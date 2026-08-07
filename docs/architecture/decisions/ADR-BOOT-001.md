@@ -1,6 +1,6 @@
 # ADR-BOOT-001 — Create `be-lazy` as a separate successor repository
 
-- Status: Proposed
+- Status: Accepted
 - Decision owner: System architecture
 - Scope: repository topology, bootstrap, provenance, and migration
 
@@ -10,7 +10,7 @@ The redesign should be implemented in a new repository named `be-lazy`. The exis
 
 ## Decision
 
-Create `be-lazy` as an independent successor repository with fresh Git history and a new remote. Keep `video-production-core` as a read-only source baseline.
+Create `be-lazy` as an independent successor repository with fresh local Git history and no remote. Keep `video-production-core` as a read-only source baseline. Creating or configuring any hosted remote is outside this autopilot mandate and remains a separately authorized, runbook-only administrative action.
 
 Use a controlled snapshot import by default:
 

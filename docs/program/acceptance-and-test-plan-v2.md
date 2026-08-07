@@ -44,6 +44,8 @@ python -m pytest
 python tools/check_core_purity.py
 python tools/check_side_effect_free.py
 python tools/check_repo_isolation.py
+python tools/check_target_boundary.py
+python tools/check_w00_provenance.py
 python -m build --wheel
 ```
 

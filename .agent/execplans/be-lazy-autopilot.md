@@ -9,8 +9,8 @@ evidence and no external side effects.
 
 ## Inputs and boundaries
 
-- Target: `C:\Users\wotmd\OneDrive\문서\유튜브관련\BeLazy`
-- Source archive: `C:\Users\wotmd\OneDrive\문서\유튜브관련\video-production-core-main.zip`
+- Target: `TARGET_ROOT` (exact canonical path is retained only in ignored local state)
+- Source archive: `SOURCE_ARCHIVE` / `video-production-core-main.zip` (exact canonical path is retained only in ignored local state)
 - Source SHA-256: `954325b77028bcf7d36a88136d8e1ed0ec2348ad15014623710614cced94034a`
 - Handoff manifest SHA-256: `1bd3aa1687299c15f81539641afcd1563097b0ff8cebc9c24a793e132386244a`
 - Branch: `agent/autopilot-v4`

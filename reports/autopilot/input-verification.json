@@ -3,7 +3,9 @@
   "verified": true,
   "checked_at": "2026-08-07T05:18:37.482Z",
   "handoff": {
-    "path": "C:\\Users\\wotmd\\OneDrive\\문서\\유튜브관련\\be-lazy-prompt-autopilot-handoff-v4",
+    "path_role": "HANDOFF_ROOT",
+    "basename": "be-lazy-prompt-autopilot-handoff-v4",
+    "canonical_path_fingerprint_sha256": "af55d6c5b873bdfd984afa6d6d6d72d830d03f2c5cb8fc4cf98d8ceca5d3b5ca",
     "manifest_sha256": "1bd3aa1687299c15f81539641afcd1563097b0ff8cebc9c24a793e132386244a",
     "declared_files": 49,
     "verified_files": 49,
@@ -14,7 +16,9 @@
     "errors": []
   },
   "source": {
-    "path": "C:\\Users\\wotmd\\OneDrive\\문서\\유튜브관련\\video-production-core-main.zip",
+    "path_role": "SOURCE_ARCHIVE",
+    "basename": "video-production-core-main.zip",
+    "canonical_path_fingerprint_sha256": "91d8c84a8708fe63f5233fa6bc26685ef16bd945ba9bf86e13e4c6dcc4c3d8d1",
     "archive_size_bytes": 319266,
     "compressed_member_bytes": 274114,
     "uncompressed_member_bytes": 1028418,
@@ -30,7 +34,9 @@
     "errors": []
   },
   "target": {
-    "path": "C:\\Users\\wotmd\\OneDrive\\문서\\유튜브관련\\BeLazy",
+    "path_role": "TARGET_ROOT",
+    "basename": "BeLazy",
+    "canonical_path_fingerprint_sha256": "888a17b1c8b56429826d71d58ad6b1a99a77a3f5a7760fd13401b7707a0da32d",
     "initial_entries": 0,
     "initial_git_repository": false,
     "branch_after_init": "agent/autopilot-v4",
@@ -39,6 +45,8 @@
     "preexisting_user_files": 0
   },
   "paths": {
+    "fingerprint_algorithm": "sha256-utf8-canonical-path-v1",
+    "exact_paths_recorded_in_ignored_local_state": true,
     "target_source_handoff_distinct": true,
     "nested": false
   }

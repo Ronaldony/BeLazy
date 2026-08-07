@@ -2,7 +2,9 @@
   "schema_version": "be-lazy-source-baseline/1.0",
   "canonical_source_name": "video-production-core",
   "source_form": "zip-archive",
-  "source_path": "C:\\Users\\wotmd\\OneDrive\\문서\\유튜브관련\\video-production-core-main.zip",
+  "source_path_role": "SOURCE_ARCHIVE",
+  "source_path_fingerprint_algorithm": "sha256-utf8-canonical-path-v1",
+  "source_path_fingerprint_sha256": "91d8c84a8708fe63f5233fa6bc26685ef16bd945ba9bf86e13e4c6dcc4c3d8d1",
   "archive_filename_observed": "video-production-core-main.zip",
   "archive_filename_reference": "video-production-core-main (1).zip",
   "archive_filename_note": "The filename differs from the advisory reference; the exact mandated SHA-256 matches and is authoritative.",
@@ -16,14 +18,30 @@
     "members": 211,
     "files": 180,
     "directories": 31,
+    "compressed_member_bytes": 274114,
+    "uncompressed_member_bytes": 1028418,
+    "maximum_member_compression_ratio": 5.79657,
     "python_modules": 78,
+    "package_init_files": 22,
+    "public_subpackages": 21,
     "schema_files": 46,
+    "unique_schema_ids": 46,
     "registered_artifact_versions": 42,
+    "duplicate_artifact_versions": 0,
     "test_modules": 38,
+    "static_test_functions": 234,
+    "fixture_files": 8,
     "source_inventory_digest_algorithm": "sha256-path-nul-type-nul-size-nul-content-v1",
     "source_inventory_digest_sha256": "cc292a59d8b3a46e9ec15a5b3f4da6da8f5f57b2c2d31987a54b9fb5855d0709",
     "inventory_file": "docs/provenance/source-member-inventory.json",
     "inventory_file_sha256": "c16ee3e0eb3360e8d2837fdbabf14fb748ffb7191f3edbd5a65a4056d40b3cab"
+  },
+  "archive_safety": {
+    "crc_failures": 0,
+    "encrypted_members": 0,
+    "unsafe_paths": 0,
+    "symlink_or_non_regular_members": 0,
+    "case_or_unicode_collisions": 0
   },
   "source_release": {
     "distribution": "video-production-core",
@@ -40,6 +58,7 @@
     "pyproject_license_field_present": false,
     "spdx_identifier_present": false,
     "copyright_notice_present": false,
+    "publishing_allowed": false,
     "decision": "No license or rights were inferred. External distribution remains outside this program."
   },
   "import": {
@@ -64,12 +83,44 @@
   },
   "target": {
     "canonical_repository_name": "be-lazy",
-    "path": "C:\\Users\\wotmd\\OneDrive\\문서\\유튜브관련\\BeLazy",
+    "path_role": "TARGET_ROOT",
+    "path_fingerprint_algorithm": "sha256-utf8-canonical-path-v1",
+    "path_fingerprint_sha256": "888a17b1c8b56429826d71d58ad6b1a99a77a3f5a7760fd13401b7707a0da32d",
     "branch": "agent/autopilot-v4",
-    "initial_commit": null,
+    "initial_commit": "b7aaaf2ac43ca99970c317a7d505316a07d320e9",
+    "baseline_snapshot_commit": "b7aaaf2ac43ca99970c317a7d505316a07d320e9",
+    "baseline_snapshot_tree": "0f9f3cf065261a0b0f24faea72fa116687bb59d2",
     "w00_checkpoint_commit": null,
+    "w00_checkpoint_seal_strategy": "This tracked provenance record binds the immutable baseline implementation commit and tree. After the reviewed W00 checkpoint commit exists, its exact commit hash is recorded in the repository-local ignored .be-lazy/autopilot/state.json; later tracked wave receipts cite that completed checkpoint without requiring a commit to contain its own hash.",
     "remote_count_at_bootstrap": 0,
+    "remote_contact_count": 0,
     "source_git_metadata_imported": false
+  },
+  "test_evidence": {
+    "baseline_report": {
+      "path": "docs/provenance/baseline-test-report.md",
+      "sha256": "c75b96ede23e509084efa930d19e9d427db2d25f719e0fdbd67e45f242901725"
+    },
+    "w00_test_receipt": {
+      "path": "reports/autopilot/waves/W00/test-receipt.json",
+      "sha256": "144a5b979f7692793bbe807694816f9a88a6b56824c386456e356aec98829f96"
+    },
+    "source_baseline": {
+      "pytest": "329 passed in 18.20s",
+      "core_purity": "PASS; scanned_files=180; violations=0",
+      "side_effect_free": "PASS; scanned_files=78; violations=0",
+      "repo_isolation": "PASS; scanned_files=125; violations=0"
+    },
+    "target_baseline": {
+      "pytest": "331 passed in 17.85s",
+      "core_purity": "PASS; scanned_files=186; violations=0",
+      "side_effect_free": "PASS; scanned_files=78; violations=0",
+      "repo_isolation": "PASS; scanned_files=126; violations=0"
+    },
+    "wheel_build": {
+      "status": "ENVIRONMENT_BLOCKED",
+      "reason": "No offline build frontend, setuptools, or wheel package is present; dependency download is prohibited. No build PASS is claimed."
+    }
   },
   "compatibility_identifiers_preserved": [
     "python_distribution_video-production-core",

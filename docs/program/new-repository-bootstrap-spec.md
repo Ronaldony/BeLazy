@@ -10,7 +10,7 @@
 SOURCE BASELINE                           TARGET IMPLEMENTATION
 video-production-core                    be-lazy
 read-only                                agent-writable branch
-existing history/remote retained         fresh history/new remote
+existing history/remote retained         fresh local history/no remote
 behavior and test oracle                 redesigned system
 ```
 

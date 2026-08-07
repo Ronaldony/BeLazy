@@ -1,0 +1,34 @@
+{
+  "artifact_version": "brand-entity/1.0",
+  "entity_id": "place-a",
+  "entity_kind": "location",
+  "canonical_status": "shadow",
+  "source": {
+    "path": "places/place-a.md",
+    "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "section_ranges": [
+      {
+        "start_heading": "## Place A",
+        "end_before_heading": null
+      }
+    ]
+  },
+  "rules_version": "rules-a",
+  "fixed_sentences": [
+    {
+      "role": "prompt-environment",
+      "consumers": ["generation-prompt.environment"],
+      "text": "A quiet inspection room.\nA marked work zone sits at center.",
+      "source_section": "Place A",
+      "sha256": "a70f2dbd445781d9407e09a58f95bd42deb75c575f43f5b884278c67127b07f0"
+    }
+  ],
+  "data": {
+    "display_name": "Place A",
+    "location": {
+      "reference_tokens": ["places/assets/place-a-wide.png", "place-a-detail.png"],
+      "usage": "planned",
+      "notes": ["Objects are supplied by each production unit."]
+    }
+  }
+}

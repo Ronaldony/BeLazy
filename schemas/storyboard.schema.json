@@ -1,0 +1,92 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.video-factory.invalid/artifact/storyboard.schema.json",
+  "title": "Storyboard (structure only; creative free text)",
+  "type": "object",
+  "required": [
+    "artifact_version",
+    "rules_version",
+    "episode_id",
+    "generated_by",
+    "shots"
+  ],
+  "properties": {
+    "artifact_version": { "const": "storyboard/1.0" },
+    "rules_version": { "$ref": "artifact-common.schema.json#/$defs/rulesVersion" },
+    "episode_id": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" },
+    "generated_by": { "$ref": "artifact-common.schema.json#/$defs/roleId" },
+    "premise": { "type": "string", "minLength": 1 },
+    "reference_requirements": {
+      "type": "object",
+      "properties": {
+        "characters": {
+          "type": "array",
+          "items": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" },
+          "uniqueItems": true
+        },
+        "locations": {
+          "type": "array",
+          "items": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" },
+          "uniqueItems": true
+        }
+      },
+      "additionalProperties": false
+    },
+    "shots": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "shot_id",
+          "duration_sec",
+          "narrative_role",
+          "characters",
+          "action",
+          "creative_direction"
+        ],
+        "properties": {
+          "shot_id": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" },
+          "duration_sec": { "type": "number", "exclusiveMinimum": 0 },
+          "narrative_role": { "type": "string", "minLength": 1 },
+          "characters": {
+            "type": "array",
+            "items": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" }
+          },
+          "location": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" },
+          "camera": {
+            "type": "object",
+            "properties": {
+              "framing": { "type": "string" },
+              "movement": { "type": "string" },
+              "notes": { "type": "string" }
+            },
+            "additionalProperties": false
+          },
+          "action": { "type": "string", "minLength": 1 },
+          "creative_direction": { "type": "string" },
+          "start_state": { "type": "string" },
+          "end_state": { "type": "string" },
+          "end_state_elements": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" },
+            "description": "Opaque element ids whose end-of-shot state must be present in the next consecutive shot. generation-packet/2.1 feasibility treats omission of this field as inconclusive."
+          },
+          "continuity": { "type": "string" },
+          "dialogue": { "type": "string" },
+          "notes": { "type": "string" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "extensions": { "$ref": "artifact-common.schema.json#/$defs/extensions" }
+  },
+  "additionalProperties": false,
+  "x-artifact-migration": {
+    "id_pattern": "^storyboard/[1-9][0-9]*-to-[1-9][0-9]*/[1-9][0-9]*$",
+    "single_major_step": true,
+    "in_place": false,
+    "automatic_downgrade": false
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "artifact_version": "concept-config/1.0",
+  "config_contract": "1.0",
+  "concept_id": "concept-a",
+  "settings": {
+    "media": {
+      "duration_seconds": 55
+    },
+    "identity": {
+      "recurring_character_ids": []
+    }
+  },
+  "extensions": {}
+}

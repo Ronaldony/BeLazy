@@ -1,0 +1,114 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.video-factory.invalid/artifact/external-call-reservation.schema.json",
+  "title": "External call reservation record (no auto-trigger)",
+  "type": "object",
+  "required": [
+    "artifact_version",
+    "rules_version",
+    "event_id",
+    "reserved_at",
+    "actor_role",
+    "adapter_id",
+    "capability_id",
+    "purpose",
+    "idempotency_key",
+    "status",
+    "bound_artifacts"
+  ],
+  "properties": {
+    "artifact_version": {
+      "const": "external-call-reservation/1.0"
+    },
+    "rules_version": {
+      "$ref": "artifact-common.schema.json#/$defs/rulesVersion"
+    },
+    "event_id": {
+      "$ref": "artifact-common.schema.json#/$defs/opaqueId"
+    },
+    "reserved_at": {
+      "type": "string",
+      "minLength": 1
+    },
+    "actor_role": {
+      "$ref": "artifact-common.schema.json#/$defs/roleId"
+    },
+    "adapter_id": {
+      "$ref": "artifact-common.schema.json#/$defs/opaqueId"
+    },
+    "capability_id": {
+      "$ref": "artifact-common.schema.json#/$defs/opaqueId"
+    },
+    "purpose": {
+      "type": "string",
+      "minLength": 1
+    },
+    "idempotency_key": {
+      "$ref": "artifact-common.schema.json#/$defs/sha256"
+    },
+    "status": {
+      "type": "string",
+      "minLength": 1
+    },
+    "episode_id": {
+      "$ref": "artifact-common.schema.json#/$defs/opaqueId"
+    },
+    "request_id": {
+      "$ref": "artifact-common.schema.json#/$defs/opaqueId"
+    },
+    "external_session_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "generation_call": {
+      "type": "boolean"
+    },
+    "quota_snapshot": {
+      "type": "object",
+      "properties": {
+        "unit": {
+          "type": "string",
+          "minLength": 1
+        },
+        "calls_before": {
+          "type": "number"
+        },
+        "calls_after": {
+          "type": "number"
+        },
+        "limit": {
+          "type": "number"
+        },
+        "notes": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "bound_artifacts": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "artifact-common.schema.json#/$defs/boundArtifact"
+      }
+    },
+    "effective_config_sha256": {
+      "$ref": "artifact-common.schema.json#/$defs/sha256"
+    },
+    "notes": {
+      "type": "string"
+    },
+    "extensions": {
+      "$ref": "artifact-common.schema.json#/$defs/extensions"
+    }
+  },
+  "additionalProperties": false,
+  "x-artifact-migration": {
+    "id_pattern": "^external-call-reservation/[1-9][0-9]*-to-[1-9][0-9]*/[1-9][0-9]*$",
+    "single_major_step": true,
+    "in_place": false,
+    "automatic_downgrade": false
+  }
+}

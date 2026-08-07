@@ -1,0 +1,105 @@
+protocol_version: be-lazy-prompt-autopilot/4.0
+program_id: be-lazy-successor-redesign
+mode: prompt_only_single_mandate
+source:
+  expected_archive_sha256: 954325b77028bcf7d36a88136d8e1ed0ec2348ad15014623710614cced94034a
+human_interaction_budget:
+  planned_initial_prompts: 1
+  planned_per_wave_confirmations: 0
+  planned_file_edits: 0
+  planned_decision_injections: 0
+  continuation_prompt_allowed_only_after_physical_session_interruption: true
+local_authority:
+  target_file_mutation: allowed
+  local_commands_and_tests: allowed
+  local_git_init_branch_commit_tag: allowed
+  source_and_handoff_mutation: denied
+  remote_side_effects: denied
+  network_access: denied
+  dependency_download: denied
+  deploy_publish_provider_calls: denied
+  runtime_human_approval_artifact_generation: denied
+  public_identifier_migration: denied
+execution:
+  branch: agent/autopilot-v4
+  supervisor_is_only_writer: true
+  parallel_write_agents: forbidden
+  discovery_subagents_per_wave_minimum: 2
+  review_subagents_per_wave_minimum: 3
+  normal_repair_rounds: 3
+  full_wave_reimplementation_rounds: 1
+  ask_human_questions: false
+  wait_for_human_between_waves: false
+  checkpoint_after_each_wave: true
+  preserve_source_pre_post_fingerprint: true
+review_roles:
+  - architecture_contract
+  - security_authority_boundary
+  - test_compatibility_packaging
+waves:
+  - id: W00-BOOTSTRAP-BASELINE
+    sequence: 0
+    task_ids: [BOOT-001, BOOT-002, BOOT-003, BOOT-004, BOOT-005]
+    spec: waves/W00-BOOTSTRAP-BASELINE.md
+    prerequisites: []
+    checkpoint_message: "autopilot(W00): bootstrap be-lazy and import verified baseline"
+  - id: W01-TRUST-BOUNDARY
+    sequence: 1
+    task_ids: [P0-PKG-001, P0-JSON-001, P0-AUTH-001]
+    spec: waves/W01-TRUST-BOUNDARY.md
+    prerequisites: [W00-BOOTSTRAP-BASELINE]
+    checkpoint_message: "autopilot(W01): repair packaging parsing and authority trust boundaries"
+  - id: W02-MANAGED-MUTATION
+    sequence: 2
+    task_ids: [MUT-001, MUT-002, MUT-003, MUT-004]
+    spec: waves/W02-MANAGED-MUTATION.md
+    prerequisites: [W01-TRUST-BOUNDARY]
+    checkpoint_message: "autopilot(W02): introduce managed mutation plane"
+  - id: W03-DIRECTOR-BLUEPRINT
+    sequence: 3
+    task_ids: [BP-001, DIR-001, DIR-002, BP-002]
+    spec: waves/W03-DIRECTOR-BLUEPRINT.md
+    prerequisites: [W02-MANAGED-MUTATION]
+    checkpoint_message: "autopilot(W03): introduce director mesh and production blueprint shadow"
+  - id: W04-WORKFLOW-AUTHORITY
+    sequence: 4
+    task_ids: [WF-001, AUTH-001, AUTH-002, WF-002]
+    spec: waves/W04-WORKFLOW-AUTHORITY.md
+    prerequisites: [W03-DIRECTOR-BLUEPRINT]
+    checkpoint_message: "autopilot(W04): add declarative workflow authority control and parity"
+  - id: W05-AUTOMATION-QUALITY-RELEASE
+    sequence: 5
+    task_ids: [SEL-001, QA-001, REL-001]
+    spec: waves/W05-AUTOMATION-QUALITY-RELEASE.md
+    prerequisites: [W04-WORKFLOW-AUTHORITY]
+    checkpoint_message: "autopilot(W05): automate candidate quality and release decisions"
+  - id: W06-RUNTIME-MIGRATION
+    sequence: 6
+    task_ids: [RUN-001, RUN-002, MIG-001, REL-002]
+    spec: waves/W06-RUNTIME-MIGRATION.md
+    prerequisites: [W05-AUTOMATION-QUALITY-RELEASE]
+    checkpoint_message: "autopilot(W06): add durable runtime executor and migration runbooks"
+  - id: W07-FINAL-AUDIT
+    sequence: 7
+    task_ids: [AUDIT-001, AUDIT-002, AUDIT-003]
+    spec: waves/W07-FINAL-AUDIT.md
+    prerequisites: [W06-RUNTIME-MIGRATION]
+    checkpoint_message: "autopilot(W07): complete final audit and delivery report"
+deferred_by_default:
+  - id: T90-PUBLIC-IDENTIFIERS
+    task_ids: [MIG-002]
+    reason: irreversible public compatibility migration requires a separate future program mandate
+final_required_outputs:
+  - .be-lazy/autopilot/state.json
+  - .agent/execplans/be-lazy-autopilot.md
+  - docs/provenance/source-baseline.json
+  - docs/provenance/import-map.csv
+  - reports/autopilot/final-report.md
+  - reports/autopilot/final-result.json
+final_invariants:
+  - source and handoff exact bytes unchanged
+  - target working tree clean after final checkpoint
+  - no remote change contact push network publish deploy provider or credential side effect
+  - no human approval identity or signature synthesized
+  - no unresolved Critical or High reviewer finding
+  - optional public identifier migration not performed

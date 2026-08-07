@@ -1,0 +1,71 @@
+policy_version: authority-policy/1.0
+default_decision: DENIED
+unknown_state_behavior: FAIL_CLOSED
+ai_human_approval_creation_forbidden: true
+approval_is_action_authority_not_artifact_state: true
+self_approval_forbidden: true
+executor_revalidation_required: true
+immutable_ledger_required_for: [R3, R4]
+material_change_invalidates_authority: true
+risk_tiers:
+  R0:
+    examples: [read, analyze, validate_schema, simulate]
+    authority: COVERED_BY_POLICY
+  R1:
+    examples: [local_preview, reversible_temp_asset, draft_render]
+    authority: COVERED_BY_POLICY
+  R2:
+    examples: [paid_external_generation, bounded_asset_write]
+    authority: STANDING_GRANT_OR_ONE_HUMAN
+    required_limits:
+      - provider_allowlist
+      - max_cost_per_run
+      - max_cost_per_day
+      - max_retries
+      - exact_input_digests
+      - expiry
+  R3:
+    examples: [public_publish, high_cost_run, material_brand_impact]
+    authority: HUMAN_OR_RELEASE_CAMPAIGN_GRANT
+    release_campaign_grant_allowed_only_when:
+      - assurance_profile_is_production_or_higher
+      - historical_quality_threshold_met
+      - incident_rate_threshold_met
+      - content_risk_is_low
+      - destination_allowlisted
+  R4:
+    examples: [policy_exception, destructive_overwrite, credential_change, high_legal_or_safety_risk]
+    authority: TWO_INDEPENDENT_HUMANS
+    standing_grant_allowed: false
+    short_expiry_required: true
+hard_escalation_triggers:
+  - unresolved_director_hard_blocker
+  - low_or_conflicting_confidence
+  - cost_over_grant
+  - provider_or_model_not_allowlisted
+  - new_publish_destination
+  - material_blueprint_change_after_authorization
+  - factual_or_rights_risk_unknown
+  - kill_switch_not_clear
+  - ledger_or_signature_invalid
+approval_binding:
+  required_digests:
+    - workflow_definition
+    - policy_bundle
+    - rules_bundle
+    - effective_config
+    - current_manifest
+    - evidence_graph
+    - executable_plan
+  required_scope:
+    - capability
+    - provider
+    - destination
+    - cost_limit
+    - retry_limit
+    - validity_window
+    - subject_ids
+execution_journal:
+  states: [PLANNED, AUTHORIZED, RESERVED, DISPATCHING, SUCCEEDED, FAILED, EXTERNAL_UNCERTAIN, RECONCILED]
+  unique_key: [adapter_id, capability_id, idempotency_key]
+  reject_same_key_different_request_digest: true

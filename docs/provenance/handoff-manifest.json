@@ -1,0 +1,258 @@
+{
+  "manifest_version": "be-lazy-prompt-autopilot-handoff/4.0",
+  "protocol_version": "be-lazy-prompt-autopilot/4.0",
+  "purpose": "Single-mandate prompt-only autonomous implementation of the be-lazy successor repository.",
+  "source_archive_sha256": "954325b77028bcf7d36a88136d8e1ed0ec2348ad15014623710614cced94034a",
+  "supersedes_primary_trigger": "be-lazy-new-repository-handoff-v3 human-driven tranche trigger",
+  "planned_human_prompts": 1,
+  "planned_human_file_edits": 0,
+  "default_wave_count": 8,
+  "file_count": 49,
+  "files": [
+    {
+      "path": "AUTONOMOUS_DECISION_DEFAULTS.yaml",
+      "size_bytes": 3255,
+      "sha256": "7bce2dace9d096d6d37d8b446853bc66fea040aba4264d20de8d26ad3a5165af"
+    },
+    {
+      "path": "AUTOPILOT_ARCHITECTURE_KO.md",
+      "size_bytes": 7518,
+      "sha256": "6cf79da7db67bf1360621706a45ac3cabe0417c6ecae2d32e1d66b32967610cd"
+    },
+    {
+      "path": "AUTOPILOT_CONTINUE_PROMPT_KO.md",
+      "size_bytes": 1990,
+      "sha256": "1aed862b779eafb69b22fa871deb7e7e9ed2d9680955567fb82e30c5f887e51a"
+    },
+    {
+      "path": "AUTOPILOT_PROGRAM.yaml",
+      "size_bytes": 4305,
+      "sha256": "0f1e74b56276c977552cdd0fc1f4cbfec8aa544a947f02f5944f4de9b2a31407"
+    },
+    {
+      "path": "AUTOPILOT_RECOVER_PROMPT_KO.md",
+      "size_bytes": 1236,
+      "sha256": "f023f3ce574324e6ddd5251d7491872b7e6b5ae1587c7f88d018c189efbea139"
+    },
+    {
+      "path": "AUTOPILOT_START_PROMPT_KO.md",
+      "size_bytes": 8754,
+      "sha256": "6933ffd354f17368b71ec548e576dc228616456259d8a6ff47d11186717aa4e4"
+    },
+    {
+      "path": "COMPLETION_CONTRACT.md",
+      "size_bytes": 3326,
+      "sha256": "f0919fe452b25eb9becf604dba34b8f679fd94f08ba1243dcd10d2cd251b49ca"
+    },
+    {
+      "path": "PROMPT_ONLY_USAGE_KO.md",
+      "size_bytes": 1088,
+      "sha256": "3679506d702384430ec9bd25b252c55ec989d2ed42feef15de97131db9868380"
+    },
+    {
+      "path": "README.md",
+      "size_bytes": 4342,
+      "sha256": "17aae2eeabafaf08e0daf04c23981246e771b9ab593450aa730057ffb818cd5f"
+    },
+    {
+      "path": "TARGET_AGENTS.md",
+      "size_bytes": 3765,
+      "sha256": "f36a53fb64c29745ba603956ff2282818ba861a15d01ab69d69be07db6724d31"
+    },
+    {
+      "path": "VALIDATION_REPORT.md",
+      "size_bytes": 2039,
+      "sha256": "99a238191d322ed883c28a6f05d1f98cdf24204082dce1cb535a9d5986124682"
+    },
+    {
+      "path": "reference/acceptance-and-test-plan-v2.md",
+      "size_bytes": 5869,
+      "sha256": "93bc177b823c150bdd2316ae7737a5cf3972dc486d437e45ed0e0077245d2c03"
+    },
+    {
+      "path": "reference/adrs/ADR-BOOT-001.md",
+      "size_bytes": 2541,
+      "sha256": "42169b1b35324ccd47037c293f24a26a6a9354bdf2fbb55bf9543394ab1fd7a3"
+    },
+    {
+      "path": "reference/adrs/ADR-MUT-001.md",
+      "size_bytes": 2713,
+      "sha256": "e6f3e48996669b5277ee7da4b94d001989aa5dceac18f362d194bac67704ef71"
+    },
+    {
+      "path": "reference/authority-policy-v2.1.yaml",
+      "size_bytes": 4411,
+      "sha256": "624e4bc552e39c1e962593bd4d59e393425db7352c43f2067280ca96eda368b2"
+    },
+    {
+      "path": "reference/be-lazy-redesign-blueprint-v3.md",
+      "size_bytes": 43169,
+      "sha256": "0b52a0a6e02d2b679b147cd8fa6e1df8c3805ff56e9c4f4489eedbf609a1e3ac"
+    },
+    {
+      "path": "reference/implementation-backlog-v2.yaml",
+      "size_bytes": 7836,
+      "sha256": "bb215ae2785a590445dffd796e005859d6071218efab903963fbb3061ded3152"
+    },
+    {
+      "path": "reference/managed-mutation-policy-v1.yaml",
+      "size_bytes": 3501,
+      "sha256": "f1551353241c621c6acea09e92cc5efc58b0a3f6239572ee7191c7820d5977d8"
+    },
+    {
+      "path": "reference/new-repository-bootstrap-spec.md",
+      "size_bytes": 7090,
+      "sha256": "12109e3b0e859b3310057ce97a139366c2d52f24a000f32e3ee6a81e57de4413"
+    },
+    {
+      "path": "reference/source-analysis/authority-policy-v1.yaml",
+      "size_bytes": 2293,
+      "sha256": "8a46f71214147ccdc58e2ee0ba9ce02e767ba546d9bc6dcabd4859409ddc6e96"
+    },
+    {
+      "path": "reference/source-analysis/director-registry-v1.yaml",
+      "size_bytes": 3111,
+      "sha256": "d00fe9ee995f56b9824c36d992739a4a0b91e071f876579a1444ca5f88d0d93e"
+    },
+    {
+      "path": "reference/source-analysis/redesign-blueprint-v1.md",
+      "size_bytes": 33858,
+      "sha256": "b7c462cc319953160fe06b3547b2b47b5b365a77482adc33d67872d79c2c68f0"
+    },
+    {
+      "path": "reference/source-analysis/source-architecture-assessment.md",
+      "size_bytes": 53577,
+      "sha256": "276da20c49e321e13fc5a5199c55cd6a112f36aa6ff6e19b9a2ac3a81145c02b"
+    },
+    {
+      "path": "reference/source-analysis/source-archive-sha256.txt",
+      "size_bytes": 101,
+      "sha256": "811e9edb7276ae0d70c4468aa820fdea79ac920c2a895c7cf1125a897f971d92"
+    },
+    {
+      "path": "reference/source-analysis/source-audit-evidence.txt",
+      "size_bytes": 2794,
+      "sha256": "10469a8b735ab8a61aac2ed7df686d8e958f572daa61b07f6f521a7af4b59f24"
+    },
+    {
+      "path": "reference/source-analysis/source-findings.json",
+      "size_bytes": 16535,
+      "sha256": "4921a4aa239edb3df8c78efa510f002558a9fb453cd340f64333b8090c0b83c7"
+    },
+    {
+      "path": "reference/source-baseline-policy-v1.yaml",
+      "size_bytes": 3574,
+      "sha256": "137bc2da0a0d1205ccb1b185aa66b7d39d7608650597d42b018dccc38f0cf7a8"
+    },
+    {
+      "path": "schemas/autopilot-final-result.schema.json",
+      "size_bytes": 2181,
+      "sha256": "d4fd1ffb5d55bf8ee991e7613fd5cfaad3f92077b4369c9171c6f466cbd81027"
+    },
+    {
+      "path": "schemas/autopilot-state.schema.json",
+      "size_bytes": 4479,
+      "sha256": "7d9abf2a1a07888313b074930aaa40830ec5b6ec9faae8e12f26449f1e0cb402"
+    },
+    {
+      "path": "scripts/verify_inputs.py",
+      "size_bytes": 4129,
+      "sha256": "de43ca499d9ffa69a8976e8f575162eef33a429fc57dad21c80a36a27e89c758"
+    },
+    {
+      "path": "target-config/.agents/skills/be-lazy-autopilot/SKILL.md",
+      "size_bytes": 2147,
+      "sha256": "281be65b3f4883cca088353d696749f2710deca0a70b72e82a88113b53711296"
+    },
+    {
+      "path": "target-config/.agents/skills/be-lazy-autopilot/references/program-loop.md",
+      "size_bytes": 327,
+      "sha256": "aa38af47c4f15d248c388fa87d8cb9c757bfe55d56bb7a2136ec27dabced476d"
+    },
+    {
+      "path": "target-config/.agents/skills/be-lazy-autopilot/references/review-protocol.md",
+      "size_bytes": 641,
+      "sha256": "c0091e2ed74970205634917c0524d3edfab1f0c6c568af94beb04cb198e6fa5f"
+    },
+    {
+      "path": "target-config/.agents/skills/be-lazy-autopilot/references/state-and-recovery.md",
+      "size_bytes": 422,
+      "sha256": "71c1e25b8beca5b35cd4695f345fe4ca0d1a41332026ed097eaeea2a6279e012"
+    },
+    {
+      "path": "target-config/.codex/agents/architecture-reviewer.toml",
+      "size_bytes": 548,
+      "sha256": "6bb7e25ff02e50c72de9c3e557baa9f334e3101aacfd6973494e3acc85c5502f"
+    },
+    {
+      "path": "target-config/.codex/agents/security-authority-reviewer.toml",
+      "size_bytes": 595,
+      "sha256": "7dad8086a143751447e75ceef5fafeabb7c6f02a8bb4262812c3a0828121afe1"
+    },
+    {
+      "path": "target-config/.codex/agents/source-explorer.toml",
+      "size_bytes": 534,
+      "sha256": "9cb70c6011e342dfecddc182c3e7640f35d070921c304847c1d7847beb37ac51"
+    },
+    {
+      "path": "target-config/.codex/agents/test-compat-reviewer.toml",
+      "size_bytes": 564,
+      "sha256": "ec7a4e5bbd649f1984525a827f739a5347d2f90dd45563c5aff6c121d649f077"
+    },
+    {
+      "path": "target-config/.codex/config.toml",
+      "size_bytes": 63,
+      "sha256": "fb26706a468cd952f3f64fc51f9fbadca8ea40b1a8c7072a2bdfb761edadb976"
+    },
+    {
+      "path": "templates/autopilot-state.template.json",
+      "size_bytes": 818,
+      "sha256": "79da09d6393fe701432bd1e9ee14fe784386def3dd4cfddbd1aad0f612df26ed"
+    },
+    {
+      "path": "templates/final-report.template.md",
+      "size_bytes": 619,
+      "sha256": "ba6cc59c64371b7ec5edfec3093b4a1f10da62682663c71991cc3ea1516eb56f"
+    },
+    {
+      "path": "waves/W00-BOOTSTRAP-BASELINE.md",
+      "size_bytes": 1849,
+      "sha256": "d22ea6b6dbaf2c65b3ba9869e7d35e95b18ac5ddef271872097ab028f346d5d5"
+    },
+    {
+      "path": "waves/W01-TRUST-BOUNDARY.md",
+      "size_bytes": 1469,
+      "sha256": "067b63d4529b551f5063bbcdd948c55753b2b569f3f47bc2228ad6417e06b6a7"
+    },
+    {
+      "path": "waves/W02-MANAGED-MUTATION.md",
+      "size_bytes": 1404,
+      "sha256": "35425f29c8b7919e28506edfcd3e7f14d5002ed3f696f73519a35bf63cb3758b"
+    },
+    {
+      "path": "waves/W03-DIRECTOR-BLUEPRINT.md",
+      "size_bytes": 1949,
+      "sha256": "30928a477427db2e2e3f2c809cdafdae64c3b8e57d4acd8faa469407fc3fb8fa"
+    },
+    {
+      "path": "waves/W04-WORKFLOW-AUTHORITY.md",
+      "size_bytes": 1456,
+      "sha256": "22a78199fb91c4ce30979521255a7b61466134a271b4e301a41aecbff322fdba"
+    },
+    {
+      "path": "waves/W05-AUTOMATION-QUALITY-RELEASE.md",
+      "size_bytes": 1615,
+      "sha256": "8b7a3940afcd66245d12c4d240ca98626151ab0ad7e97c74adce6ec3bb1ccfbb"
+    },
+    {
+      "path": "waves/W06-RUNTIME-MIGRATION.md",
+      "size_bytes": 1539,
+      "sha256": "e5c12bf7896a1a18031029ad00aec69579311626db1cc7ae8833bbc4b677b8fd"
+    },
+    {
+      "path": "waves/W07-FINAL-AUDIT.md",
+      "size_bytes": 1686,
+      "sha256": "8e28487f42d906a0fe8e6e339f73685fe793729b7884449948f37a8fc3cffd1b"
+    }
+  ]
+}

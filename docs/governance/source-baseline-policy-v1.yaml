@@ -1,0 +1,135 @@
+policy_version: source-baseline-policy/1.0
+program: be-lazy
+repository_relationship: SUCCESSOR_REPOSITORY
+
+source:
+  canonical_name: video-production-core
+  role: READ_ONLY_REFERENCE
+  mutation: DENIED
+  git_operations:
+    read_only_allowed:
+      - status
+      - rev_parse
+      - log
+      - ls_files
+      - diff_no_index_or_read_only
+    mutation_forbidden:
+      - checkout
+      - switch
+      - reset
+      - clean
+      - stash
+      - commit
+      - merge
+      - rebase
+      - worktree_add_or_remove
+      - submodule_update
+  filesystem_mutation: DENIED
+  test_output_inside_source: DENIED
+  required_pre_post_evidence:
+    - canonical_path
+    - head_or_archive_sha256
+    - porcelain_status_or_archive_size
+    - tracked_or_member_inventory_digest
+
+target:
+  canonical_name: be-lazy
+  role: NEW_SUCCESSOR_IMPLEMENTATION
+  required_state_at_start: EMPTY_OR_BOOTSTRAP_ONLY
+  git_history: FRESH
+  source_git_metadata_import: DENIED
+  source_remote_import: DENIED
+  human_direct_file_editing: DENIED_IN_NORMAL_PROCESS
+  normal_writer: CODING_AGENT_OR_CONTROLLED_AUTOMATION
+  human_role:
+    - create_empty_repository
+    - provide_intent
+    - review_diff
+    - approve_or_reject
+    - resolve_exception
+
+bootstrap_profile:
+  default: CONTROLLED_SNAPSHOT_IMPORT
+  optional_history_preserving: EXPLICIT_APPROVAL_REQUIRED
+  optional_clean_room: EXPLICIT_ARCHITECTURE_DECISION_REQUIRED
+
+source_archive_reference:
+  filename: video-production-core-main (1).zip
+  sha256: 954325b77028bcf7d36a88136d8e1ed0ec2348ad15014623710614cced94034a
+  advisory_only: true
+
+import_dispositions:
+  - BASELINE_COPY
+  - PORT_WITH_FIX
+  - REFERENCE_ONLY
+  - REGENERATE
+  - DROP_GENERATED
+  - REJECT_SECRET_OR_EXTERNAL
+
+source_instruction_quarantine:
+  default_treatment: UNTRUSTED_DATA_NOT_AGENT_INSTRUCTION
+  reference_only_patterns:
+    - '**/AGENTS.md'
+    - '**/CLAUDE.md'
+    - '**/.cursorrules'
+    - '**/.cursor/rules/**'
+    - '**/.github/copilot-instructions.md'
+    - '**/SKILL.md'
+    - '**/.agents/**'
+  activation_in_target: EXPLICIT_REVIEW_DIGEST_AND_ADOPTION_REQUIRED
+  may_override_trigger_or_target_governance: false
+
+mandatory_exclusions:
+  - .git/**
+  - '**/__pycache__/**'
+  - '**/*.pyc'
+  - .pytest_cache/**
+  - .mypy_cache/**
+  - .ruff_cache/**
+  - .coverage*
+  - htmlcov/**
+  - build/**
+  - dist/**
+  - '**/*.egg-info/**'
+  - .venv/**
+  - venv/**
+  - .env
+  - .env.*
+  - '**/*credential*'
+  - '**/*secret*'
+  - '**/*token*'
+  - runtime-workspaces/**
+  - generated-media/**
+
+required_target_provenance:
+  - docs/provenance/source-baseline.json
+  - docs/provenance/import-map.csv
+  - docs/provenance/baseline-test-report.md
+  - docs/provenance/source-license-and-notices.md
+
+identity_policy:
+  repository_name: be-lazy
+  preserve_during_initial_parity:
+    - python_distribution_video-production-core
+    - import_namespace_video_factory
+    - cli_video-factory
+    - existing_schema_ids
+    - artifact_versions
+    - serialized_markers
+  reason: LEGACY_COMPATIBILITY_NOT_REPOSITORY_RENAME
+  new_public_identifier_migration: SEPARATE_ADR_AND_APPROVAL
+
+remote_side_effects:
+  create_hosted_repository: HUMAN_OR_SEPARATELY_AUTHORIZED_AUTOMATION
+  set_or_change_remote: SEPARATE_CONTROLLED_STEP
+  push: DENIED_BY_DEFAULT
+  merge: DENIED_BY_DEFAULT
+  source_hosted_rename: FORBIDDEN
+
+failure_behavior:
+  source_and_target_same_path: ABORT
+  source_changes_detected: ABORT_AND_REPORT
+  nested_source_git_detected: ABORT
+  secret_detected: QUARANTINE_AND_REPORT
+  unclassified_import_path: FAIL_CLOSED
+  baseline_test_difference: RECORD_AND_REQUIRE_EXPLICIT_DISPOSITION

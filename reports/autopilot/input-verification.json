@@ -1,0 +1,45 @@
+{
+  "protocol_version": "be-lazy-input-verification/1.0",
+  "verified": true,
+  "checked_at": "2026-08-07T05:18:37.482Z",
+  "handoff": {
+    "path": "C:\\Users\\wotmd\\OneDrive\\문서\\유튜브관련\\be-lazy-prompt-autopilot-handoff-v4",
+    "manifest_sha256": "1bd3aa1687299c15f81539641afcd1563097b0ff8cebc9c24a793e132386244a",
+    "declared_files": 49,
+    "verified_files": 49,
+    "extra_files": 0,
+    "missing_files": 0,
+    "reparse_points": 0,
+    "case_unicode_collisions": 0,
+    "errors": []
+  },
+  "source": {
+    "path": "C:\\Users\\wotmd\\OneDrive\\문서\\유튜브관련\\video-production-core-main.zip",
+    "archive_size_bytes": 319266,
+    "compressed_member_bytes": 274114,
+    "uncompressed_member_bytes": 1028418,
+    "maximum_compression_ratio": 5.796570537802027,
+    "expected_sha256": "954325b77028bcf7d36a88136d8e1ed0ec2348ad15014623710614cced94034a",
+    "observed_sha256": "954325b77028bcf7d36a88136d8e1ed0ec2348ad15014623710614cced94034a",
+    "members": 211,
+    "unsafe_members": 0,
+    "symlink_members": 0,
+    "case_unicode_collisions": 0,
+    "encrypted_members": 0,
+    "crc_failures": 0,
+    "errors": []
+  },
+  "target": {
+    "path": "C:\\Users\\wotmd\\OneDrive\\문서\\유튜브관련\\BeLazy",
+    "initial_entries": 0,
+    "initial_git_repository": false,
+    "branch_after_init": "agent/autopilot-v4",
+    "remote_count_before": 0,
+    "remote_count_after": 0,
+    "preexisting_user_files": 0
+  },
+  "paths": {
+    "target_source_handoff_distinct": true,
+    "nested": false
+  }
+}

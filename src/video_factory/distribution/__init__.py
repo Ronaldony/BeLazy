@@ -1,0 +1,65 @@
+"""Core distribution lock and wheel planning (ADR-001, plan/observe only)."""
+
+from .contracts import (
+    DEFAULT_SELECTED_DISTRIBUTION,
+    LOCK_FORMAT_VERSION,
+    VENDOR_CORE_PREFIX,
+    ArtifactRole,
+    CoreLockDocument,
+    LockArtifact,
+    LockVerdict,
+    LockVerdictStatus,
+    WheelBuildPlan,
+    WheelPlanStatus,
+)
+from .lock import (
+    CoreLockError,
+    build_core_lock,
+    default_wheel_filename,
+    lock_document_from_core,
+    parse_core_lock,
+    python_version_satisfies,
+    validate_lock_document,
+    verify_lock_against_installed,
+)
+from .paths import (
+    DistributionPathError,
+    compare_semver,
+    contract_major,
+    map_archive_member_to_extract_relative,
+    normalize_relative_posix,
+    reject_parent_escape,
+    require_relative_artifact_path,
+    require_vendor_core_path,
+)
+from .wheel_plan import plan_wheel_build
+
+__all__ = [
+    "DEFAULT_SELECTED_DISTRIBUTION",
+    "LOCK_FORMAT_VERSION",
+    "VENDOR_CORE_PREFIX",
+    "ArtifactRole",
+    "CoreLockDocument",
+    "CoreLockError",
+    "DistributionPathError",
+    "LockArtifact",
+    "LockVerdict",
+    "LockVerdictStatus",
+    "WheelBuildPlan",
+    "WheelPlanStatus",
+    "build_core_lock",
+    "compare_semver",
+    "contract_major",
+    "default_wheel_filename",
+    "lock_document_from_core",
+    "map_archive_member_to_extract_relative",
+    "normalize_relative_posix",
+    "parse_core_lock",
+    "plan_wheel_build",
+    "python_version_satisfies",
+    "reject_parent_escape",
+    "require_relative_artifact_path",
+    "require_vendor_core_path",
+    "validate_lock_document",
+    "verify_lock_against_installed",
+]

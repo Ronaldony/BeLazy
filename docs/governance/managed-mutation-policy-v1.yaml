@@ -1,0 +1,127 @@
+policy_version: managed-mutation-policy/1.0
+canonical_repository_name: be-lazy
+principle: HUMAN_INTENT_AGENT_EXECUTION
+human_direct_file_mutation:
+  default: DENIED
+  applies_to:
+    - production_artifact_workspace
+    - channel_workspace
+    - episode_workspace
+    - policy_bundle
+    - approval_ledger
+    - generated_projection
+  source_repository:
+    existing_video_production_core: READ_ONLY_REFERENCE
+    target_be_lazy: AGENT_BRANCH_TEST_PR
+    human_manual_editing: DISCOURAGED
+  read_access: ROLE_BASED
+
+required_flow:
+  - CHANGE_REQUEST
+  - MUTATION_PLAN
+  - SEMANTIC_DIFF
+  - POLICY_EVALUATION
+  - AUTHORITY_DECISION
+  - EXECUTOR_REVALIDATION
+  - ATOMIC_OR_RECORDED_EXECUTION
+  - MUTATION_RECEIPT
+  - WORKSPACE_REVISION
+
+contracts:
+  - change-request/1.0
+  - mutation-plan/1.0
+  - mutation-receipt/1.0
+  - workspace-revision/1.0
+  - drift-report/1.0
+  - break-glass-authorization/1.0
+
+operation_rules:
+  create:
+    target_must_not_exist: true
+    new_exact_sha256_required: true
+    new_byte_length_required: true
+  replace:
+    expected_before_exact_sha256_required: true
+    new_exact_sha256_required: true
+    overwrite_without_match: DENIED
+  delete:
+    expected_before_exact_sha256_required: true
+    tombstone_or_revision_required: true
+  move:
+    source_exact_sha256_required: true
+    destination_must_not_exist: true
+    source_and_destination_within_workspace: true
+
+path_security:
+  absolute_paths: DENIED
+  parent_traversal: DENIED
+  workspace_escape: DENIED
+  symlinks: DENIED
+  reparse_points: DENIED
+  case_collision: DENIED
+  unicode_normalization_collision: DENIED
+  executor_must_revalidate_immediately_before_write: true
+
+execution:
+  core_side_effects: FORBIDDEN
+  core_output: PLAN_AND_DECISION_ONLY
+  runtime_service_identity_required: true
+  durable_journal_required: true
+  idempotency_key_required: true
+  same_key_different_plan_digest: DENIED
+  before_manifest_digest_required: true
+  after_manifest_digest_required: true
+  partial_success_must_be_explicit: true
+  rollback_or_reconciliation_plan_required: true
+
+human_interfaces:
+  allowed:
+    - submit_change_intent
+    - review_semantic_diff
+    - approve_or_deny_authority_request
+    - resolve_exception
+    - inspect_read_only_evidence
+  forbidden_as_normal_process:
+    - edit_managed_file_in_editor
+    - delete_managed_file_in_file_explorer
+    - copy_file_into_managed_workspace
+    - hand_edit_generated_projection
+    - bypass_agent_with_shell_mutation
+
+risk:
+  bounded_reversible_agent_mutation: R1
+  paid_or_external_mutation: R2
+  public_release_or_material_brand_mutation: R3
+  direct_human_mutation: R4
+  destructive_overwrite: R4
+  policy_or_approval_ledger_mutation: R4
+
+break_glass:
+  enabled: true
+  standing_grant_allowed: false
+  required_risk_tier: R4
+  independent_approvers: 2
+  short_expiry_required: true
+  exact_path_scope_required: true
+  exact_operation_scope_required: true
+  pre_change_snapshot_required: true
+  immutable_audit_required: true
+  post_change_validation_required: true
+  incident_record_required: true
+
+drift_detection:
+  compare_against_current_manifest: true
+  on_unplanned_change:
+    workspace_trust_state: UNTRUSTED
+    generation: BLOCK
+    publish: BLOCK
+    create_drift_report: true
+    require_reconciliation: true
+  human_modified_bytes_are_current_evidence: false
+
+source_control:
+  agent_worktree_or_branch_required: true
+  protected_branch_direct_commit: DENIED
+  force_push: DENIED
+  tests_before_review: REQUIRED
+  human_role: REVIEW_AND_MERGE

@@ -1,0 +1,113 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.video-factory.invalid/artifact/idea-scorecard.schema.json",
+  "title": "Aggregated idea scorecard (no automatic selection)",
+  "type": "object",
+  "required": [
+    "artifact_version",
+    "rules_version",
+    "episode_id",
+    "generated_at",
+    "candidate_source",
+    "score_sources",
+    "rubric_keys",
+    "candidates",
+    "selection_policy"
+  ],
+  "properties": {
+    "artifact_version": { "const": "idea-scorecard/1.0" },
+    "rules_version": { "$ref": "artifact-common.schema.json#/$defs/rulesVersion" },
+    "episode_id": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" },
+    "generated_at": { "type": "string", "minLength": 1 },
+    "candidate_source": {
+      "type": "object",
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": { "$ref": "artifact-common.schema.json#/$defs/relativePath" },
+        "sha256": { "$ref": "artifact-common.schema.json#/$defs/sha256" },
+        "generated_by": { "$ref": "artifact-common.schema.json#/$defs/roleId" }
+      },
+      "additionalProperties": false
+    },
+    "score_sources": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["path", "sha256", "scored_by"],
+        "properties": {
+          "path": { "$ref": "artifact-common.schema.json#/$defs/relativePath" },
+          "sha256": { "$ref": "artifact-common.schema.json#/$defs/sha256" },
+          "scored_by": { "$ref": "artifact-common.schema.json#/$defs/roleId" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "rubric_keys": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "candidates": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "candidate_id",
+          "title_working",
+          "scores",
+          "total_score",
+          "score_order"
+        ],
+        "properties": {
+          "candidate_id": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" },
+          "title_working": { "type": "string", "minLength": 1 },
+          "scores": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "required": ["scored_by", "rubric", "subtotal"],
+              "properties": {
+                "scored_by": { "$ref": "artifact-common.schema.json#/$defs/roleId" },
+                "rubric": {
+                  "type": "object",
+                  "minProperties": 1,
+                  "additionalProperties": { "type": "number" }
+                },
+                "subtotal": { "type": "number" },
+                "notes": { "type": "string" }
+              },
+              "additionalProperties": false
+            }
+          },
+          "total_score": { "type": "number" },
+          "max_score": { "type": "number" },
+          "score_order": { "type": "integer", "minimum": 1 }
+        },
+        "additionalProperties": false
+      }
+    },
+    "selection_policy": {
+      "type": "object",
+      "required": ["automatic_selection", "final_actor", "notice"],
+      "properties": {
+        "automatic_selection": { "const": false },
+        "selected_candidate_id": { "type": "null" },
+        "final_actor": { "$ref": "artifact-common.schema.json#/$defs/roleId" },
+        "notice": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": false
+    },
+    "extensions": { "$ref": "artifact-common.schema.json#/$defs/extensions" }
+  },
+  "additionalProperties": false,
+  "x-artifact-migration": {
+    "id_pattern": "^idea-scorecard/[1-9][0-9]*-to-[1-9][0-9]*/[1-9][0-9]*$",
+    "single_major_step": true,
+    "in_place": false,
+    "automatic_downgrade": false
+  }
+}

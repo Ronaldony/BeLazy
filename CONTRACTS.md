@@ -1,0 +1,599 @@
+# Public contracts
+
+rules_version: supplied by the consuming workspace
+core_contract: 0.3
+config_contract: 1.0
+
+The public surface is the set of names re-exported by each package `__init__.py`. Internal helpers and repository
+tools are not public runtime API.
+
+## Core 0.3 gate model
+
+Production planning is evidence-based, not presence-based:
+
+1. The caller observes exact artifact bytes and supplies path/hash/document
+   snapshots. Raw documents are rejected by orchestration.
+2. Core validates every registered schema and requires one explicitly current
+   artifact for singleton families. Mixed episode or rules provenance blocks.
+3. Reviews must pass, bind to the current subject hash, and satisfy distinct
+   reviewer counts from workflow policy.
+4. Generation requires `generation-packet/2.0` or `2.1`, the version-specific
+   complete independent feasibility pass, and exact human approval evidence in
+   Standard/Controlled.
+5. Every packet shot needs one current QC verdict of pass or warn. Failed or
+   inconclusive QC cannot advance.
+6. Multi-shot packets additionally need one current pass/warn continuity QC
+   exactly hash-bound to every shot output and covering each adjacent
+   last-to-first pair on all three continuity axes.
+7. Candidate ranking, human edit selection, rough cut, final delivery, final
+   review, metadata, and publish approval form the remaining lineage. Core
+   returns `ready_for_human_publish`; it never publishes.
+
+| Package | Public contract |
+|---|---|
+| `video_factory.domain` | opaque identifiers, hashes, `ArtifactReference`, validation, canonical serialization, and migration ports |
+| `video_factory.brand` | closed character/location entity envelope, role-preserving fixed sentences, deterministic Markdown projection, structured round-trip evidence, and exact-source catalog port |
+| `video_factory.config` | four persisted config models, seven ordered merge layers, closed validation, extension registration, provenance, and effective snapshots |
+| `video_factory.engine` | workflow/execution modes, validated `ArtifactSnapshot` graph, hash-bound generation readiness, and deterministic plan-only orchestration; never transitions |
+| `video_factory.policy` | Rapid/Standard/Controlled workflow policy data, mode resolution (no silent default), and ADR-004 bridge helpers |
+| `video_factory.providers` | capability registry, shared descriptor/envelopes, injected constraint profiles, and separate media-provider/task-executor ports |
+| `video_factory.approvals` | pending requirements and granted evidence as distinct contracts; deterministic requirement IDs and exact evidence binding |
+| `video_factory.feasibility` | pure checks for capability, minimum duration, first-frame aspect/before-state, continuity anchors, cross-shot first-frame state carryover, and unsupported render dependencies |
+| `video_factory.qc` | injected constraints with pass/warn/fail/inconclusive/not-applicable outcomes and fallback measurement hints |
+| `video_factory.continuity` | cross-shot comparison of one opaque element between two generated clips (relative-scale / orientation-shape / presence); plan-only, caller-supplied finite nonnegative tolerances, closed measurement serialization, and pure serialized-document rejudgment |
+| `video_factory.media` | pure observed-output matching, double-extension warning recovery, and caller-injected aspect validation |
+| `video_factory.storage` | no-overwrite artifact store ports, frozen-index guards, **plan-only** workspace init/export (`plan_materialize` / `plan_export` → Plan objects; never writes) |
+| `video_factory.review` | creator/reviewer-separated request, result, revision policy, and review port |
+| `video_factory.security` | path guard, secret reference, purity-scanner port, and in-process `scan_repository` / `RepositoryPurityScanner` |
+| `video_factory.artifacts` | artifact schema registry (`artifact_version` → schema), single-document and batch JSON Schema validation runner, structured field-path errors |
+| `video_factory.lint` | injected `VerbatimRule` / `SourceLockRule` data, JSON rule-file loader, `run_lint` → `LintReport` reusing `qc.Finding` (byte/sha256 equality + source drift); **no channel text in core** |
+| `video_factory.sheets` | deterministic generation sheet; preview-only unless readiness proof matches the exact packet content |
+| `video_factory.encode` | concat/re-encode/mux command plans, explicit input roles, optional soundtrack, post-checks/fallbacks; never executes |
+| `video_factory.analytics` | injected `AnalyticsRecord` snapshots, `VerificationRule`/`RetroPolicy` data, deterministic `compute_retro` → `RetroReport` (`supported`/`refuted`/`inconclusive`); **no external analytics APIs**; CLI analytics commands not wired yet |
+| `video_factory.distribution` | ADR-001 `core.lock` document types, deterministic `build_core_lock` (string only), `parse_core_lock`, observation-only `verify_lock_against_installed`, and `plan_wheel_build` (argv/string only; **never builds or installs**) |
+| `video_factory.cli` | command registry (`CommandSpec`); plan-only implemented surface for `doctor`/`validate`/`init`/`export`/`qc`/`approve`/`run`/`status`/`new-*`/`review`; contract-only recovery (`retry`/`resume`/`invalidate`/`reopen`); sole `not_yet_backed`: `migrate`; no silent workflow-mode default (OD-004) |
+
+## Plan-only core invariant (2026-07-23)
+
+Core **must not perform side effects**. Allowed: observe (read / existence checks), validate, compute, and
+**produce structured Plan objects**. Forbidden inside `src/`: file write/delete/move, archive creation, and
+child-process launches. Actual execution belongs to a human or a channel-workspace tool that consumes Plans.
+
+This generalizes the existing `EncodeCommandPlan` pattern (`executed=False` always) and provider
+`human_only` → `AWAITING_HUMAN` outcomes.
+
+| Planner | Plan type | READY means | Rejected statuses (examples) |
+|---|---|---|---|
+| `plan_materialize` | `WorkspaceInitPlan` | validated copy operation list (source/dest relative paths + source sha256) | `rejected_target_nonempty`, `rejected_schema`, `rejected_frozen_index`, … |
+| `plan_export` | `WorkspaceExportPlan` | export file list + output kind (`directory`\|`zip`) after sensitive scan | `rejected_sensitive` (+findings), `rejected_target_exists`, `rejected_frozen_index`, … |
+| `build_encode_command` | `EncodeCommandPlan` | argv + command string | `rejected_output_exists`, `rejected_invalid` |
+| `build_qc_plan` / `judge_measurements` | `QCPlan` / `QCJudgment` | primary/fallback method hints and pass/warn/fail/inconclusive/not-applicable judgment | empty plan; unknown comparison |
+| `build_approval_requirement` | `ApprovalRequirement` | path+sha256-bound requirement document | empty artifacts; invalid sha256 |
+| `observe_episode_state` / `plan_next_step` | `EpisodeStateObservation` / `NextStepPlan` | validated current snapshot graph and deterministic next action | raw docs, mixed provenance, ambiguous current artifacts, missing mode |
+| `build_generation_readiness` | `GenerationReadinessPlan` | exact current reviews, feasibility pass, and human evidence all bind | stale/missing/failed evidence; Rapid mode |
+| `draft_*_config` | validated config mapping | schema-valid channel/concept/episode draft | invalid scope id / settings |
+| `build_core_lock` | TOML `str` | deterministic lock document text (caller writes file) | invalid artifact / path escape |
+| `plan_wheel_build` | `WheelBuildPlan` | `python -m build --wheel` argv + vendor placement notes | invalid version |
+| `verify_lock_against_installed` | `LockVerdict` | compatible / upgrade_available / breaking / python_mismatch | invalid lock |
+
+Gate: `tools/check_side_effect_free.py` statically scans `src/` (AST-first, regex backup) and exits 1 on
+write/process APIs. Complements `check_core_purity.py` and `check_repo_isolation.py`.
+
+### Breaking change (core 0.x — allowed under plan-only directive)
+
+| Removed (breaking) | Replacement |
+|---|---|
+| `storage.materialize(...)` → `WorkspaceInitResult` (copied files) | `storage.plan_materialize(...)` → `WorkspaceInitPlan` |
+| `storage.export(...)` → `ExportResult` (wrote dir/zip) | `storage.plan_export(...)` → `WorkspaceExportPlan` |
+| `WorkspaceInitResult` / `ExportResult` | `WorkspaceInitPlan` / `WorkspaceExportPlan` (+ status enums, `CopyOperation`) |
+| `WorkspaceInitEngine.materialize` / `WorkspaceExportEngine.export` | `.plan_materialize` / `.plan_export` |
+| CLI `init`/`export` payload fields implying writes (`files_copied`, `files_exported`) | plan fields (`operations`/`files`, `executed=false`, plan `status`) |
+| doctor purity via child-process launch of `tools/check_core_purity.py` | in-process `video_factory.security.purity.scan_repository` (CLI tool remains a thin wrapper) |
+
+Validation/refusal logic is **not** weakened: the same nonempty-target, schema, frozen-index, and sensitive-pattern
+checks still run; only the post-pass action changed from write → plan.
+
+## Configuration documents
+
+The persisted models are `WorkspaceConfig`, `ChannelConfig`, `ConceptConfig`, and `EpisodeConfig`. Each document
+has its own `artifact_version`, an independent `config_contract`, one opaque scope identifier, optional closed
+`settings`, and optional `extensions`.
+
+Core-owned settings are deliberately small:
+
+- `media.duration_seconds`, `media.aspect_ratio`, and `media.platforms` are values supplied by configuration.
+  The package declares no duration, shape, or platform default.
+- `identity.recurring_character_ids` is an array of opaque identifiers. An empty array is valid and explicitly
+  represents a scope with no recurring identity.
+- `execution.mode` records an opaque requested mode. It has no package default and does not by itself grant an
+  external action.
+
+Every core-owned object is closed. Unknown fields fail validation. The only open data is
+`extensions.<namespace>.payload`; its core-owned wrapper still requires exactly `contract_version` and `payload`.
+A namespace must be registered with an owner-supplied validator before merge. The core invokes that validator,
+then preserves and hashes the payload without interpreting it. A payload cannot add or relax a core invariant.
+
+The schemas are in `schemas/`. `config-layer.schema.json` is the single shared definition source used by the four
+layer schemas and `effective-config.schema.json`.
+
+## Merge and provenance
+
+Precedence is fixed from least to most authoritative:
+
+1. `core_defaults`
+2. `workspace`
+3. `channel`
+4. `concept`
+5. `episode`
+6. `runtime_override`
+7. `human_decision`
+
+Input order is irrelevant; the merger sorts by this contract. Only one source per layer and one occurrence of a
+JSON object key are allowed. Objects merge recursively, like-typed scalar values replace, and arrays replace as a
+whole. Arrays are never appended implicitly. A type conflict or `null` deletion fails the merge.
+
+Runtime overrides are fail-closed: callers must pass an explicit allowlist of leaf JSON Pointers, and any other
+runtime pointer aborts snapshot creation. An explicit human decision is a configuration provenance layer, not
+approval evidence. Approval evidence remains a separate immutable artifact.
+
+Provenance maps every effective leaf JSON Pointer to its winning `layer` and `source_id`. Object members inherited
+from lower layers keep their own winners. Each extension namespace is one opaque leaf for merge and provenance,
+so the core never recursively combines owner payload semantics.
+
+## Effective snapshot and deterministic hash
+
+`EffectiveConfigSnapshot` uses `artifact_version: effective-config/1.0` and contains:
+
+- scope identifiers;
+- independent distribution, core-contract, rules, policy, and config-contract versions;
+- the core lock binding;
+- ordered source path and source digest records;
+- the closed merged values and per-pointer provenance;
+- applied runtime allowlist constraints; and
+- `effective_config_sha256`.
+
+Source digests and the effective digest use `canonical-json-v1`:
+
+1. Objects are sorted by Unicode key value. Arrays retain their declared order.
+2. Output is UTF-8 with no BOM, insignificant whitespace, or trailing newline.
+3. Strings use JSON escaping. Only finite numbers are allowed.
+4. Integers, decimals, and finite floating values use plain base-10 form; redundant fractional zeroes are removed,
+   and negative zero becomes zero.
+5. A source digest is calculated from the complete parsed source document, so key order, indentation, and file
+   line endings do not affect it.
+6. The effective digest covers artifact version, scope, independent versions, bindings, ordered source metadata,
+   effective values, provenance, and constraints. `created_at` and the digest field itself are excluded, preventing
+   clock time and self-reference from changing the logical configuration identity.
+
+The snapshot mapping is JSON Schema-valid JSON data. Persistence, version allocation, and no-overwrite storage are
+separate storage responsibilities; this package does not silently write a file as a side effect of merging.
+
+## Version and migration policy
+
+Version fields are not aliases:
+
+- `artifact_version` is `<kind>/<major>.<minor>` and versions one artifact structure and meaning.
+- `rules_version` is opaque provenance supplied by the workspace. It is not parsed as a package or artifact
+  version.
+- `core_distribution` is the installed package semantic version.
+- `core_contract`, `config_contract`, and extension contracts independently express machine compatibility.
+- `policy_version` identifies the applied policy bundle independently of the rules provenance.
+
+Artifact major migration IDs use `<artifact-kind>/<from-major>-to-<to-major>/<ordinal>`. A migration advances one
+major at a time, is deterministic for the same input bytes and migration ID, writes a new artifact instead of
+editing the source, records source path/hash/migration/core version, never disguises a rules or policy change, and
+never performs an automatic downgrade. An unknown major fails closed. Each schema records these rules in its
+`x-artifact-migration` annotation.
+
+## Production artifact schemas (planning → generation → publish prep / handoff)
+
+Core validates **structure**, not creative taste. Channel-specific marketing policy, provider names, duration
+ranges, and aspect ratios stay outside these schemas (policy pack or config settings). Adding a
+`schemas/{family}.schema.json` with `properties.artifact_version.const` is enough for automatic registry
+registration; the runner source tree need not change.
+
+Common envelope (document families):
+
+- `artifact_version`: `<family>/<major.minor>` (const per schema, e.g. `storyboard/1.0`)
+- `rules_version`: opaque provenance string (not parsed as a package version) — required on most families;
+  append-only `handoff-event` omits it and carries provenance in the event payload when needed
+- `extensions`: optional closed wrapper map; only `extensions.<namespace>.{contract_version,payload}` is open inside `payload`
+
+File naming: `schemas/{family}.schema.json` for family `artifact_version` left side. Shared `$defs` live in
+`artifact-common.schema.json` (not itself a document kind). The registry loads every `*.schema.json` that declares
+`properties.artifact_version.const` and maps that const → schema. An unregistered version **fails closed**.
+
+### Planning / storyboard / references
+
+| Family (`artifact_version`) | Core structural fields | Explicitly not forced |
+|---|---|---|
+| `brief/1.0` | `episode_id`, one-line `summary`, `hook`, `development`, `ending`, `risks[]`; optional `series_link`, optional `marketing_reasons[{reason_id,statement}]` | 4 Reasons names/count; Stop/Stay/Share/Series are channel policy via `marketing_reasons` or `extensions` |
+| `idea-candidates/1.0` | opaque `candidate_id`, `title_working`, `premise`, scorer/writer `roleId` | pillar enums, candidate count caps, marketing reason taxonomy |
+| `idea-scores/1.0` | blind scores: opaque candidate ids, numeric `rubric` map (keys free), `scored_by` role | fixed rubric key set, provider/role enums, score ceiling |
+| `idea-scorecard/1.0` | aggregated scores + `selection_policy.automatic_selection: false` and null `selected_candidate_id` | automatic winner selection; max score constants |
+| `storyboard/1.0` | `shots[]` with `shot_id`, `duration_sec` (positive number only), opaque `narrative_role`, `characters[]` (empty allowed), optional opaque `location`, optional `camera` object, structural `action`, free-text `creative_direction`, and optional opaque `end_state_elements[]` as 2.1 carryover evidence | shot count range, total duration range, aspect ratio, comedy-timing enums |
+| `storyboard-review/1.0` | hash-bound `subject` (`path`+`sha256`+`artifact_version`), creator/reviewer roles, `verdict` ∈ `pass`/`fail`/`uncertain` (aligned with `ReviewVerdict`), `findings[]` | concrete AI tool identity enums |
+| `storyboard-approval/1.0` | `approved_by_human`, `approver_role`, `approved_at`, `bound_artifacts[]` (path+sha256+artifact_version; same binding idea as `ApprovalRequirement.bound_artifacts`) | channel-specific actor const strings |
+| `storyboard-approval/2.0` | granted human evidence with requirement/evidence IDs, state, record hash, effective-config hash, and exact current storyboard/review bindings | pending requirements or a packet-local boolean as approval |
+| `reference-manifest/1.0` | human selection metadata + `assets[{path,sha256}]` where `path` is repository-relative only (absolute / drive / `..` rejected) | fixed `05_references/` prefix, image extension whitelist |
+| `reference-review/1.0` | per-asset `verdict` + free-text `reasons[]` | bible-match / composition checklists (channel QC policy) |
+
+### Generation / QC / edit / publish / handoff
+
+| Family (`artifact_version`) | Core structural fields | Explicitly not forced / forbidden |
+|---|---|---|
+| `generation-packet/1.0` | per-shot free-text `prompt`, `candidates` (integer ≥ 1), optional `reference_assets[{path,sha256}]`, opaque `capability_id`, `provider_plans[].adapter_id` (opaque), optional `quota_plan.budgets` as map of `{unit,amount}` | concrete media adapter enums, aspect-ratio enum, candidate max caps, named credit pools |
+| `generation-packet/2.0` | storyboard hash binding; explicit output dimensions; per-shot source id, capability, first-frame path/hash/dimensions/before-state, continuity/master-plate facts, and render dependencies | provider-specific duration/aspect constants; those come from an injected constraint profile |
+| `generation-packet/2.1` | adds per-shot `first_frame.depicted_elements` and `continuity.carried_elements`; strict feasibility compares them with the preceding hash-bound storyboard shot's `end_state_elements` so an unmatched empty declaration cannot pass | element vocabulary (opaque, owner-assigned); pixel-level proof |
+| `packet-review/1.0` | same review pattern as `storyboard-review` (`subject` hash bind, `verdict`, `findings`) | tool identity enums |
+| `packet-approval/1.0` | same approval pattern as `storyboard-approval` (`bound_artifacts[]`, `approver_role`) | channel actor const strings |
+| `approval-requirement/1.0` | pending gate request with deterministic requirement ID, capability, input hashes, and effective-config hash; `creates_evidence: false` | approver/timestamp placeholders or approval authority |
+| `generation-feasibility-review/1.0` | packet/storyboard/profile bindings and the check kinds emitted per shot (six for `generation-packet/2.0`, seven for `2.1`, which adds `first_frame_state_carryover`); verdict pass/fail/inconclusive | inferred provider behavior |
+| `packet-approval/2.0` | granted human evidence exactly bound to packet, required reviews, and feasibility evidence | a non-authoritative `approved_by_human` packet flag |
+| `external-call-reservation/1.0` | reservation **record**: `event_id`, `reserved_at`, `actor_role`, opaque `adapter_id`/`capability_id`, `idempotency_key`, `status`, `bound_artifacts[]`, optional `quota_snapshot` | auto-trigger/dispatch fields; hard-coded daily quotas |
+| `candidate-ranking/1.0` | deterministic sort: `ranking_policy[]`, per-shot ranked candidates with numeric `metrics` map | **no** `final_selection` / auto-choice fields (human selects) |
+| `shot-qc/1.0` | `measurements[]` / `constraints[]` / `findings[]` aligned with `qc.contracts` (`Measurement`/`Constraint`/`Finding`); `expectations_source` points at config, not literal channel numbers | fixed resolution/fps/duration constants in schema |
+| `shot-qc/2.0` | adds required `shot_id` and allows pass/warn/fail/inconclusive so every packet shot can be gated independently | treating warning as failure or missing data as pass |
+| `continuity-qc/1.0` | binds **several** shot outputs at once; per-element observations (`relative_scale` / `orientation_shape` / `presence`) at first/middle/last sample points, pairwise comparisons, exact measurement values/units, complete policy inputs, and per-comparison judgments; sufficient for deterministic rejudgment | tolerance defaults, frame-extraction execution, element vocabulary |
+| `edit-manifest/1.0` | human-selected `input_clips[]` (path+sha256), `audio_required`, optional free-text `target_platforms[]` | platform brand enums as required vocabulary |
+| `rough-cut-report/1.0` | local assembly status, ranking bind, inputs, `output_path`, optional local-tool flags and command argv | publish/upload execution flags |
+| `final-delivery/1.0` | selected output hash, lineage references, technical-QC reference, and pass/warn technical verdict | implicit “latest file” selection |
+| `final-review/1.0` | creator/reviewer-separated review bound to the current final-delivery hash | self-review or stale final review |
+| `publish-metadata-draft/1.0` | draft title/description/tags, optional disclosure text, `human_review_required: true` | **no** account id, auto-upload, or publish-execution fields |
+| `publish-approval/1.0` | granted evidence bound exactly to final delivery, required final reviews, and metadata | upload or publish execution |
+| `generation-day-brief/1.0` | `approval_items[]` aggregation, optional quota structure, `automatic_approval_performed: false`, `generation_executed: false` | fixed gate-kind enum, hard quota numbers |
+| `handoff-event/1.0` | append-only: `event_id`, `occurred_at`, `actor_role`, opaque `event_type`, free `payload` | channel pipeline state enums as closed vocabulary |
+| `handoff-task/1.0` | task envelope aligned with adapter **request** concepts: `task_id`, `input_artifacts`, `allowed_outputs`, `capability_allowlist`, `idempotency_key`, `required_actor_role`, `human_gate_required` | concrete executor/tool enums; `request_id` reserved for adapter calls (use `task_id` here) |
+| `handoff-result/1.0` | result envelope aligned with adapter **result** concepts: `outcome` ∈ `SUCCEEDED`/`REJECTED`/`FAILED`/`EXTERNAL_UNCERTAIN`/`AWAITING_HUMAN`, `external_reference`, `measured_cost`, `uncertainty`, optional `request_id` | concrete adapter id enums |
+| `next-step/1.0` | next action guidance: `next_actor_role` (opaque role id), `action_type`, `instructions`, relative `target_paths[]`, `approval_required`, `auto_execution` | locale-only instruction fields; auto-execution with approval required |
+
+### Analytics / retro (2)
+
+| Family (`artifact_version`) | Core structural fields | Explicitly not forced / forbidden |
+|---|---|---|
+| `analytics-record/1.0` | opaque `episode_id`, `collected_at`, `collector_role`, `checkpoint_window{window_id,definition}` (both data), free `metrics` map (`metric_key` → number\|null), optional `publish_record_ref` bind | named marketing reason taxonomies; fixed checkpoint window vocabulary; external API clients |
+| `retro-report/1.0` | `policy_id`, `checkpoint_window_ids[]` (from records used), `evaluations[]` with opaque `hypothesis_id` + closed `comparator`/`verdict`, aggregate `counts` | hard-coded hypothesis set size/names; wall-clock computation timestamps; treating null metrics as failure |
+
+Contract alignment notes:
+
+- **Approvals:** `packet-approval` and `external-call-reservation` use `bound_artifacts` (path+sha256+artifact_version), matching `ApprovalRequirement.bound_artifacts` and ADR-004 hash binding; reservation adds `idempotency_key` for the request-envelope concept without becoming a dispatch trigger.
+- **Providers:** `handoff-task` uses the same *ideas* as `RequestEnvelope` (`input_artifacts`, `allowed_outputs`, `capability_*`, `idempotency_key`) but keeps the name `task_id` because a handoff task is not necessarily one adapter request. `handoff-result` reuses `outcome`, `external_reference`, `measured_cost`, and `uncertainty` with the same meanings as `ResultEnvelope`.
+- **QC:** `shot-qc` serializes `Constraint` / `Measurement` / `Finding` shapes from `video_factory.qc.contracts`; expected technical values are referenced via `expectations_source` (config), not hard-coded in the schema.
+
+Runner surface (`video_factory.artifacts`):
+
+- `ArtifactSchemaRegistry` / `get_default_registry()`
+- `validate_artifact(document, artifact_version=None)` → structured `ArtifactValidationResult` (field paths)
+- `validate_artifact_directory(path)` → `BatchValidationReport` (passed/failed/skipped counts)
+
+CLI `validate`:
+
+- **Config (unchanged):** `--layer workspace|channel|concept|episode <path>`
+- **Artifact:** omit `--layer`, pass a document path (uses document `artifact_version`)
+- **Batch:** `--directory <dir>` validates every `*.json` with an `artifact_version`
+
+## Other artifact contracts
+
+- `ArtifactReference`: relative path, SHA-256 digest, and artifact structure version.
+- `CapabilityDescriptor`, `RequestEnvelope`, `ResultEnvelope`: adapter discovery plus hash-bound input/output and
+  uncertainty evidence.
+- `ApprovalEvidence`: immutable evidence bound to the exact requirement and referenced artifact hashes.
+- `QCReport`: deterministic findings evaluated only against injected policy constraints.
+- `CatalogEntry` and ledger records: exact paths and hashes; directory discovery is not part of the contract.
+
+## Generic quality lint contract
+
+Core does **not** know channel character bibles, shot counts, avoid-term lists, or provider budgets. Those remain
+channel-owned rule *data*. Core only evaluates injected rules:
+
+| Core type | Meaning |
+|---|---|
+| `VerbatimRule` | `target_field_pointer` (JSON Pointer) must match `expected_text_sha256` (and optional full `expected_text` byte-for-byte). Optional `source_path` + `source_sha256` detect source drift. |
+| `SourceLockRule` | file at `source_root / source_path` must currently hash to `source_sha256` |
+| `LintRuleSet` / loader | channel ships a JSON rule file (`rules[]` with `kind: verbatim \| source_lock`); YAML extension accepted only when JSON-compatible (stdlib-only) |
+| `run_lint` → `LintReport` | findings reuse `video_factory.qc.Finding` / `Measurement`; `passed` is all-findings conjunction |
+
+## Generation order-sheet contract
+
+`render_generation_sheet(packet_doc, readiness=...)` turns a packet into
+human copy-paste Markdown. Without a `GenerationReadinessPlan` bound to the
+exact canonical packet digest, the title always contains `DO NOT GENERATE`.
+The packet's compatibility boolean is displayed but never grants authority.
+
+Determinism rules (same input → byte-identical output):
+
+1. UTF-8, LF only; no wall-clock timestamps.
+2. Fixed section order: header → output/quota → shots (document order) → footer marker.
+3. Free maps enumerated with Unicode-sorted keys; `provider_plans` labels sorted.
+4. Each shot `prompt` is emitted **verbatim** inside a fenced block (no summary or rewrite).
+5. Header and HTML comment stamp `packet_sha256` from `canonical-json-v1` bytes of the packet.
+6. An authorized sheet stamps feasibility and human-approval evidence
+   references. Stale readiness raises instead of silently downgrading.
+
+## Encode plan contract (OD-005 — no execution)
+
+`schemas/encode-request.schema.json` and `schemas/encode-command-plan.schema.json` are **contract** schemas, not
+production artifact families (no `artifact_version` const → not auto-registered by the artifact registry).
+
+| Core type | Meaning |
+|---|---|
+| `EncodeRequest` | profile id, role-tagged inputs (video/audio/subtitle/overlay), optional video/audio filters, output spec, overwrite observation, and shortest policy |
+| `EncodeProfile` (data) | `rough_cut` concatenates video; `final` re-encodes one video and optionally muxes one soundtrack; media values remain overridable |
+| `EncodeCommandPlan` | argv/string plus post-encode checks and fallback profile references; **`executed: false` always** |
+| overwrite | `refuse` + `output_exists` → `rejected_output_exists` (no argv); `allow_version_suffix` requires `version_suffix` |
+
+Core encode/lint/sheets modules must never import or invoke process-launch helpers. Execution is a
+human step or a later approved adapter.
+
+## Adapter execution contract
+
+The adapter surface implements ADR-004 without concrete bindings. `CapabilityDescriptor` is the shared discovery
+record for an opaque adapter ID, provider/executor kind, contract version, capabilities, supported execution
+modes, input/output artifact versions, side effects, and uncertainty model. `RequestEnvelope` binds a capability
+request to its effective-config digest, immutable input references, allowed outputs, idempotency key, and separated
+creator/reviewer roles. `ResultEnvelope`, `ExternalReference`, `CostMeasurement`, `UncertaintyEvidence`, and
+`Outcome` preserve output provenance, both external request/session identifiers, measured-or-unknown cost, and
+uncertain reconcile state without translating a timeout into success or failure.
+
+The provider and executor abstractions deliberately remain separate:
+
+| Core type | ADR-004 decision implemented |
+|---|---|
+| `ProviderAdapter`, `ProviderPlan`, `ProviderPreview` | deterministic validation, provider-unit estimate and local-only preview |
+| `HumanHandoff`, `ProviderHumanResult` | prepare human instructions and expected output names, then stop at `AWAITING_HUMAN` without external dispatch |
+| `ReadOnlyStaging`, `ExecutorDispatchContext` | exact read-only inputs, allowed output contract, and tool/capability allowlists before executor dispatch |
+| `ExecutorAdapter`, `NormalizedEvent` | creator/reviewer separation, stream normalization, timeout uncertainty, and reconcile-before-retry |
+| `ExecutionModeLimits`, `EffectiveExecutionMode` | intersect channel, selected-mode, and adapter maxima during effective-config merge |
+| `OrchestrationPolicy`, `OrchestrationGuard` | inspect effective mode and immutable human evidence before reservation or adapter selection |
+| `AdapterBinding`, `InMemoryCapabilityRegistry` | resolve a profile-supplied opaque binding and enforce capability plus adapter kind |
+| `enforce_adapter_dispatch` | repeat the mode/kind/capability check immediately before any external process |
+
+Provider descriptors cannot advertise `automated` in this contract. A provider can validate, estimate, preview,
+prepare a human handoff, and ingest a human-downloaded result; it has no external generation implementation.
+Executor dispatch is available only in effective `automated` mode, with read-only staging and explicit allowlists.
+An uncertain executor idempotency key remains locked until `reconcile()` reaches a settled outcome.
+
+Missing or unknown execution limits normalize to `human_only` as a fail-safe. This is not a production workflow
+default: no workflow profile is selected by the package. A configuration field or extension boolean cannot
+increase the intersection result.
+
+## Brand entity projection contract
+
+`brand-entity/1.0` implements only the shadow-evidence boundary. Its common envelope requires an opaque entity ID,
+`character` or `location` kind, canonical status, opaque rules provenance, one exact source path and byte digest,
+declared heading-bounded extraction ranges, and an ordered array of fixed sentences. Every fixed sentence carries
+its own role, ordered consumer IDs, source section, verbatim UTF-8 text, and digest. Duplicate roles fail validation;
+the package never merges entries or chooses a representative sentence.
+
+The `data` member is closed and kind-discriminated. `CharacterData` records a display name, design status, exact
+visual-reference path, scale anchor, and ordered invariants. `LocationData` records a display name, ordered reference
+tokens, usage, and ordered notes. The reference values remain owner data; the core assigns no character, place, or
+consumer vocabulary.
+
+The following type-to-decision mapping makes each abstraction traceable to the staged projection decision:
+
+| Core type | Decision implemented |
+|---|---|
+| `SourceSectionRange`, `EntitySource` | bind a shadow to exact Markdown bytes and explicit extraction bounds |
+| `FixedSentence` | preserve multiple role-specific blocks, their consumers, order, and byte digests without selection |
+| `CharacterData`, `LocationData`, `BrandData` | use one envelope with closed kind-specific extensions while owner values stay outside core |
+| `BrandEntity`, `EntityKind`, `CanonicalStatus` | distinguish shadow evidence from a future canonical source without changing authority |
+| `ProjectionField`, `FixedSentenceObservation`, `ProjectionSnapshot` | represent comparable source, shadow, and rendered observations without repair |
+| `FieldComparison`, `FixedSentenceComparison`, `OrderComparison`, `RoundTripReport` | expose missing values, ordering changes, and UTF-8 byte changes as structured evidence |
+| `MarkdownProjectionRenderer` | produce a deterministic human view and copy fixed-sentence payload bytes unchanged |
+| `RoundTripChecker` | compare all three observations and report differences instead of normalizing them |
+| `BrandCatalog`, `CatalogEntity`, `CatalogSourceFormat` | give consumers one logical lookup boundary with an explicit source format |
+| `MarkdownCatalogEntry`, `FixedSentenceExtractor`, `MarkdownBrandCatalog` | make the current production implementation read one declared Markdown path and hash only; no glob, merge, or modification-time choice |
+| `NonProductionEntityError`, `require_production_eligible` | reject `shadow` structured data when offered as production input |
+
+The generated view contains length-delimited UTF-8 blocks. The parser reads the declared byte count and fails on a
+malformed trailer; it does not normalize line endings, whitespace, or text. Round-trip comparison covers modeled
+fields and fixed sentences. Owner-side extraction is intentionally injected because interpreting arbitrary Markdown
+headings and narrative prose is not a generic core responsibility.
+
+## Distribution lock and wheel plan (ADR-001)
+
+Channel workspaces pin the installed core via a root `core.lock` (UTF-8 TOML, `lock_format = 1`). The core
+package **computes** lock text and compatibility verdicts; it does not write `core.lock`, build wheels, or run
+`pip install`.
+
+### `core.lock` shape
+
+```toml
+lock_format = 1
+selected_distribution = "video-production-core"
+
+[[artifacts]]
+role = "core"
+name = "video-production-core"
+version = "<semantic-version>"
+contract_version = "<major.minor>"
+source_commit = "<40-hex>"
+path = "vendor/core/<version>/<wheel-file>"
+sha256 = "<64-hex>"
+requires_python = "<version-range>"
+
+[[artifacts]]
+role = "dependency"
+name = "<distribution-name>"
+version = "<exact-version>"
+path = "vendor/core/<version>/<wheel-file>"
+sha256 = "<64-hex>"
+```
+
+Rules enforced by `build_core_lock` / `parse_core_lock`:
+
+1. `path` is repository-relative POSIX under `vendor/core/`; `..` and absolute paths are rejected.
+2. Exactly one `role = "core"` artifact; `selected_distribution` must equal its `name`.
+3. Core artifacts require `contract_version`, `source_commit`, and `requires_python`; dependency artifacts omit them.
+4. Versions are exact pins (semantic version strings). Floating ranges in lock tables are rejected.
+
+### Determinism (`build_core_lock`)
+
+Same inputs → identical UTF-8 bytes:
+
+1. LF only (`\n`); no BOM; exactly one trailing newline.
+2. Header key order: `lock_format`, `selected_distribution`.
+3. `[[artifacts]]` sorted by role (core first), then name, version, path.
+4. Per-table key order fixed; core-only keys omitted on dependency tables.
+5. Paths normalized to POSIX; digests lowercased hex before emit.
+
+### Compatibility (`verify_lock_against_installed`)
+
+| Status | Meaning |
+|---|---|
+| `compatible` | installed distribution version and contract match the lock pin |
+| `upgrade_available` | same **contract major**; distribution version differs — non-breaking; lock still pins old path |
+| `breaking` | contract **major** differs (ADR-001 breaking definition as data) |
+| `python_mismatch` | installed Python does not satisfy lock `requires_python` (OD-003: `>=3.12,<3.13`) |
+| `invalid_lock` | document or inputs cannot be validated |
+
+`forces_newer_install` is always `false`. A lock pin is the authority for channel assets: a newer installed core
+does not rewrite or force replacement of `vendor/core/<old>/` wheels until a human replaces `core.lock`.
+
+Align with `EffectiveVersions.core_distribution` / `core_contract` and `EffectiveBindings.core_lock_sha256`
+(ADR-003): after install, distribution and contract versions must match the lock; effective-config binds the
+lock digest.
+
+### Wheel build · vendor placement · upgrade · rollback (human commands)
+
+Core only emits a `WheelBuildPlan`. Humans (or channel-side tools) execute:
+
+```text
+# 1) From a clean tagged commit in the core repository
+python -m build --wheel --outdir dist
+
+# 2) Copy into the channel workspace without overwriting same version
+#    expected: dist/video_production_core-<version>-py3-none-any.whl
+#    target:   vendor/core/<version>/video_production_core-<version>-py3-none-any.whl
+#    verify SHA-256 before and after copy (OneDrive lock: retry ≤3 then stop)
+
+# 3) Offline install only (no network index)
+python -m pip install --no-index --find-links vendor/core/<version> video-production-core==<version>
+
+# 4) Run core contract tests + channel compatibility + known-failure baseline (273/9 must not grow)
+
+# 5) Replace root core.lock in a single commit only after tests pass
+#    (use build_core_lock(...) text; do not hand-edit digests)
+
+# Rollback: restore previous commit's core.lock and reinstall the preserved older wheel.
+# Do not delete the newer wheel (keep for investigation). Contract-major upgrades are never auto-rolled back.
+```
+
+Library entry points: `plan_wheel_build(version)` → argv + `vendor_relative_path` + placement notes;
+`build_core_lock(artifacts)` → lock file text for the human to write.
+
+### Path portability
+
+`require_relative_artifact_path` / `require_vendor_core_path` / `map_archive_member_to_extract_relative` reject
+absolute paths and `..` (zip-slip). `normalize_frozen_path` remains the casefolding membership key for frozen
+indexes. Host-absolute literals remain forbidden by `tools/check_repo_isolation.py`.
+
+## Breaking changes and current limit
+
+The distribution uses semantic versions. A minor contract change may add an optional field while preserving every
+existing required meaning. A major bump is required when an existing consumer cannot read or enforce the same
+meaning. Weakening approval, no-overwrite, path containment, canonical hashing, idempotency, immutable-log, or
+fail-closed behavior is breaking even if the Python call shape is unchanged.
+
+Configuration validation, merge, provenance, canonical hashing, snapshot mapping, adapter contract behavior,
+production artifact schema validation (twenty-five production families: nine planning/storyboard/reference plus
+fourteen generation/QC/edit/publish-draft/handoff families plus two analytics/retro families, plus registry runner),
+deterministic retro evaluation over injected metrics, doctor schema/tool/package diagnostics (observation only),
+plan-only workspace init/export planners, plan-only QC/approval/orchestration planners, config draft builders,
+ADR-001 distribution lock builder/verifier and wheel build planner, and the four execution-mode enforcement hooks
+are implemented. The CLI registry exposes seventeen general commands: twelve are implemented in the plan-only sense
+(return plans/documents/observations; never write or execute media tools); recovery commands are contract-only
+intent evaluators with mode fail-closed and retry idempotency; only `migrate` remains `not_yet_backed`. Concrete
+adapters, full workflow execution, human approval evidence creation, media measurement execution, **Plan execution**
+(materialize/export/encode/wheel-build runtimes), and live `core.lock` materialization remain outside this package.
+A mode request becomes effective only after the three-way safety intersection; no production workflow mode is
+selected by default.
+
+## Analytics and retro contract
+
+Core evaluates **injected** metric snapshots against **injected** verification policy. It does not collect metrics
+from external video platforms, does not hard-code marketing reason names, and does not hard-code observation
+window labels. Those values are channel policy data.
+
+| Core type | Meaning |
+|---|---|
+| `AnalyticsRecord` | one post-publish snapshot: opaque episode id, optional publish-record bind, collector role, checkpoint window (opaque id + free definition), `metrics` map with null = not collected |
+| `VerificationRule` | opaque `hypothesis_id` + `metric_key` + closed `comparator` (`gte`/`lte`/`gt`/`lt`/`eq`/`between`) + numeric threshold (or inclusive range) + missing-metric policy (`inconclusive` only) |
+| `RetroPolicy` | ordered rules plus optional preferred window id filter |
+| `compute_retro(records, policy)` | pure function → `RetroReport` with per-rule `supported`/`refuted`/`inconclusive` and aggregate counts |
+| `analytics-record/1.0`, `retro-report/1.0` | JSON Schema families registered like other production artifacts |
+
+CLI analytics command backing is **not** implemented in this package yet; import the library surface directly.
+
+## Doctor diagnostics (additive)
+
+`doctor` keeps its original payload fields and adds:
+
+| Field | Meaning |
+|---|---|
+| `schema_registry` | in-process scan: schema file count, registered `artifact_version` count/list, load failure list |
+| `optional_tools` | `ffmpeg`/`ffprobe` observed via `shutil.which` as `present`/`absent` (absence does **not** fail doctor by itself) |
+| `package_contracts` | `core_version`, `core_contract`, `config_contract` summary |
+
+Purity is evaluated **in-process** via `video_factory.security.purity.scan_repository` (same summary line format as
+`tools/check_core_purity.py`). Doctor does not launch a child process for purity.
+
+live_health tests may observe host values but must not assert tool presence or absence.
+
+## CLI command contract
+
+| Status | Commands |
+|---|---|
+| `implemented` (plan-only) | `doctor`, `validate`, `init`, `export`, `qc`, `approve`, `run`, `status`, `new-channel`, `new-concept`, `new-episode`, `review` |
+| `contract_only` | `retry`, `resume`, `invalidate`, `reopen` |
+| `not_yet_backed` | `migrate` |
+
+Honest meanings for promoted commands:
+
+| Command | Returns | Does **not** |
+|---|---|---|
+| `qc` | `QCPlan` (+ optional `QCJudgment` over injected measurements) | run ffprobe/ffmpeg |
+| `approve` | `ApprovalRequirement` (+ optional evidence-binding check) | create `ApprovalEvidence` / auto-approve |
+| `run` | `NextStepPlan` (`transition_applied=false`) | transition workflow or execute stages |
+| `status` | `EpisodeStateObservation` | mutate state |
+| `new-channel` / `new-concept` / `new-episode` | validated config document mapping | write files |
+| `review` | `ReviewRequest` document | perform the review |
+
+Mode-independent commands are `doctor`, `validate`, `init`, and `export`. Every other command requires an explicit
+workflow mode argument; missing mode raises the same fail-closed error as `resolve_workflow_policy(None)`.
+Recovery policy checks reject Rapid for all four recovery commands, allow Standard for `retry`/`resume`/`reopen`,
+and restrict `invalidate` (including cascade) to Controlled where destructive approval and immutable audit apply.
+
+## QC plan engine
+
+| Type / function | Meaning |
+|---|---|
+| `Expectation` | injected expectation with applicability, severity, boolean/numeric/string operands, and primary/fallback measurement hints |
+| `build_qc_plan(constraints, expectations)` | pure plan containing non-executing primary and fallback method data |
+| `judge_measurements(plan, measurements)` | pure pass/warn/fail/inconclusive/not-applicable judgment |
+| Severity/applicability | failed INFO → pass with a recorded finding and does not lower overall; failed WARNING → warn; failed ERROR → fail; missing → inconclusive; declared N/A remains separate |
+
+`Finding.passed` records whether the constraint expression was satisfied,
+independently from the severity-adjusted judgment status. Therefore an INFO
+violation is represented as `Finding.passed = false` with status `PASS`; its
+message identifies it as an informational finding so the two meanings are not
+confused.
+
+## Approval requirement builder
+
+| Type / function | Meaning |
+|---|---|
+| `build_approval_requirement(kind, artifacts, effective_config_sha256)` | binds path+sha256 artifacts; never invents evidence |
+| `requirement_to_mapping` / `requirement_from_mapping` | `approval-requirement/1.0`; never inserts approver or timestamp placeholders |
+| `approval_evidence_to_mapping` | serializes already supplied granted human evidence; never creates evidence |
+| `validate_evidence_binding` | checks capability, config hash, and bound artifacts (PHASE 6 alignment) |
+
+## Orchestration planner
+
+| Type / function | Meaning |
+|---|---|
+| `observe_episode_state(snapshots)` | validates caller-observed path/hash/document envelopes and builds an explicit-current graph |
+| `build_generation_readiness` | checks current-bound reviews, packet/storyboard binding, all feasibility checks, and human approval |
+| `plan_next_step(observation, workflow_mode)` | blocks failed reviews/QC, enforces per-shot/final/publish gates, and never executes |
+| `next_step_to_mapping` | deterministic `next-step/1.0`; requires rules provenance and keeps `auto_execution=false` |

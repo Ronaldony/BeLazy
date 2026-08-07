@@ -1,0 +1,166 @@
+policy_version: authority-policy/2.1
+canonical_repository_name: be-lazy
+default_decision: DENIED
+unknown_state_behavior: FAIL_CLOSED
+ai_human_approval_creation_forbidden: true
+approval_is_action_authority_not_artifact_state: true
+self_approval_forbidden: true
+executor_revalidation_required: true
+material_change_invalidates_authority: true
+
+human_file_access:
+  read: ROLE_BASED
+  direct_managed_mutation: DENIED
+  normal_change_path: CHANGE_REQUEST_TO_AGENT_RUNTIME
+  emergency_direct_mutation: BREAK_GLASS_R4_ONLY
+
+risk_tiers:
+  R0:
+    examples:
+      - read
+      - analyze
+      - validate_schema
+      - simulate
+      - produce_plan
+    authority: COVERED_BY_POLICY
+  R1:
+    examples:
+      - local_preview
+      - reversible_temp_asset
+      - bounded_agent_managed_draft_mutation
+    authority: COVERED_BY_POLICY
+    human_direct_file_mutation_allowed: false
+  R2:
+    examples:
+      - paid_external_generation
+      - bounded_agent_managed_asset_write
+    authority: STANDING_GRANT_OR_ONE_HUMAN
+    required_limits:
+      - provider_allowlist
+      - max_cost_per_run
+      - max_cost_per_day
+      - max_retries
+      - exact_input_digests
+      - mutation_plan_digest
+      - expiry
+  R3:
+    examples:
+      - public_publish
+      - high_cost_run
+      - material_brand_impact
+      - hosted_repository_create
+      - target_remote_configuration
+    authority: HUMAN_OR_RELEASE_CAMPAIGN_GRANT
+    release_campaign_grant_allowed_only_when:
+      - assurance_profile_is_production_or_higher
+      - historical_quality_threshold_met
+      - incident_rate_threshold_met
+      - content_risk_is_low
+      - destination_allowlisted
+  R4:
+    examples:
+      - policy_exception
+      - destructive_overwrite
+      - credential_change
+      - direct_human_managed_file_mutation
+      - approval_ledger_mutation
+      - high_legal_or_safety_risk
+    authority: TWO_INDEPENDENT_HUMANS
+    standing_grant_allowed: false
+    short_expiry_required: true
+    immutable_ledger_required: true
+
+hard_escalation_triggers:
+  - unresolved_director_hard_blocker
+  - low_or_conflicting_confidence
+  - cost_over_grant
+  - provider_or_model_not_allowlisted
+  - new_publish_destination
+  - material_blueprint_change_after_authorization
+  - factual_or_rights_risk_unknown
+  - kill_switch_not_clear
+  - ledger_or_signature_invalid
+  - workspace_trust_state_untrusted
+  - out_of_band_file_mutation_detected
+  - mutation_plan_precondition_mismatch
+  - direct_human_mutation_requested
+
+approval_binding:
+  required_digests:
+    - workflow_definition
+    - policy_bundle
+    - rules_bundle
+    - effective_config
+    - current_manifest
+    - evidence_graph
+    - executable_plan
+  mutation_required_digests:
+    - change_request
+    - mutation_plan
+    - before_workspace_revision
+  required_scope:
+    - capability
+    - provider
+    - destination
+    - cost_limit
+    - retry_limit
+    - validity_window
+    - subject_ids
+  mutation_required_scope:
+    - operation_kinds
+    - exact_paths
+    - maximum_bytes
+    - rollback_strategy
+
+managed_mutation:
+  core_execution_forbidden: true
+  runtime_service_identity_required: true
+  exact_before_digest_required_for:
+    - replace
+    - delete
+    - move
+  blind_overwrite: DENIED
+  blind_delete: DENIED
+  path_escape: DENIED
+  symlink_or_reparse_target: DENIED
+  durable_receipt_required: true
+  before_and_after_manifest_required: true
+  out_of_band_change_behavior: QUARANTINE_AND_BLOCK
+
+break_glass:
+  risk_tier: R4
+  independent_approvers: 2
+  standing_grant_allowed: false
+  exact_path_and_operation_scope_required: true
+  pre_change_snapshot_required: true
+  short_expiry_required: true
+  post_change_validation_required: true
+  incident_record_required: true
+
+execution_journal:
+  states:
+    - PLANNED
+    - AUTHORIZED
+    - RESERVED
+    - DISPATCHING
+    - SUCCEEDED
+    - PARTIALLY_APPLIED
+    - FAILED
+    - EXTERNAL_UNCERTAIN
+    - RECONCILED
+  unique_key:
+    - adapter_id
+    - capability_id
+    - idempotency_key
+  reject_same_key_different_request_digest: true
+
+repository_boundaries:
+  source_repository_mutation: DENIED
+  source_hosted_rename: FORBIDDEN
+  new_target_repository_creation: R3_ADMINISTRATIVE_ACTION
+  target_push_or_merge: SEPARATE_AUTHORITY_REQUIRED
+  source_to_target_import:
+    authority: COVERED_BY_BOOTSTRAP_POLICY_WHEN_LOCAL_AND_VERIFIED
+    source_must_remain_read_only: true
+    provenance_required: true
+    secret_scan_required: true

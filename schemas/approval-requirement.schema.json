@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.video-factory.invalid/artifact/approval-requirement.schema.json",
+  "title": "Pending human approval requirement",
+  "type": "object",
+  "required": [
+    "artifact_version",
+    "rules_version",
+    "episode_id",
+    "requirement_id",
+    "capability_id",
+    "bound_artifacts",
+    "effective_config_sha256",
+    "kind",
+    "creates_evidence"
+  ],
+  "properties": {
+    "artifact_version": {
+      "const": "approval-requirement/1.0"
+    },
+    "rules_version": {
+      "$ref": "artifact-common.schema.json#/$defs/rulesVersion"
+    },
+    "episode_id": {
+      "$ref": "artifact-common.schema.json#/$defs/opaqueId"
+    },
+    "requirement_id": {
+      "$ref": "artifact-common.schema.json#/$defs/opaqueId"
+    },
+    "capability_id": {
+      "$ref": "artifact-common.schema.json#/$defs/opaqueId"
+    },
+    "bound_artifacts": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "artifact-common.schema.json#/$defs/boundArtifact"
+      }
+    },
+    "effective_config_sha256": {
+      "$ref": "artifact-common.schema.json#/$defs/sha256"
+    },
+    "kind": {
+      "type": "string",
+      "minLength": 1
+    },
+    "creates_evidence": {
+      "const": false
+    },
+    "extensions": {
+      "$ref": "artifact-common.schema.json#/$defs/extensions"
+    }
+  },
+  "additionalProperties": false
+}

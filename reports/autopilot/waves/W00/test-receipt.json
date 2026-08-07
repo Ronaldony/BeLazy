@@ -1,0 +1,98 @@
+{
+  "receipt_version": "be-lazy-wave-test-receipt/1.0",
+  "wave": "W00-BOOTSTRAP-BASELINE",
+  "recorded_at": "2026-08-07T05:18:37.482Z",
+  "environment": {
+    "host_os": "Windows",
+    "python": "3.12.10",
+    "test_runner": "pytest 9.1.1 from a pre-existing read-only local environment",
+    "jsonschema": "4.26.0",
+    "network_used": false,
+    "packages_installed": false
+  },
+  "commands": [
+    {
+      "id": "source-pytest",
+      "scope": "verified temporary source extraction",
+      "command": "python -m pytest -q -p no:cacheprovider --basetemp <external-temp>",
+      "exit_code": 0,
+      "result": "329 passed in 18.20s"
+    },
+    {
+      "id": "source-core-purity",
+      "scope": "verified temporary source extraction",
+      "command": "python tools/check_core_purity.py",
+      "exit_code": 0,
+      "result": "core_purity=PASS scanned_files=180 violations=0"
+    },
+    {
+      "id": "source-side-effect-free",
+      "scope": "verified temporary source extraction",
+      "command": "python tools/check_side_effect_free.py",
+      "exit_code": 0,
+      "result": "side_effect_free=PASS scanned_files=78 violations=0"
+    },
+    {
+      "id": "source-repo-isolation",
+      "scope": "verified temporary source extraction",
+      "command": "python tools/check_repo_isolation.py",
+      "exit_code": 0,
+      "result": "repo_isolation=PASS scanned_files=125 violations=0"
+    },
+    {
+      "id": "target-initial-pytest",
+      "scope": "target before purity-scope repair",
+      "command": "python -m pytest -q -p no:cacheprovider --basetemp <external-temp>",
+      "exit_code": 1,
+      "result": "327 passed, 2 failed; both failures were the documented target control/provenance purity collision"
+    },
+    {
+      "id": "target-focused-purity",
+      "scope": "target after repair",
+      "command": "python -m pytest -q tests/unit/test_core_purity.py tests/unit/test_target_purity_scope.py tests/unit/test_cli_commands.py tests/unit/test_doctor_extension.py",
+      "exit_code": 0,
+      "result": "15 passed in 3.66s"
+    },
+    {
+      "id": "target-full-pytest",
+      "scope": "target after repair",
+      "command": "python -m pytest -q -p no:cacheprovider --basetemp <external-temp>",
+      "exit_code": 0,
+      "result": "331 passed in 17.85s"
+    },
+    {
+      "id": "target-core-purity",
+      "scope": "target after repair",
+      "command": "python tools/check_core_purity.py",
+      "exit_code": 0,
+      "result": "core_purity=PASS scanned_files=186 violations=0"
+    },
+    {
+      "id": "target-side-effect-free",
+      "scope": "target after repair",
+      "command": "python tools/check_side_effect_free.py",
+      "exit_code": 0,
+      "result": "side_effect_free=PASS scanned_files=78 violations=0"
+    },
+    {
+      "id": "target-repo-isolation",
+      "scope": "target after repair",
+      "command": "python tools/check_repo_isolation.py",
+      "exit_code": 0,
+      "result": "repo_isolation=PASS scanned_files=126 violations=0"
+    },
+    {
+      "id": "input-postcheck",
+      "scope": "source archive and handoff package",
+      "command": "scripts/verify_inputs.py",
+      "exit_code": 0,
+      "result": "source and handoff exact digests unchanged"
+    }
+  ],
+  "not_executed": [
+    {
+      "command": "python -m build --wheel",
+      "reason": "No offline build frontend, setuptools, or wheel package is present on the host. No dependency download is allowed."
+    }
+  ]
+}

@@ -1,0 +1,168 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.invalid/video-factory/brand-entity.schema.json",
+  "title": "Brand entity projection",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "artifact_version",
+    "entity_id",
+    "entity_kind",
+    "canonical_status",
+    "source",
+    "rules_version",
+    "fixed_sentences",
+    "data"
+  ],
+  "properties": {
+    "artifact_version": { "const": "brand-entity/1.0" },
+    "entity_id": { "$ref": "#/$defs/opaqueId" },
+    "entity_kind": { "enum": ["character", "location"] },
+    "canonical_status": { "enum": ["shadow", "canonical"] },
+    "source": { "$ref": "#/$defs/source" },
+    "rules_version": { "type": "string", "minLength": 1 },
+    "fixed_sentences": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/fixedSentence" }
+    },
+    "data": { "type": "object" }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "entity_kind": { "const": "character" } },
+        "required": ["entity_kind"]
+      },
+      "then": { "properties": { "data": { "$ref": "#/$defs/characterData" } } }
+    },
+    {
+      "if": {
+        "properties": { "entity_kind": { "const": "location" } },
+        "required": ["entity_kind"]
+      },
+      "then": { "properties": { "data": { "$ref": "#/$defs/locationData" } } }
+    }
+  ],
+  "$defs": {
+    "opaqueId": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "relativePath": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?!/)(?![A-Za-z]:)(?!.*(?:^|/)\\.\\.(?:/|$))[^\\\\\\r\\n]+$"
+    },
+    "sourceRange": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["start_heading", "end_before_heading"],
+      "properties": {
+        "start_heading": { "type": "string", "minLength": 1 },
+        "end_before_heading": {
+          "oneOf": [
+            { "type": "string", "minLength": 1 },
+            { "type": "null" }
+          ]
+        }
+      }
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256", "section_ranges"],
+      "properties": {
+        "path": { "$ref": "#/$defs/relativePath" },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "section_ranges": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/sourceRange" }
+        }
+      }
+    },
+    "fixedSentence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["role", "consumers", "text", "source_section", "sha256"],
+      "properties": {
+        "role": { "$ref": "#/$defs/opaqueId" },
+        "consumers": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/opaqueId" }
+        },
+        "text": { "type": "string", "minLength": 1 },
+        "source_section": { "type": "string", "minLength": 1 },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "characterData": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["display_name", "character"],
+      "properties": {
+        "display_name": { "type": "string", "minLength": 1 },
+        "character": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "design_status",
+            "visual_reference_path",
+            "scale_anchor",
+            "invariants"
+          ],
+          "properties": {
+            "design_status": { "type": "string", "minLength": 1 },
+            "visual_reference_path": { "$ref": "#/$defs/relativePath" },
+            "scale_anchor": { "type": "string", "minLength": 1 },
+            "invariants": {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": { "type": "string", "minLength": 1 }
+            }
+          }
+        }
+      }
+    },
+    "locationData": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["display_name", "location"],
+      "properties": {
+        "display_name": { "type": "string", "minLength": 1 },
+        "location": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["reference_tokens", "usage", "notes"],
+          "properties": {
+            "reference_tokens": {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": { "type": "string", "minLength": 1 }
+            },
+            "usage": { "type": "string", "minLength": 1 },
+            "notes": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": { "type": "string", "minLength": 1 }
+            }
+          }
+        }
+      }
+    }
+  },
+  "x-round-trip": {
+    "ordered_arrays": ["fixed_sentences", "source.section_ranges", "kind-specific lists"],
+    "fixed_sentence_bytes": "UTF-8 text bytes are hashed and emitted without normalization",
+    "selection_policy": "Consumers must select an explicit role; the core never merges roles"
+  }
+}

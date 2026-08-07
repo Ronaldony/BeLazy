@@ -1,0 +1,19 @@
+{
+  "artifact_version": "workspace-config/1.0",
+  "config_contract": "1.0",
+  "workspace_id": "workspace-a",
+  "settings": {
+    "media": {
+      "duration_seconds": 35,
+      "aspect_ratio": {
+        "width": 9,
+        "height": 16
+      },
+      "platforms": ["platform-a"]
+    },
+    "execution": {
+      "mode": "mode-a"
+    }
+  },
+  "extensions": {}
+}

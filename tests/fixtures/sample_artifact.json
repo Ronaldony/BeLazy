@@ -1,0 +1,9 @@
+{
+  "adapter_id": "adapter-a",
+  "artifact_version": "sample/1.0",
+  "payload": {
+    "value": 7
+  },
+  "scope_id": "scope-a"
+}
+

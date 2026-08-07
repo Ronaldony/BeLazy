@@ -1,0 +1,184 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.video-factory.invalid/artifact/handoff-result.schema.json",
+  "title": "Handoff result envelope (aligned with adapter result concepts)",
+  "type": "object",
+  "required": [
+    "artifact_version",
+    "result_id",
+    "task_id",
+    "task_sha256",
+    "completed_at",
+    "executor_role",
+    "adapter_id",
+    "outcome",
+    "input_artifacts",
+    "outputs",
+    "external_reference",
+    "measured_cost",
+    "uncertainty"
+  ],
+  "properties": {
+    "artifact_version": {
+      "const": "handoff-result/1.0"
+    },
+    "result_id": {
+      "$ref": "artifact-common.schema.json#/$defs/opaqueId"
+    },
+    "task_id": {
+      "$ref": "artifact-common.schema.json#/$defs/opaqueId"
+    },
+    "task_sha256": {
+      "$ref": "artifact-common.schema.json#/$defs/sha256"
+    },
+    "request_id": {
+      "description": "Adapter request id when this result settles a provider or executor call; same meaning as ResultEnvelope.request_id",
+      "$ref": "artifact-common.schema.json#/$defs/opaqueId"
+    },
+    "episode_id": {
+      "$ref": "artifact-common.schema.json#/$defs/opaqueId"
+    },
+    "completed_at": {
+      "type": "string",
+      "minLength": 1
+    },
+    "executor_role": {
+      "$ref": "artifact-common.schema.json#/$defs/roleId"
+    },
+    "adapter_id": {
+      "$ref": "artifact-common.schema.json#/$defs/opaqueId"
+    },
+    "outcome": {
+      "$ref": "artifact-common.schema.json#/$defs/adapterOutcome"
+    },
+    "tool": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "model": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "version": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "input_artifacts": {
+      "type": "array",
+      "items": {
+        "$ref": "artifact-common.schema.json#/$defs/pathSha256"
+      }
+    },
+    "outputs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "path",
+          "sha256"
+        ],
+        "properties": {
+          "path": {
+            "$ref": "artifact-common.schema.json#/$defs/relativePath"
+          },
+          "sha256": {
+            "$ref": "artifact-common.schema.json#/$defs/sha256"
+          },
+          "artifact_version": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "artifact-common.schema.json#/$defs/artifactVersion"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "exit_code": {
+      "type": "integer"
+    },
+    "review": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "required": [
+            "verdict",
+            "findings"
+          ],
+          "properties": {
+            "verdict": {
+              "$ref": "artifact-common.schema.json#/$defs/reviewVerdict"
+            },
+            "revision_cycle": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "findings": {
+              "type": "array",
+              "items": {
+                "$ref": "artifact-common.schema.json#/$defs/finding"
+              }
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "external_reference": {
+      "$ref": "artifact-common.schema.json#/$defs/externalReference"
+    },
+    "measured_cost": {
+      "$ref": "artifact-common.schema.json#/$defs/measuredCost"
+    },
+    "uncertainty": {
+      "$ref": "artifact-common.schema.json#/$defs/uncertaintyEvidence"
+    },
+    "audit": {
+      "type": "object",
+      "required": [
+        "submitted_by",
+        "submitted_at"
+      ],
+      "properties": {
+        "submitted_by": {
+          "$ref": "artifact-common.schema.json#/$defs/roleId"
+        },
+        "submitted_at": {
+          "type": "string",
+          "minLength": 1
+        },
+        "notes": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "extensions": {
+      "$ref": "artifact-common.schema.json#/$defs/extensions"
+    }
+  },
+  "additionalProperties": false,
+  "x-artifact-migration": {
+    "id_pattern": "^handoff-result/[1-9][0-9]*-to-[1-9][0-9]*/[1-9][0-9]*$",
+    "single_major_step": true,
+    "in_place": false,
+    "automatic_downgrade": false
+  }
+}

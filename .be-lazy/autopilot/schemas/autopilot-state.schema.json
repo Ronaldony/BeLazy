@@ -1,0 +1,214 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://be-lazy.local/schemas/autopilot-state.schema.json",
+  "title": "be-lazy Autopilot State",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "protocol_version",
+    "program_id",
+    "status",
+    "source",
+    "handoff",
+    "target",
+    "waves",
+    "updated_at"
+  ],
+  "properties": {
+    "protocol_version": {
+      "const": "be-lazy-prompt-autopilot-state/1.0"
+    },
+    "program_id": {
+      "const": "be-lazy-successor-redesign"
+    },
+    "status": {
+      "enum": [
+        "initializing",
+        "running",
+        "reviewing",
+        "repairing",
+        "complete",
+        "partial",
+        "blocked"
+      ]
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path_or_attachment",
+        "expected_sha256",
+        "observed_sha256",
+        "unchanged"
+      ],
+      "properties": {
+        "path_or_attachment": {
+          "type": "string",
+          "minLength": 1
+        },
+        "expected_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "observed_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "unchanged": {
+          "type": "boolean"
+        }
+      }
+    },
+    "handoff": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path_or_attachment",
+        "manifest_sha256",
+        "verified"
+      ],
+      "properties": {
+        "path_or_attachment": {
+          "type": "string",
+          "minLength": 1
+        },
+        "manifest_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "verified": {
+          "type": "boolean"
+        }
+      }
+    },
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "branch",
+        "initial_commit",
+        "current_head",
+        "working_tree_clean"
+      ],
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "branch": {
+          "const": "agent/autopilot-v4"
+        },
+        "initial_commit": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "current_head": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "working_tree_clean": {
+          "type": "boolean"
+        }
+      }
+    },
+    "waves": {
+      "type": "array",
+      "minItems": 8,
+      "maxItems": 8,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "status",
+          "attempts",
+          "task_ids",
+          "checkpoint_commit",
+          "tests",
+          "reviews",
+          "unresolved_findings"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^W0[0-7]-"
+          },
+          "status": {
+            "enum": [
+              "pending",
+              "in_progress",
+              "reviewing",
+              "repairing",
+              "passed",
+              "blocked"
+            ]
+          },
+          "attempts": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "task_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "uniqueItems": true
+          },
+          "checkpoint_commit": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "tests": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "reviews": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "unresolved_findings": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          }
+        }
+      }
+    },
+    "non_blocking_gaps": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      },
+      "default": []
+    },
+    "hard_blocker": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "default": null
+    },
+    "created_at": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "updated_at": {
+      "type": "string",
+      "minLength": 1
+    }
+  }
+}

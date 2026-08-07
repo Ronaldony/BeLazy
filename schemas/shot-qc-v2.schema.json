@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.video-factory.invalid/artifact/shot-qc-v2.schema.json",
+  "title": "Shot technical QC report with shot binding",
+  "type": "object",
+  "required": [
+    "artifact_version",
+    "rules_version",
+    "episode_id",
+    "shot_id",
+    "checked_at",
+    "subject",
+    "measurements",
+    "constraints",
+    "findings",
+    "verdict"
+  ],
+  "properties": {
+    "artifact_version": {
+      "const": "shot-qc/2.0"
+    },
+    "rules_version": {
+      "$ref": "artifact-common.schema.json#/$defs/rulesVersion"
+    },
+    "episode_id": {
+      "$ref": "artifact-common.schema.json#/$defs/opaqueId"
+    },
+    "shot_id": {
+      "$ref": "artifact-common.schema.json#/$defs/opaqueId"
+    },
+    "checked_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "subject": {
+      "$ref": "artifact-common.schema.json#/$defs/boundArtifact"
+    },
+    "measurements": {
+      "type": "array",
+      "items": {
+        "$ref": "artifact-common.schema.json#/$defs/measurement"
+      }
+    },
+    "constraints": {
+      "type": "array",
+      "items": {
+        "$ref": "artifact-common.schema.json#/$defs/qcConstraint"
+      }
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "$ref": "artifact-common.schema.json#/$defs/qcFinding"
+      }
+    },
+    "verdict": {
+      "type": "string",
+      "enum": [
+        "pass",
+        "warn",
+        "fail",
+        "inconclusive"
+      ]
+    },
+    "extensions": {
+      "$ref": "artifact-common.schema.json#/$defs/extensions"
+    }
+  },
+  "additionalProperties": false
+}

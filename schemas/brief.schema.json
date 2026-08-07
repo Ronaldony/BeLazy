@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.video-factory.invalid/artifact/brief.schema.json",
+  "title": "Episode brief",
+  "type": "object",
+  "required": [
+    "artifact_version",
+    "rules_version",
+    "episode_id",
+    "summary",
+    "hook",
+    "development",
+    "ending",
+    "risks"
+  ],
+  "properties": {
+    "artifact_version": { "const": "brief/1.0" },
+    "rules_version": { "$ref": "artifact-common.schema.json#/$defs/rulesVersion" },
+    "episode_id": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" },
+    "title_working": { "type": "string", "minLength": 1 },
+    "summary": { "type": "string", "minLength": 1 },
+    "hook": { "type": "string", "minLength": 1 },
+    "development": { "type": "string", "minLength": 1 },
+    "ending": { "type": "string", "minLength": 1 },
+    "risks": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "series_link": {
+      "type": "object",
+      "properties": {
+        "series_id": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" },
+        "prev_episode_id": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" },
+        "notes": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "marketing_reasons": {
+      "type": "array",
+      "items": { "$ref": "artifact-common.schema.json#/$defs/marketingReason" }
+    },
+    "extensions": { "$ref": "artifact-common.schema.json#/$defs/extensions" }
+  },
+  "additionalProperties": false,
+  "x-artifact-migration": {
+    "id_pattern": "^brief/[1-9][0-9]*-to-[1-9][0-9]*/[1-9][0-9]*$",
+    "single_major_step": true,
+    "in_place": false,
+    "automatic_downgrade": false
+  }
+}

@@ -1,0 +1,110 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://be-lazy.local/schemas/autopilot-final-result.schema.json",
+  "title": "be-lazy Autopilot Final Result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "protocol_version",
+    "status",
+    "completed_waves",
+    "completed_task_ids",
+    "commit_range",
+    "test_summary",
+    "source_unchanged",
+    "handoff_verified",
+    "remote_side_effects",
+    "network_side_effects",
+    "human_approval_synthesized",
+    "public_identifier_migration_performed",
+    "critical_high_findings",
+    "known_gaps"
+  ],
+  "properties": {
+    "protocol_version": {
+      "const": "be-lazy-prompt-autopilot-final/1.0"
+    },
+    "status": {
+      "enum": [
+        "COMPLETE",
+        "PARTIAL",
+        "BLOCKED"
+      ]
+    },
+    "completed_waves": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "uniqueItems": true
+    },
+    "completed_task_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "uniqueItems": true
+    },
+    "commit_range": {
+      "type": "object",
+      "required": [
+        "first",
+        "last"
+      ],
+      "properties": {
+        "first": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "last": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "test_summary": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "source_unchanged": {
+      "type": "boolean"
+    },
+    "handoff_verified": {
+      "type": "boolean"
+    },
+    "remote_side_effects": {
+      "const": false
+    },
+    "network_side_effects": {
+      "const": false
+    },
+    "human_approval_synthesized": {
+      "const": false
+    },
+    "public_identifier_migration_performed": {
+      "const": false
+    },
+    "critical_high_findings": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "known_gaps": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "hard_blocker": {
+      "type": [
+        "object",
+        "null"
+      ]
+    }
+  }
+}

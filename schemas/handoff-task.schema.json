@@ -1,0 +1,174 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.video-factory.invalid/artifact/handoff-task.schema.json",
+  "title": "Handoff task envelope (aligned with adapter request concepts)",
+  "type": "object",
+  "required": [
+    "artifact_version",
+    "rules_version",
+    "task_id",
+    "created_at",
+    "phase",
+    "mode",
+    "required_actor_role",
+    "input_artifacts",
+    "allowed_outputs",
+    "capability_allowlist",
+    "idempotency_key",
+    "human_gate_required",
+    "summary"
+  ],
+  "properties": {
+    "artifact_version": {
+      "const": "handoff-task/1.0"
+    },
+    "rules_version": {
+      "$ref": "artifact-common.schema.json#/$defs/rulesVersion"
+    },
+    "task_id": {
+      "$ref": "artifact-common.schema.json#/$defs/opaqueId"
+    },
+    "episode_id": {
+      "$ref": "artifact-common.schema.json#/$defs/opaqueId"
+    },
+    "created_at": {
+      "type": "string",
+      "minLength": 1
+    },
+    "phase": {
+      "type": "string",
+      "minLength": 1
+    },
+    "pipeline_state": {
+      "type": "string",
+      "minLength": 1
+    },
+    "mode": {
+      "type": "string",
+      "minLength": 1
+    },
+    "required_actor_role": {
+      "$ref": "artifact-common.schema.json#/$defs/roleId"
+    },
+    "forbidden_actor_roles": {
+      "type": "array",
+      "items": {
+        "$ref": "artifact-common.schema.json#/$defs/roleId"
+      },
+      "uniqueItems": true
+    },
+    "input_artifacts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "path",
+          "sha256"
+        ],
+        "properties": {
+          "path": {
+            "$ref": "artifact-common.schema.json#/$defs/relativePath"
+          },
+          "sha256": {
+            "$ref": "artifact-common.schema.json#/$defs/sha256"
+          },
+          "artifact_version": {
+            "$ref": "artifact-common.schema.json#/$defs/artifactVersion"
+          },
+          "producer_role": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "artifact-common.schema.json#/$defs/roleId"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "allowed_outputs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "path_prefix"
+        ],
+        "properties": {
+          "path_prefix": {
+            "$ref": "artifact-common.schema.json#/$defs/relativePath"
+          },
+          "artifact_versions": {
+            "type": "array",
+            "items": {
+              "$ref": "artifact-common.schema.json#/$defs/artifactVersion"
+            }
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "output_schema": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "$ref": "artifact-common.schema.json#/$defs/relativePath"
+        },
+        "artifact_version": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "artifact-common.schema.json#/$defs/artifactVersion"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "capability_allowlist": {
+      "type": "array",
+      "items": {
+        "$ref": "artifact-common.schema.json#/$defs/opaqueId"
+      },
+      "uniqueItems": true
+    },
+    "parent_task_id": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "artifact-common.schema.json#/$defs/opaqueId"
+        }
+      ]
+    },
+    "revision_cycle": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "idempotency_key": {
+      "$ref": "artifact-common.schema.json#/$defs/sha256"
+    },
+    "human_gate_required": {
+      "type": "boolean"
+    },
+    "summary": {
+      "type": "string",
+      "minLength": 1
+    },
+    "extensions": {
+      "$ref": "artifact-common.schema.json#/$defs/extensions"
+    }
+  },
+  "additionalProperties": false,
+  "x-artifact-migration": {
+    "id_pattern": "^handoff-task/[1-9][0-9]*-to-[1-9][0-9]*/[1-9][0-9]*$",
+    "single_major_step": true,
+    "in_place": false,
+    "automatic_downgrade": false
+  }
+}

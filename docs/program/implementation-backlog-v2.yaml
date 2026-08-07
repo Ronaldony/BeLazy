@@ -1,0 +1,228 @@
+plan_version: be-lazy-implementation-backlog/2.0
+canonical_target_repository: be-lazy
+source_repository: video-production-core
+repository_relationship: SUCCESSOR_REPOSITORY
+execution_style: PHASED_AGENT_BRANCHES
+source_mutation: DENIED
+no_remote_side_effects: true
+phases:
+- id: PHASE-0
+  name: New repository bootstrap and controlled source import
+  objective: Create an independent target, capture source provenance, and establish a reproducible behavioral baseline without
+    modifying the source.
+  tasks:
+  - id: BOOT-001
+    title: Validate source and target separation
+    depends_on: []
+    outputs:
+    - source-precheck
+    - target-precheck
+    done_when:
+    - canonical source and target paths differ
+    - target is empty or bootstrap-only
+    - source head/status or archive digest is recorded
+    - no source mutation command is executed
+  - id: BOOT-002
+    title: Initialize target governance and living ExecPlan
+    depends_on:
+    - BOOT-001
+    done_when:
+    - target has independent Git root
+    - AGENTS.md and .agent/PLANS.md exist
+    - living bootstrap/redesign ExecPlan exists
+    - source .git and remote are absent from target
+  - id: BOOT-003
+    title: Build source inventory and import map
+    depends_on:
+    - BOOT-001
+    outputs:
+    - source-baseline.json
+    - import-map.csv
+    - source-license-and-notices.md
+    done_when:
+    - every source path has exactly one import disposition
+    - source digests and license are recorded
+    - secrets caches build outputs and local state are excluded
+  - id: BOOT-004
+    title: Perform controlled snapshot import
+    depends_on:
+    - BOOT-002
+    - BOOT-003
+    done_when:
+    - imported bytes match recorded source digests unless marked PORT_WITH_FIX
+    - repository-facing target identity is be-lazy
+    - legacy public identifiers are classified as compatibility contracts
+    - source remains unchanged
+  - id: BOOT-005
+    title: Establish source-to-target baseline test parity
+    depends_on:
+    - BOOT-004
+    outputs:
+    - baseline-test-report
+    done_when:
+    - source tests run without writing to source or use a verified temporary copy
+    - target tests run in supported environment
+    - every difference is explained or blocked
+    - source post-check matches pre-check
+- id: PHASE-1
+  name: Trust-boundary repair
+  objective: Make the imported core installable, strict, and safely authorizable before redesign.
+  tasks:
+  - id: P0-PKG-001
+    title: Package JSON Schemas as installable resources
+    depends_on:
+    - BOOT-005
+    done_when:
+    - wheel contains every registered schema
+    - installed wheel loads registry without source checkout
+    - package-resource API is used
+  - id: P0-JSON-001
+    title: Introduce strict JSON input boundaries
+    depends_on:
+    - BOOT-005
+    done_when:
+    - duplicate keys rejected
+    - NaN and Infinity rejected
+    - date-time formats validated
+    - bytes path and mapping APIs are unambiguous
+    - missing paths produce structured errors
+  - id: P0-AUTH-001
+    title: Bind approvals to current effective configuration and material context
+    depends_on:
+    - BOOT-005
+    done_when:
+    - stale config approval fails closed
+    - current config digest is explicit evaluator input
+    - workflow policy rules manifest evidence and plan digests are bound
+    - mismatch regression tests pass
+- id: PHASE-2
+  name: Managed Mutation contracts
+  objective: Remove direct human file mutation from normal operation while keeping core side-effect-free.
+  tasks:
+  - id: MUT-001
+    title: Add mutation contract package and schemas
+    depends_on:
+    - P0-JSON-001
+    outputs:
+    - change-request/1.0
+    - mutation-plan/1.0
+    - mutation-receipt/1.0
+    - workspace-revision/1.0
+    - drift-report/1.0
+    - break-glass-authorization/1.0
+  - id: MUT-002
+    title: Implement pure MutationPlanner and path policy
+    depends_on:
+    - MUT-001
+  - id: MUT-003
+    title: Add runtime ports and executor guard contracts
+    depends_on:
+    - MUT-002
+    - P0-AUTH-001
+  - id: MUT-004
+    title: Add drift and break-glass policy integration
+    depends_on:
+    - MUT-003
+- id: PHASE-3
+  name: Production Blueprint and Director Mesh
+  objective: Replace sequential specialist handoffs with parallel expert design over one source of truth.
+  tasks:
+  - id: BP-001
+    title: Add ProductionBlueprint and projection contracts
+    depends_on:
+    - PHASE-2
+  - id: DIR-001
+    title: Add DirectorCharter DirectorAssessment activation and ownership matrix
+    depends_on:
+    - BP-001
+  - id: DIR-002
+    title: Add bounded synthesis and conflict resolution
+    depends_on:
+    - DIR-001
+  - id: BP-002
+    title: Run Blueprint in shadow mode and project legacy artifacts
+    depends_on:
+    - DIR-002
+- id: PHASE-4
+  name: Declarative workflow and authority control plane
+  objective: Remove redundant review stages and minimize human intervention through bounded grants.
+  tasks:
+  - id: WF-001
+    title: Introduce claims gates and action frontier evaluator
+    depends_on:
+    - BP-002
+  - id: AUTH-001
+    title: Add common GateResult StandingAuthorization and AuthorityDecision
+    depends_on:
+    - WF-001
+    - P0-AUTH-001
+  - id: AUTH-002
+    title: Add signed approval ledger ports and material-change invalidation
+    depends_on:
+    - AUTH-001
+  - id: WF-002
+    title: Dual-run legacy and new evaluators with semantic parity reports
+    depends_on:
+    - AUTH-002
+- id: PHASE-5
+  name: Automated selection quality and release
+  objective: Remove routine manual candidate selection and assembly while preserving strict release authority.
+  tasks:
+  - id: SEL-001
+    title: Add CandidateDecision with confidence and margin thresholds
+    depends_on:
+    - WF-002
+  - id: QA-001
+    title: Add integrated QualityBundle and targeted remediation
+    depends_on:
+    - SEL-001
+  - id: REL-001
+    title: Add ReleaseCandidate and release authority decision
+    depends_on:
+    - QA-001
+- id: PHASE-6
+  name: Runtime integration and migration
+  objective: Connect external executors behind ports, preserve durability, and retire legacy authoritative artifacts in the
+    target only.
+  tasks:
+  - id: RUN-001
+    title: Implement durable execution journal in a separate runtime boundary
+    depends_on:
+    - REL-001
+  - id: RUN-002
+    title: Implement managed filesystem executor outside pure core
+    depends_on:
+    - RUN-001
+    - MUT-004
+  - id: MIG-001
+    title: Convert legacy documents to read-only projections
+    depends_on:
+    - RUN-002
+  - id: REL-002
+    title: Produce target release migration and rollback runbook
+    depends_on:
+    - MIG-001
+- id: PHASE-90
+  name: Optional public identifier migration
+  optional: true
+  objective: Migrate distribution, CLI, import, or schema identifiers only under a separately approved compatibility program.
+  tasks:
+  - id: MIG-002
+    title: Perform separately approved public identifier migration
+    depends_on:
+    - REL-002
+    done_when:
+    - compatibility ADR and consumer inventory are complete
+    - coexistence deprecation converter lockfile wheelhouse telemetry and rollback plans are tested
+    - no package publish or remote side effect occurs in the coding tranche
+global_done_when:
+- source repository or archive is byte-identical before and after work
+- target is an independent Git repository named be-lazy
+- all imported paths have provenance and disposition
+- all tests pass on supported Python 3.12
+- wheel installation works offline from a clean environment
+- core purity side-effect and isolation checks pass
+- no human approval is synthesized by AI code
+- no normal production workflow requires direct human file mutation
+- public compatibility changes are explicitly versioned documented and rollbackable
+- no remote creation push merge rename or publishing was performed without separate authority

@@ -1,0 +1,41 @@
+[build-system]
+# setuptools is the sole build dependency: it creates the wheel and discovers the src-layout package.
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "video-production-core"
+version = "0.3.1"
+description = "Channel-neutral contracts for deterministic video production workflows"
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+# jsonschema is used by the artifact schema runner (Draft 2020-12). Install from the
+# environment that already carries it when offline; do not fetch packages during migration.
+dependencies = [
+    "jsonschema>=4.20",
+]
+
+[project.scripts]
+video-factory = "video_factory.cli:main"
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+# Default runs every registered tier. Filter with -m when needed, e.g.
+#   -m unit
+#   -m integration
+#   -m "not live_health and not windows"
+# Do not set a default -m filter: existing tests must remain in the default suite.
+addopts = "-ra --strict-markers"
+testpaths = ["tests"]
+pythonpath = ["src"]
+markers = [
+    "unit: pure logic and synthetic fixtures; no external resource requirements",
+    "integration: temporary workspace scenarios (tmp_path / basetemp only)",
+    "live_health: observes real local environment values without asserting presence or absence",
+    "windows: depends on Windows path separators, locking, or shell assumptions",
+]

@@ -1,0 +1,16 @@
+{
+  "artifact_version": "episode-config/1.0",
+  "config_contract": "1.0",
+  "episode_id": "episode-a",
+  "settings": {
+    "media": {
+      "duration_seconds": 75,
+      "aspect_ratio": {
+        "width": 16,
+        "height": 9
+      },
+      "platforms": ["platform-c"]
+    }
+  },
+  "extensions": {}
+}

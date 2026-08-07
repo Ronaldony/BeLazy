@@ -1,0 +1,364 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.video-factory.invalid/artifact/artifact-common.schema.json",
+  "title": "Shared artifact document definitions",
+  "$defs": {
+    "opaqueId": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+    },
+    "rulesVersion": {
+      "type": "string",
+      "minLength": 1
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "relativePath": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?!/)(?![A-Za-z]:)(?!.*(?:^|/)\\.\\.(?:/|$))[^\\\\\\r\\n]+$"
+    },
+    "artifactVersion": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*\\/[1-9][0-9]*\\.[0-9]+$"
+    },
+    "roleId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "reviewVerdict": {
+      "type": "string",
+      "enum": [
+        "pass",
+        "fail",
+        "uncertain"
+      ]
+    },
+    "extension": {
+      "type": "object",
+      "required": [
+        "contract_version",
+        "payload"
+      ],
+      "properties": {
+        "contract_version": {
+          "type": "string",
+          "pattern": "^[0-9]+\\.[0-9]+$"
+        },
+        "payload": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      },
+      "additionalProperties": false
+    },
+    "extensions": {
+      "type": "object",
+      "propertyNames": {
+        "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$"
+      },
+      "patternProperties": {
+        "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$": {
+          "$ref": "#/$defs/extension"
+        }
+      },
+      "additionalProperties": false
+    },
+    "boundArtifact": {
+      "type": "object",
+      "required": [
+        "path",
+        "sha256",
+        "artifact_version"
+      ],
+      "properties": {
+        "path": {
+          "$ref": "#/$defs/relativePath"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "artifact_version": {
+          "$ref": "#/$defs/artifactVersion"
+        }
+      },
+      "additionalProperties": false
+    },
+    "marketingReason": {
+      "type": "object",
+      "required": [
+        "reason_id",
+        "statement"
+      ],
+      "properties": {
+        "reason_id": {
+          "$ref": "#/$defs/opaqueId"
+        },
+        "statement": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "finding": {
+      "type": "object",
+      "required": [
+        "severity",
+        "code",
+        "message",
+        "path"
+      ],
+      "properties": {
+        "severity": {
+          "type": "string",
+          "minLength": 1
+        },
+        "code": {
+          "type": "string",
+          "minLength": 1
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "pathSha256": {
+      "type": "object",
+      "required": [
+        "path",
+        "sha256"
+      ],
+      "properties": {
+        "path": {
+          "$ref": "#/$defs/relativePath"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      },
+      "additionalProperties": false
+    },
+    "adapterOutcome": {
+      "type": "string",
+      "enum": [
+        "SUCCEEDED",
+        "REJECTED",
+        "FAILED",
+        "EXTERNAL_UNCERTAIN",
+        "AWAITING_HUMAN"
+      ]
+    },
+    "quotaAmount": {
+      "type": "object",
+      "required": [
+        "unit",
+        "amount"
+      ],
+      "properties": {
+        "unit": {
+          "type": "string",
+          "minLength": 1
+        },
+        "amount": {
+          "type": "number"
+        },
+        "notes": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "measurement": {
+      "type": "object",
+      "required": [
+        "measurement_id",
+        "value"
+      ],
+      "properties": {
+        "measurement_id": {
+          "$ref": "#/$defs/opaqueId"
+        },
+        "value": {
+          "type": [
+            "number",
+            "string",
+            "boolean",
+            "null"
+          ]
+        },
+        "unit": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "comparison": {
+      "type": "string",
+      "enum": [
+        "equal",
+        "minimum",
+        "maximum",
+        "range",
+        "member_of"
+      ]
+    },
+    "severity": {
+      "type": "string",
+      "enum": [
+        "info",
+        "warning",
+        "error"
+      ]
+    },
+    "qcConstraint": {
+      "type": "object",
+      "required": [
+        "constraint_id",
+        "measurement_id",
+        "comparison",
+        "operands",
+        "severity"
+      ],
+      "properties": {
+        "constraint_id": {
+          "$ref": "#/$defs/opaqueId"
+        },
+        "measurement_id": {
+          "$ref": "#/$defs/opaqueId"
+        },
+        "comparison": {
+          "$ref": "#/$defs/comparison"
+        },
+        "operands": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": [
+              "number",
+              "string",
+              "integer",
+              "boolean"
+            ]
+          }
+        },
+        "severity": {
+          "$ref": "#/$defs/severity"
+        }
+      },
+      "additionalProperties": false
+    },
+    "qcFinding": {
+      "type": "object",
+      "required": [
+        "constraint_id",
+        "passed",
+        "observed",
+        "message"
+      ],
+      "properties": {
+        "constraint_id": {
+          "$ref": "#/$defs/opaqueId"
+        },
+        "passed": {
+          "type": "boolean"
+        },
+        "observed": {
+          "$ref": "#/$defs/measurement"
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "externalReference": {
+      "type": "object",
+      "required": [
+        "request_id",
+        "session_id"
+      ],
+      "properties": {
+        "request_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "session_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "measuredCost": {
+      "type": "object",
+      "required": [
+        "amount",
+        "unit",
+        "is_unknown"
+      ],
+      "properties": {
+        "amount": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "unit": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "is_unknown": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "uncertaintyEvidence": {
+      "type": "object",
+      "required": [
+        "uncertain"
+      ],
+      "properties": {
+        "uncertain": {
+          "type": "boolean"
+        },
+        "reason": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "reconcile_evidence": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/boundArtifact"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

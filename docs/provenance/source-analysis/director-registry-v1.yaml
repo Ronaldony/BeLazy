@@ -1,0 +1,75 @@
+registry_version: director-registry/1.0
+activation_policy_version: director-activation/1.0
+rules:
+  sequential_director_stages_forbidden: true
+  structured_outputs_only: true
+  self_approval_forbidden: true
+  maximum_conflict_rounds: 2
+  cache_by_input_digest: true
+  rerun_only_impacted_scopes: true
+
+directors:
+  - id: showrunner
+    type: core
+    owns: [intent.integration, tradeoff_resolution, blueprint.coherence]
+    verifies: [all_required_scopes_covered]
+    escalation: [unresolved_hard_conflict, intent_ambiguity]
+  - id: narrative-director
+    type: core
+    owns: [narrative, shot_graph.*.purpose]
+    verifies: [causality, hook, development, ending, information_flow]
+  - id: staging-director
+    type: core
+    owns: [shot_graph.*.subjects, shot_graph.*.environment, shot_graph.*.staging]
+    verifies: [blocking, sightline, action_clarity, one_core_action]
+  - id: art-director
+    type: core
+    owns: [visual_language, asset_and_reference_locks, shot_graph.*.lighting_and_color]
+    verifies: [design_consistency, palette, texture, reference_completeness]
+  - id: cinematography-director
+    type: core
+    owns: [shot_graph.*.camera, visual_language.camera_grammar]
+    verifies: [framing, lens, movement, axis, focus, spatial_logic]
+  - id: motion-performance-director
+    type: core
+    owns: [shot_graph.*.motion, shot_graph.*.subjects.pose_and_gaze]
+    verifies: [physicality, movement_complexity, timing, prohibited_motion]
+  - id: generative-technical-director
+    type: core
+    owns: [generation_strategy, shot_graph.*.generation]
+    verifies: [capability, references, provider_fit, candidate_and_retry_budget]
+  - id: editing-rhythm-director
+    type: core
+    owns: [edit_timeline, shot_graph.*.timing, shot_graph.*.transition]
+    verifies: [total_duration, pacing, cut_handles, transition_feasibility]
+  - id: sound-director
+    type: core
+    owns: [sound_design, shot_graph.*.sound]
+    verifies: [ambience, foley, sync, mix_priority, audio_policy]
+  - id: continuity-director
+    type: core
+    owns: [shot_graph.*.state, shot_graph.*.continuity]
+    verifies: [identity, prop_state, spatial_state, temporal_state, carryover]
+  - id: quality-director
+    type: core
+    owns: [risks_and_acceptance, shot_graph.*.acceptance]
+    verifies: [measurability, hard_gate_coverage, threshold_consistency]
+  - id: audience-distribution-director
+    type: core
+    owns: [audience_and_success, delivery_and_distribution]
+    verifies: [platform_fit, retention, metadata, accessibility]
+  - id: fact-research-director
+    type: conditional
+    activate_when: [factual_claims_present]
+  - id: rights-brand-safety-director
+    type: conditional
+    activate_when: [third_party_rights, sponsorship, real_person, policy_risk]
+  - id: vfx-compositing-director
+    type: conditional
+    activate_when: [compositing_required, vfx_required]
+  - id: dialogue-voice-director
+    type: conditional
+    activate_when: [dialogue_present, voiceover_present]
+  - id: localization-accessibility-director
+    type: conditional
+    activate_when: [multi_locale, captions_required, accessibility_profile]

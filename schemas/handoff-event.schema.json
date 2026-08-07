@@ -1,0 +1,102 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.video-factory.invalid/artifact/handoff-event.schema.json",
+  "title": "Append-only handoff event",
+  "type": "object",
+  "required": [
+    "artifact_version",
+    "event_id",
+    "event_type",
+    "occurred_at",
+    "actor_role",
+    "payload"
+  ],
+  "properties": {
+    "artifact_version": {
+      "const": "handoff-event/1.0"
+    },
+    "event_id": {
+      "$ref": "artifact-common.schema.json#/$defs/opaqueId"
+    },
+    "event_type": {
+      "type": "string",
+      "minLength": 1
+    },
+    "occurred_at": {
+      "type": "string",
+      "minLength": 1
+    },
+    "actor_role": {
+      "$ref": "artifact-common.schema.json#/$defs/roleId"
+    },
+    "episode_id": {
+      "$ref": "artifact-common.schema.json#/$defs/opaqueId"
+    },
+    "before_state": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "after_state": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "task_id": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "artifact-common.schema.json#/$defs/opaqueId"
+        }
+      ]
+    },
+    "task_sha256": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "result_id": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "artifact-common.schema.json#/$defs/opaqueId"
+        }
+      ]
+    },
+    "result_sha256": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "reason_code": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "payload": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "extensions": {
+      "$ref": "artifact-common.schema.json#/$defs/extensions"
+    }
+  },
+  "additionalProperties": false,
+  "x-artifact-migration": {
+    "id_pattern": "^handoff-event/[1-9][0-9]*-to-[1-9][0-9]*/[1-9][0-9]*$",
+    "single_major_step": true,
+    "in_place": false,
+    "automatic_downgrade": false
+  }
+}

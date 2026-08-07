@@ -1,0 +1,24 @@
+{
+  "artifact_version": "channel-config/1.0",
+  "config_contract": "1.0",
+  "channel_id": "channel-a",
+  "settings": {
+    "media": {
+      "duration_seconds": 45,
+      "platforms": ["platform-b"]
+    },
+    "identity": {
+      "recurring_character_ids": []
+    }
+  },
+  "extensions": {
+    "namespace-a": {
+      "contract_version": "1.0",
+      "payload": {
+        "owner_field": {
+          "value": 7
+        }
+      }
+    }
+  }
+}

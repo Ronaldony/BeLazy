@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.video-factory.invalid/artifact/idea-scores.schema.json",
+  "title": "Blind idea scores from one scorer role",
+  "type": "object",
+  "required": [
+    "artifact_version",
+    "rules_version",
+    "episode_id",
+    "candidate_source_sha256",
+    "scored_by",
+    "scores"
+  ],
+  "properties": {
+    "artifact_version": { "const": "idea-scores/1.0" },
+    "rules_version": { "$ref": "artifact-common.schema.json#/$defs/rulesVersion" },
+    "episode_id": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" },
+    "candidate_source_sha256": { "$ref": "artifact-common.schema.json#/$defs/sha256" },
+    "scored_by": { "$ref": "artifact-common.schema.json#/$defs/roleId" },
+    "scores": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["candidate_id", "rubric"],
+        "properties": {
+          "candidate_id": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" },
+          "rubric": {
+            "type": "object",
+            "minProperties": 1,
+            "additionalProperties": { "type": "number" }
+          },
+          "notes": { "type": "string" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "extensions": { "$ref": "artifact-common.schema.json#/$defs/extensions" }
+  },
+  "additionalProperties": false,
+  "x-artifact-migration": {
+    "id_pattern": "^idea-scores/[1-9][0-9]*-to-[1-9][0-9]*/[1-9][0-9]*$",
+    "single_major_step": true,
+    "in_place": false,
+    "automatic_downgrade": false
+  }
+}

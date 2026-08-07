@@ -1,0 +1,287 @@
+{
+  "metadata": {
+    "repository": "video-production-core-main",
+    "distribution": "video-production-core",
+    "version": "0.3.1",
+    "core_contract": "0.3",
+    "config_contract": "1.0",
+    "audit_date": "2026-08-05",
+    "python_audit_runtime": "3.13.5 (package declaration: >=3.12,<3.13)",
+    "source_modules": 78,
+    "source_loc": 15921,
+    "schema_files": 46,
+    "registered_artifact_versions": 42,
+    "artifact_families": 37,
+    "tests": {
+      "passed": 327,
+      "skipped": 2
+    },
+    "coverage": {
+      "combined_percent": 78.0400996559497,
+      "statement_percent": 83.53902869049527,
+      "branch_percent": 62.37442922374429
+    },
+    "scope_limitations": [
+      "실제 채널 workspace/rules bundle/provider profile은 저장소에 포함되지 않음",
+      "실제 approval ledger, external adapters, persistence, publisher runtime은 포함되지 않음",
+      "따라서 repository 내부 계약/계획 동작은 검증했지만 실제 운영 환경의 종단 간 실행은 검증 대상 밖"
+    ]
+  },
+  "findings": [
+    {
+      "id": "P0-001",
+      "severity": "P0",
+      "title": "배포 휠에 JSON Schema 리소스가 포함되지 않음",
+      "status": "confirmed",
+      "evidence": [
+        "pyproject.toml:21-25에는 src 패키지 탐색만 있고 schema package-data 설정이 없음",
+        "빌드된 wheel 83개 엔트리 중 *.schema.json 0개",
+        "설치본 get_default_registry()가 ArtifactSchemaError를 발생시킴",
+        "src/video_factory/artifacts/registry.py:47-61이 소스 체크아웃 상대 경로를 전제함"
+      ],
+      "impact": "README가 권장하는 검증된 휠 설치 방식에서 핵심 artifact 검증 기능이 작동하지 않는다.",
+      "target_action": "schema를 패키지 리소스로 이동하고 importlib.resources 기반 로딩, wheel-install E2E 및 manifest 검사를 추가한다."
+    },
+    {
+      "id": "P0-002",
+      "severity": "P0",
+      "title": "오케스트레이션 승인 게이트가 현재 effective-config 해시를 검증하지 않음",
+      "status": "confirmed",
+      "evidence": [
+        "approval schema/도메인에는 effective_config_sha256가 존재함",
+        "providers/enforcement.py:41-56은 request와 승인 requirement의 config hash를 비교함",
+        "engine/orchestration.py:315-361의 _approval_blockers는 version/state/capability/bound_artifacts만 비교함",
+        "서로 다른 임의 config hash(c*64, d*64)를 넣은 두 실험 모두 generation readiness ready=True"
+      ],
+      "impact": "이전 또는 다른 설정으로 발급된 승인 증거가 현재 생성/게시 게이트를 통과할 수 있다.",
+      "target_action": "모든 gate evaluation context에 CurrentEffectiveConfigRef를 필수화하고 승인·plan identity에 exact hash를 포함한다."
+    },
+    {
+      "id": "P1-001",
+      "severity": "P1",
+      "title": "ArtifactSnapshot이 호출자 주장 해시와 current 플래그를 신뢰함",
+      "status": "confirmed",
+      "evidence": [
+        "artifact_graph.py:142-167은 sha256가 주어지면 문서/바이트와의 일치 여부를 검증하지 않음",
+        "artifact_graph.py:200-216은 envelope의 sha256와 is_current를 그대로 수용함",
+        "exact byte helper는 존재하지만 생산 게이트에서 강제되지 않음"
+      ],
+      "impact": "구조상 유효한 거짓 digest/current assertion이 lineage와 승인 결합의 신뢰 루트가 될 수 있다.",
+      "target_action": "verification_state와 digest_kind를 가진 EvidenceEnvelope를 도입하고 생산 승인은 VERIFIED_BYTES + manifest-current만 허용한다."
+    },
+    {
+      "id": "P1-002",
+      "severity": "P1",
+      "title": "Artifact JSON 파싱/스키마 검증이 엄격하지 않고 오류 경계가 불안정함",
+      "status": "confirmed",
+      "evidence": [
+        "validation.py:95-106은 FormatChecker 없이 validator를 생성함",
+        "invalid date-time, NaN metric, duplicate JSON key가 모두 ok=True",
+        "존재하지 않는 Path는 validation.py:164-175에서 source 미할당으로 UnboundLocalError",
+        "str 입력이 존재하는 경로인지 JSON text인지 모호하게 분기됨"
+      ],
+      "impact": "유효하지 않은 증거가 통과하거나, 정상적인 입력 오류가 구조화된 실패 대신 예외로 누출된다.",
+      "target_action": "strict decoder(중복 키/비유한 수/UTF-8/깊이·크기 제한), FormatChecker, 명시적 validate_bytes/path/mapping API를 만든다."
+    },
+    {
+      "id": "P1-003",
+      "severity": "P1",
+      "title": "1,681줄 단일 오케스트레이터에 정책·증거·도메인 판단이 집중됨",
+      "status": "confirmed",
+      "evidence": [
+        "engine/orchestration.py는 저장소 최대 모듈이며 plan_next_step이 긴 순차 분기 구조",
+        "PipelineKind는 17 family만 포함하지만 registry에는 37 family가 존재함",
+        "create_generation_packet 안내는 최신 2.1 지원과 달리 2.0을 하드코딩함",
+        "plan id는 workflow/policy/rules/effective-config digest를 포함하지 않음"
+      ],
+      "impact": "정책 변경과 artifact 추가가 중앙 분기문 변경으로 이어지고, 누락·드리프트·회귀 위험이 커진다.",
+      "target_action": "versioned declarative workflow DAG + gate catalog + generic evaluator로 치환하고 레거시 evaluator와 dual-run한다."
+    },
+    {
+      "id": "P1-004",
+      "severity": "P1",
+      "title": "패키지 의존성에 6개 패키지 순환 결합이 존재함",
+      "status": "confirmed",
+      "evidence": [
+        "SCC: approvals, config, continuity, engine, policy, providers",
+        "대표 역방향: config→engine, policy→engine/providers, providers→approvals/engine, engine→config/continuity/policy"
+      ],
+      "impact": "핵심 타입의 소유권이 불분명하고 독립 테스트·재사용·패키지 분리가 어려워진다.",
+      "target_action": "kernel→schema/evidence/policy/gates→workflow→application→ports/adapters의 단방향 규칙을 도입하고 architecture test로 강제한다."
+    },
+    {
+      "id": "P1-005",
+      "severity": "P1",
+      "title": "정책 카탈로그의 일부 필드와 실제 게이트 동작이 일치하지 않음",
+      "status": "confirmed",
+      "evidence": [
+        "Controlled의 STAGE_BRIEF=HUMAN이지만 orchestrator는 brief review를 평가하지 않고 storyboard로 진행함",
+        "Standard 주석은 storyboard peer review를 optional로 설명하지만 구현은 1건을 요구함",
+        "allows_capability_downgrade_mid_run은 선언만 있고 실행 경로에서 사용되지 않음",
+        "immutable_audit_log_required와 author separation은 제한된 위치에서만 소비됨"
+      ],
+      "impact": "정책 문서/코드/실제 gate가 서로 다른 보안·검수 수준을 약속한다.",
+      "target_action": "PolicyBundle을 버전·해시 결합하고 모든 필드에 enforcement matrix 및 conformance test를 둔다."
+    },
+    {
+      "id": "P1-006",
+      "severity": "P1",
+      "title": "요청 execution mode와 계산된 effective mode가 같은 필드로 덮어써짐",
+      "status": "confirmed",
+      "evidence": [
+        "config/merge.py:336-355가 settings.execution.mode를 effective_mode로 치환함",
+        "원 요청값과 변환 사유는 constraints 문자열에만 간접 보존됨",
+        "leaf provenance는 원 source를 가리키지만 실제 값은 merge 후 정책 계산으로 변환됨"
+      ],
+      "impact": "감사 시 사용자의 요청, 정책 상한, 실제 결정값을 명확히 분리하기 어렵다.",
+      "target_action": "requested_execution_mode, effective_execution_mode, decision_limits/reasons/provenance를 별도 필드로 보존한다."
+    },
+    {
+      "id": "P1-007",
+      "severity": "P1",
+      "title": "CLI가 내부 기능을 실제 입력 인터페이스로 노출하지 못하며 상태 표기가 과장됨",
+      "status": "confirmed",
+      "evidence": [
+        "run/status CLI는 artifact_docs=()를 전달함",
+        "qc는 expectations=None, approve/review는 항상 usage_error",
+        "registry는 이 명령들을 IMPLEMENTED로 표시함",
+        "main은 --json을 검사하지만 parser에는 옵션이 없어 doctor --json exit=2",
+        "cli/main.py branch-aware coverage 8.1%"
+      ],
+      "impact": "사용자는 명령이 운영 가능한 것으로 오해할 수 있고 자동화 계약이 불안정하다.",
+      "target_action": "stdin/--input/--output/--json, 안정 exit code, JSON result envelope을 도입하고 library-only 명령은 명확히 분류한다."
+    },
+    {
+      "id": "P1-008",
+      "severity": "P1",
+      "title": "Executor 불확실 상태와 idempotency lock이 프로세스 메모리에만 존재함",
+      "status": "confirmed",
+      "evidence": [
+        "providers/adapters.py:313-424의 _unresolved는 인메모리 dict",
+        "프로세스 재시작 시 미해결 외부 상태가 사라짐",
+        "observe/reconcile은 immutable request fingerprint를 검증하지 않음"
+      ],
+      "impact": "재시작·다중 인스턴스·중복 dispatch 상황에서 비용이 드는 외부 작업을 안전하게 조정할 수 없다.",
+      "target_action": "durable ExecutionJournalPort와 CAS 기반 상태기계, request digest, reconciliation receipt를 도입한다."
+    },
+    {
+      "id": "P1-009",
+      "severity": "P1",
+      "title": "승인 증거는 구조적으로만 유효하며 진위가 인증되지 않음",
+      "status": "confirmed",
+      "evidence": [
+        "ApprovalEvidence.record_sha256는 단순 필드이며 serialized record 또는 signature와 대조되지 않음",
+        "approved_by_human=true는 caller-supplied document data",
+        "immutable audit ledger receipt/signature contract가 없음"
+      ],
+      "impact": "schema-valid assertion과 실제 사람이 승인한 인증 증거를 구분할 수 없다.",
+      "target_action": "authentication_state, ledger receipt/signature verification port를 도입하고 Controlled gate는 인증된 evidence만 허용한다."
+    },
+    {
+      "id": "P1-010",
+      "severity": "P1",
+      "title": "ArtifactGraph가 일반적인 lineage graph라기보다 검증된 snapshot 집합에 가까움",
+      "status": "confirmed",
+      "evidence": [
+        "family/one/matches 조회 중심이며 edge extraction·cycle·supersession/revision 모델이 없음",
+        "각 artifact의 참조 결합은 orchestrator helper에서 수동 검증됨",
+        "currentness는 외부 boolean assertion에 의존함"
+      ],
+      "impact": "artifact family가 늘수록 참조 검증이 중복되고 stale lineage를 일관되게 탐지하기 어렵다.",
+      "target_action": "typed EvidenceGraph, edge registry, subject/revision index, CurrentManifest, generic lineage query를 만든다."
+    },
+    {
+      "id": "P1-011",
+      "severity": "P1",
+      "title": "Review/Feasibility/QC/Continuity/Approval의 verdict와 증거 규칙이 분절됨",
+      "status": "confirmed",
+      "evidence": [
+        "review pass/fail/uncertain, feasibility pass/fail/inconclusive, QC 5상태, approval granted/rejected 등 상이",
+        "QC는 duplicate measurement id를 last-win 처리하지만 continuity는 reject",
+        "QC equality가 문자열 coercion을 하고 Decimal을 float로 직렬화함",
+        "artifact 미지정 시 unspecified/zero-hash placeholder를 생성함"
+      ],
+      "impact": "동일 의미의 gate가 서로 다른 실패 의미·정밀도·중복 처리 규칙을 가진다.",
+      "target_action": "공통 GateResult/ReasonCode/Status algebra와 typed quantity, exact decimal serialization, strict duplicate rule을 도입한다."
+    },
+    {
+      "id": "P1-012",
+      "severity": "P1",
+      "title": "스키마 검증과 도메인 값 검증이 분리되어 invalid typed value가 생성 가능함",
+      "status": "confirmed",
+      "evidence": [
+        "domain/contracts.py의 ID·Hash·Path가 NewType(str)라 런타임 검증을 제공하지 않음",
+        "constructor와 schema/semantic helper 사이에 중복 검증이 존재함"
+      ],
+      "impact": "검증을 거치지 않은 값도 타입상 정상처럼 core 내부로 유입될 수 있다.",
+      "target_action": "파싱 경계에서 validated immutable value object를 생성하고 gate는 Validated[T]만 받도록 한다."
+    },
+    {
+      "id": "P1-013",
+      "severity": "P1",
+      "title": "최종 결과물 QC가 shot-qc family와 final-output 가상 shot으로 모델링됨",
+      "status": "confirmed",
+      "evidence": [
+        "orchestration.py:1576-1600은 final-delivery.technical_qc_ref를 shot-qc family에서 찾음",
+        "테스트는 shot_id=final-output을 사용함"
+      ],
+      "impact": "shot scope와 assembled delivery scope의 품질 규칙·측정치를 명확히 분리하기 어렵다.",
+      "target_action": "subject_scope를 명시하거나 delivery-qc/media-qc 계약을 별도로 도입한다."
+    },
+    {
+      "id": "P1-014",
+      "severity": "P1",
+      "title": "workspace plan이 symlink escape와 계획-실행 간 TOCTOU를 막지 못함",
+      "status": "confirmed",
+      "evidence": [
+        "workspace_init/export의 rglob + is_file이 root 밖 target을 가리키는 symlink를 포함함",
+        "실험에서 init/export 모두 READY이며 외부 파일 link.txt가 계획에 포함됨",
+        "plan 생성 후 실행 전 source bytes가 바뀌어도 executor-side revalidation contract가 없음"
+      ],
+      "impact": "외부 실행기가 계획을 신뢰하면 root 밖 정보 노출 또는 승인된 계획과 다른 바이트 실행이 가능하다.",
+      "target_action": "no-follow traversal, resolved containment, file type policy, exact input digest 재검증을 가진 ExecutablePlan/Receipt를 도입한다."
+    },
+    {
+      "id": "P1-015",
+      "severity": "P1",
+      "title": "테스트 수는 많지만 전체 생산 lineage와 설치 경계 통합 검증이 부족함",
+      "status": "confirmed",
+      "evidence": [
+        "327 tests 중 integration test는 1개",
+        "해당 test는 config merge/CLI validate/doctor/retry ledger를 다루고 전체 episode lineage는 다루지 않음",
+        "installed-wheel schema/CLI E2E가 없어 P0 packaging 결함을 발견하지 못함",
+        "총 branch coverage 62.37%; 핵심 경계 모듈 일부는 8~69%"
+      ],
+      "impact": "소스 체크아웃 단위 테스트가 통과해도 배포 및 종단 간 신뢰 경계가 깨질 수 있다.",
+      "target_action": "wheel-installed E2E, full synthetic workflow, property/mutation, architecture, dual-evaluator parity test를 추가한다."
+    },
+    {
+      "id": "P2-001",
+      "severity": "P2",
+      "title": "ADR·CI·migration·release governance가 코드 성장 속도를 따라가지 못함",
+      "status": "confirmed",
+      "evidence": [
+        "코드/문서가 ADR-001/003/004/006을 참조하지만 ADR 파일이 저장소에 없음",
+        "CI 설정, installed-wheel matrix, reproducible build 검사가 없음",
+        "migrate CLI는 NOT_YET_BACKED인데 artifact major/minor 버전은 누적 중",
+        "Python 3.12 전용 지원 선언이나 현재 감사 환경 3.13에서만 전체 suite 실행됨"
+      ],
+      "impact": "설계 의도·호환성·릴리스 판정이 사람 기억과 문서 조각에 의존한다.",
+      "target_action": "ADR 보관소, contract compatibility policy, Python 3.12/Windows/Linux CI, reproducible wheel, migration registry를 구축한다."
+    },
+    {
+      "id": "P2-002",
+      "severity": "P2",
+      "title": "성능·DoS·API 명확성 하드닝 여지가 남아 있음",
+      "status": "confirmed",
+      "evidence": [
+        "schema registry/validator를 반복 생성하며 compiled cache가 없음",
+        "입력 크기·깊이·파일 수 제한이 없음",
+        "provider registry가 capability 하나당 단일 binding 중심",
+        "public Transition API와 plan-only 불변식 사이에 의미 중복이 존재함"
+      ],
+      "impact": "대규모 입력·확장된 provider 구성·공개 API 진화에서 비용과 혼란이 증가한다.",
+      "target_action": "resource limits/cache, provider identity key, API deprecation map, semver compatibility rule을 명시한다."
+    }
+  ]
+}

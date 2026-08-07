@@ -1,0 +1,42 @@
+{
+  "artifact_version": "brand-entity/1.0",
+  "entity_id": "identity-a",
+  "entity_kind": "character",
+  "canonical_status": "shadow",
+  "source": {
+    "path": "identity/identity-a.md",
+    "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "section_ranges": [
+      {
+        "start_heading": "## Appearance",
+        "end_before_heading": "## Behavior"
+      }
+    ]
+  },
+  "rules_version": "rules-a",
+  "fixed_sentences": [
+    {
+      "role": "review-lock",
+      "consumers": ["documentation", "visual-review"],
+      "text": "A rounded figure with a neutral finish.\nNo facial marks.",
+      "source_section": "Appearance",
+      "sha256": "dbe24d9c7cfa5f07a795b487f0a00d3018c5556080ef4a5284c2ba0cbb9415e7"
+    },
+    {
+      "role": "prompt-subject",
+      "consumers": ["generation-prompt.subject"],
+      "text": "A rounded figure under neutral studio light.",
+      "source_section": "Prompt subject",
+      "sha256": "9af2b826c66dbcc50ebaca2bfc47224282c453bbfc6a531f9266e75a2e6517ca"
+    }
+  ],
+  "data": {
+    "display_name": "Identity A",
+    "character": {
+      "design_status": "locked",
+      "visual_reference_path": "identity/assets/identity-a.png",
+      "scale_anchor": "adult-scale",
+      "invariants": ["no facial marks", "rounded silhouette"]
+    }
+  }
+}

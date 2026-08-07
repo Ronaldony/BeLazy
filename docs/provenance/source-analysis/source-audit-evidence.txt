@@ -1,0 +1,84 @@
+video-production-core 0.3.1 — repository audit evidence
+Audit date: 2026-08-05
+
+[Repository]
+- Python modules: 78
+- Source LOC: 15,921
+- Schema files: 46
+- Registered artifact versions: 42
+- Artifact families: 37
+- Top-level packages: 22
+
+[Test run]
+Python 3.13.5 (declared support: >=3.12,<3.13)
+327 passed, 2 skipped (Windows-only)
+core_purity=PASS scanned_files=265 violations=0
+side_effect_free=PASS scanned_files=78 violations=0
+repo_isolation=PASS scanned_files=131 violations=0
+
+[Coverage]
+Combined: 78.0401%
+Statements: 83.5390%
+Branches: 62.3744%
+Weak boundaries:
+- cli/main.py 8.07%
+- providers/enforcement.py 61.11%
+- providers/adapters.py 62.63%
+- qc/plan.py 68.51%
+- approvals/requirements.py 69.30%
+- cli/handlers.py 71.17%
+- engine/orchestration.py 77.71%
+
+[Wheel packaging reproduction]
+Wheel: video_production_core-0.3.1-py3-none-any.whl
+Entries: 83
+*.schema.json entries: 0
+Installed registry result:
+ArtifactSchemaError: could not locate core schemas/ directory relative to video_factory package
+
+[Effective-config approval binding reproduction]
+Approval effective_config_sha256=c*64 -> generation readiness ready=True, blockers=[]
+Approval effective_config_sha256=d*64 -> generation readiness ready=True, blockers=[]
+There is no current expected effective config argument in build_generation_readiness/plan_next_step.
+
+[Artifact validation reproduction]
+invalid reviewed_at='not-a-date' -> ok=True
+analytics metric views=NaN -> ok=True
+duplicate episode_id JSON key -> ok=True
+missing Path -> UnboundLocalError: local variable source is not associated with a value
+CLI `doctor --json` -> argparse unrecognized argument, exit=2
+
+[Filesystem boundary reproduction]
+A symlink inside a template/source pointed to a file outside the root.
+plan_materialize -> status=ready, link included and outside target bytes hashed
+plan_export -> status=ready, link included
+resolved target containment -> False
+
+[Dependency cycle]
+Strongly connected component:
+- video_factory.approvals
+- video_factory.config
+- video_factory.continuity
+- video_factory.engine
+- video_factory.policy
+- video_factory.providers
+Edges within SCC:
+approvals -> config
+config -> engine
+continuity -> config
+engine -> config, continuity, policy
+policy -> engine, providers
+providers -> approvals, engine
+
+[Large modules]
+engine/orchestration.py: 1,681 LOC
+cli/handlers.py: 1,296 LOC
+qc/plan.py: 791 LOC
+continuity/plan.py: 726 LOC
+feasibility/plan.py: 519 LOC
+distribution/lock.py: 478 LOC
+
+[Scope limitation]
+The repository does not include the consuming channel workspace, real rules/profile bundles,
+authenticated approval ledger, persistent execution journal, concrete external adapters, or publisher.
+Repository-level contracts and pure behavior were audited; real operational end-to-end execution was not.

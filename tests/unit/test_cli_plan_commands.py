@@ -234,6 +234,29 @@ def test_approve_handler_requires_current_context_for_evidence_binding() -> None
         "approval.current_context_missing"
     )
 
+    legacy_requirement = build_approval_requirement(
+        "packet", [artifact], "b" * 64
+    )
+    legacy_evidence = ApprovalEvidence(
+        evidence_id=OpaqueId("evidence-cli-legacy"),
+        requirement=legacy_requirement,
+        state=ApprovalState.GRANTED,
+        approver_role=RoleId("human-operator"),
+        created_at="2026-07-21T00:00:00Z",
+        record_sha256=HashDigest("c" * 64),
+    )
+    legacy = handle_approve(
+        "standard",
+        kind="packet",
+        artifacts=[artifact],
+        effective_config_sha256="b" * 64,
+        evidence=legacy_evidence,
+    )
+    assert legacy.status == "evidence_rejected"
+    assert legacy.payload["evidence_binding"]["reason_code"] == (
+        "approval.current_context_missing"
+    )
+
     stale = replace(
         context, workflow_definition_sha256=HashDigest("e" * 64)
     )

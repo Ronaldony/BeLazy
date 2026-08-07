@@ -48,6 +48,18 @@ CONTEXT_FIELDS = (
 
 
 def plan_next_step(observation, workflow_mode):
+    """W00-compatible, non-authorizing planning overload."""
+
+    return _plan_next_step(observation, workflow_mode)
+
+
+def build_generation_readiness(observation, workflow_mode):
+    """W00-compatible structural readiness overload."""
+
+    return _build_generation_readiness(observation, workflow_mode)
+
+
+def _strict_plan_next_step(observation, workflow_mode):
     return _plan_next_step(
         observation,
         workflow_mode,
@@ -56,7 +68,7 @@ def plan_next_step(observation, workflow_mode):
     )
 
 
-def build_generation_readiness(observation, workflow_mode):
+def _strict_build_generation_readiness(observation, workflow_mode):
     return _build_generation_readiness(
         observation,
         workflow_mode,
@@ -591,12 +603,20 @@ def test_generation_readiness_requires_all_bound_pass_evidence() -> None:
     observation = observe_episode_state(_generation_gate_snapshots())
     readiness = build_generation_readiness(observation, "standard")
     assert readiness.ready is True
+    assert readiness.authorization_ready is False
     assert readiness.packet is not None
     assert readiness.feasibility_review is not None
     assert readiness.approval_evidence is not None
     plan = plan_next_step(observation, "standard")
     assert plan.action_type == "run_external_generation"
     assert "paid_external_generation" in plan.prohibited_actions
+
+    authorized = _strict_build_generation_readiness(observation, "standard")
+    assert authorized.ready is True
+    assert authorized.authorization_ready is True
+    assert authorized.gate_context_sha256 is not None
+    assert authorized.valid_from == "2026-07-21T01:00:00Z"
+    assert authorized.valid_until == "2026-07-21T06:00:00Z"
 
 
 def test_generation_readiness_accepts_packet_2_1_end_to_end() -> None:
@@ -672,7 +692,7 @@ def test_missing_expired_and_duplicate_approval_contexts_fail_closed() -> None:
     expired = _snapshot(str(packet_approval.path), expired_document)
     expired_snapshots = list(snapshots)
     expired_snapshots[expired_snapshots.index(packet_approval)] = expired
-    expired_plan = plan_next_step(
+    expired_plan = _strict_plan_next_step(
         observe_episode_state(expired_snapshots), "standard"
     )
     assert expired_plan.action_type == "approve_generation"
@@ -685,7 +705,7 @@ def test_missing_expired_and_duplicate_approval_contexts_fail_closed() -> None:
     duplicate = _snapshot(str(packet_approval.path), duplicate_document)
     duplicate_snapshots = list(snapshots)
     duplicate_snapshots[duplicate_snapshots.index(packet_approval)] = duplicate
-    duplicate_plan = plan_next_step(
+    duplicate_plan = _strict_plan_next_step(
         observe_episode_state(duplicate_snapshots), "standard"
     )
     assert duplicate_plan.action_type == "approve_generation"
@@ -994,7 +1014,7 @@ def test_full_lineage_stops_at_ready_for_human_publish() -> None:
         if field == "effective_config_sha256":
             stale_document["effective_config_sha256"] = "e" * 64
         stale_publish = _snapshot(str(publish_approval.path), stale_document)
-        stale_plan = plan_next_step(
+        stale_plan = _strict_plan_next_step(
             observe_episode_state([*lineage_without_publish, stale_publish]),
             "standard",
         )
@@ -1034,6 +1054,16 @@ def test_next_step_is_deterministic_and_schema_valid() -> None:
     assert document["auto_execution"] is False
     result = validate_artifact(document)
     assert result.ok is True, result.error_texts
+
+
+def test_plan_identity_is_invariant_to_artifact_input_order() -> None:
+    snapshots = _generation_gate_snapshots(include_packet_approval=False)
+    forward = observe_episode_state(snapshots)
+    reverse = observe_episode_state(list(reversed(snapshots)))
+    one = _plan_next_step(forward, "standard")
+    two = _plan_next_step(reverse, "standard")
+    assert one.action_type == two.action_type
+    assert one.next_step_id == two.next_step_id
 
 
 def test_rules_version_must_not_be_fabricated_for_empty_observation() -> None:

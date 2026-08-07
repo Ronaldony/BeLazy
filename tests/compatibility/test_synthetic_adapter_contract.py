@@ -7,8 +7,10 @@ without any external call.
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from decimal import Decimal
 
+from video_factory.approvals import GateContext
 from video_factory.domain import (
     ArtifactReference,
     ArtifactVersion,
@@ -32,6 +34,8 @@ from video_factory.providers import (
     HumanHandoff,
     InMemoryCapabilityRegistry,
     NormalizedEvent,
+    OrchestrationGuard,
+    OrchestrationPolicy,
     Outcome,
     ProviderAdapter,
     ProviderPlan,
@@ -234,6 +238,33 @@ def test_registry_resolves_synthetic_adapters_by_capability_and_kind() -> None:
         allowed_tools=frozenset({OpaqueId("tool-a")}),
         capability_allowlist=frozenset({request.capability_id}),
     )
-    result = executor.dispatch(request, context)
+    gate_context = GateContext(
+        workflow_definition_sha256=HashDigest("1" * 64),
+        policy_bundle_sha256=HashDigest("2" * 64),
+        rules_bundle_sha256=HashDigest("3" * 64),
+        effective_config_sha256=HashDigest("b" * 64),
+        current_manifest_sha256=HashDigest("4" * 64),
+        evidence_graph_sha256=HashDigest("5" * 64),
+        executable_plan_sha256=HashDigest("6" * 64),
+    )
+    evaluated_at = datetime(2026, 7, 21, 1, 0, tzinfo=timezone.utc)
+    authorization = OrchestrationGuard().authorize(
+        request,
+        OrchestrationPolicy(
+            TASK_CAPABILITY,
+            AdapterKind.EXECUTOR,
+            ExecutionMode.AUTOMATED,
+            False,
+        ),
+        current_context=gate_context,
+        evaluated_at=evaluated_at,
+    )
+    result = executor.dispatch(
+        request,
+        context,
+        authorization=authorization,
+        current_context=gate_context,
+        evaluated_at=evaluated_at,
+    )
     assert result.outcome is Outcome.SUCCEEDED
     assert executor.external_calls == 1

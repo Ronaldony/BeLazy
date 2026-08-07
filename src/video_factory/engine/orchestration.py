@@ -127,6 +127,42 @@ class GenerationReadinessPlan:
     approval_evidence: ArtifactReference | None
     blockers: tuple[str, ...]
     gate_context_sha256: str | None = None
+    authorization_ready: bool = False
+    valid_from: str | None = None
+    valid_until: str | None = None
+
+    def __post_init__(self) -> None:
+        if self.ready and self.blockers:
+            raise OrchestrationPlanError("ready plan cannot contain blockers")
+        if not self.authorization_ready:
+            return
+        if not self.ready:
+            raise OrchestrationPlanError(
+                "authorization-ready plan must also be structurally ready"
+            )
+        if (
+            self.packet is None
+            or self.packet_content_sha256 is None
+            or self.feasibility_review is None
+            or self.approval_evidence is None
+            or self.gate_context_sha256 is None
+            or self.valid_from is None
+            or self.valid_until is None
+        ):
+            raise OrchestrationPlanError(
+                "authorization-ready plan lacks proof or validity-window fields"
+            )
+        try:
+            valid_from = parse_rfc3339_datetime(self.valid_from)
+            valid_until = parse_rfc3339_datetime(self.valid_until)
+        except ValueError as error:
+            raise OrchestrationPlanError(
+                "authorization-ready plan has an invalid validity window"
+            ) from error
+        if valid_from >= valid_until:
+            raise OrchestrationPlanError(
+                "authorization-ready plan validity window is empty"
+            )
 
     @property
     def packet_sha256(self) -> str | None:
@@ -396,6 +432,7 @@ def _approval_blockers(
     required_artifacts: Sequence[ArtifactSnapshot],
     current_context: GateContext | None,
     evaluated_at: datetime | None,
+    enforce_current_context: bool = True,
 ) -> tuple[tuple[str, ...], ArtifactSnapshot | None]:
     approvals = observation.graph.family(family)
     if len(approvals) != 1:
@@ -438,14 +475,15 @@ def _approval_blockers(
         blockers.append(f"{family} bound_artifacts contain duplicate identities")
     if actual != required:
         blockers.append(f"{family} bound_artifacts do not exactly match current inputs")
-    blockers.extend(
-        _approval_context_blockers(
-            doc,
-            family=family,
-            current_context=current_context,
-            evaluated_at=evaluated_at,
+    if enforce_current_context:
+        blockers.extend(
+            _approval_context_blockers(
+                doc,
+                family=family,
+                current_context=current_context,
+                evaluated_at=evaluated_at,
+            )
         )
-    )
     return tuple(blockers), approval
 
 
@@ -619,10 +657,12 @@ def build_generation_readiness(
     except WorkflowPolicyError as error:
         raise OrchestrationPlanError(str(error)) from error
 
+    legacy_planning = current_context is None and evaluated_at is None
     blockers = list(observation.findings)
     storyboard = observation.graph.one(PipelineKind.STORYBOARD.value)
     packet = observation.graph.one(PipelineKind.GENERATION_PACKET.value)
     feasibility: ArtifactSnapshot | None = None
+    storyboard_approval: ArtifactSnapshot | None = None
     approval: ArtifactSnapshot | None = None
 
     if storyboard is None:
@@ -641,7 +681,7 @@ def build_generation_readiness(
         )
         blockers.extend(review_blockers)
         if policy.hash_binding_required:
-            approval_blockers, _ = _approval_blockers(
+            approval_blockers, storyboard_approval = _approval_blockers(
                 observation,
                 family=PipelineKind.STORYBOARD_APPROVAL.value,
                 expected_version="storyboard-approval/2.0",
@@ -649,6 +689,7 @@ def build_generation_readiness(
                 required_artifacts=(storyboard, *storyboard_reviews),
                 current_context=current_context,
                 evaluated_at=evaluated_at,
+                enforce_current_context=not legacy_planning,
             )
             blockers.extend(approval_blockers)
     if storyboard is not None and packet is not None:
@@ -683,11 +724,35 @@ def build_generation_readiness(
                 required_artifacts=required,
                 current_context=current_context,
                 evaluated_at=evaluated_at,
+                enforce_current_context=not legacy_planning,
             )
             blockers.extend(approval_blockers)
     if policy.mode is WorkflowMode.RAPID:
         blockers.append("rapid mode is preview-only and cannot authorize generation")
 
+    unique = tuple(dict.fromkeys(blockers))
+    authorization_ready = not unique and not legacy_planning
+    valid_from: str | None = None
+    valid_until: str | None = None
+    if authorization_ready:
+        approvals = tuple(
+            item for item in (storyboard_approval, approval) if item is not None
+        )
+        if not approvals:
+            blockers.append("authorization approval validity window is missing")
+            authorization_ready = False
+        else:
+            windows = [
+                (
+                    parse_rfc3339_datetime(str(item.document["approved_at"])),
+                    str(item.document["approved_at"]),
+                    parse_rfc3339_datetime(str(item.document["expires_at"])),
+                    str(item.document["expires_at"]),
+                )
+                for item in approvals
+            ]
+            valid_from = max(windows, key=lambda item: item[0])[1]
+            valid_until = min(windows, key=lambda item: item[2])[3]
     unique = tuple(dict.fromkeys(blockers))
     return GenerationReadinessPlan(
         ready=not unique,
@@ -706,6 +771,9 @@ def build_generation_readiness(
             if current_context is not None
             else None
         ),
+        authorization_ready=authorization_ready,
+        valid_from=valid_from,
+        valid_until=valid_until,
         blockers=unique,
     )
 
@@ -728,7 +796,15 @@ def _plan_id(
                 "artifact_version": item.artifact_version,
                 "is_current": item.is_current,
             }
-            for item in observation.artifacts
+            for item in sorted(
+                observation.artifacts,
+                key=lambda artifact: (
+                    artifact.path,
+                    artifact.sha256,
+                    artifact.artifact_version,
+                    artifact.is_current,
+                ),
+            )
         ],
     }
     if current_context is not None:
@@ -750,6 +826,7 @@ def plan_next_step(
     except WorkflowPolicyError as error:
         raise OrchestrationPlanError(str(error)) from error
     mode = policy.mode
+    legacy_planning = current_context is None and evaluated_at is None
     prohibited = (
         "auto_transition_workflow_state",
         "auto_approve",
@@ -873,6 +950,7 @@ def plan_next_step(
             required_artifacts=(storyboard, *storyboard_reviews),
             current_context=current_context,
             evaluated_at=evaluated_at,
+            enforce_current_context=not legacy_planning,
         )
         if approval_blockers:
             return make_plan(
@@ -979,6 +1057,7 @@ def plan_next_step(
             required_artifacts=(packet, *packet_reviews, feasibility),
             current_context=current_context,
             evaluated_at=evaluated_at,
+            enforce_current_context=not legacy_planning,
         )
         if approval_blockers:
             return make_plan(
@@ -1209,6 +1288,7 @@ def plan_next_step(
             required_artifacts=(delivery, *final_reviews, metadata),
             current_context=current_context,
             evaluated_at=evaluated_at,
+            enforce_current_context=not legacy_planning,
         )
         if publish_blockers:
             return make_plan(

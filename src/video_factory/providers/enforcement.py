@@ -17,6 +17,7 @@ from video_factory.approvals import (
 from video_factory.domain import CapabilityId
 from video_factory.engine.contracts import ExecutionMode
 from video_factory.engine.mode import mode_is_within_limit
+from video_factory.json_boundary import parse_rfc3339_datetime
 
 from .contracts import AdapterKind, CapabilityDescriptor, RequestEnvelope
 
@@ -43,6 +44,7 @@ class OrchestrationAuthorization:
     human_evidence_id: str | None
     gate_context_sha256: str | None = None
     evaluated_at: str | None = None
+    valid_until: str | None = None
 
 
 def _reject(message: str) -> None:
@@ -55,7 +57,7 @@ def _validate_human_evidence(
     *,
     current_context: GateContext | None,
     evaluated_at: datetime | None,
-) -> str:
+) -> tuple[str, str]:
     if evidence is None:
         _reject("required human evidence is missing")
     requirement = ApprovalRequirement(
@@ -73,7 +75,8 @@ def _validate_human_evidence(
     )
     if not result.ok:
         _reject(result.message)
-    return str(evidence.evidence_id)
+    assert evidence.expires_at is not None
+    return str(evidence.evidence_id), evidence.expires_at
 
 
 class OrchestrationGuard:
@@ -124,13 +127,20 @@ class OrchestrationGuard:
                 != request.effective_config_sha256
             ):
                 _reject("request effective config does not match current gate context")
+            if (
+                evaluated_at is None
+                or evaluated_at.tzinfo is None
+                or evaluated_at.utcoffset() is None
+            ):
+                _reject("timezone-aware evaluation time is required for authorization")
 
         evidence_id = None
+        valid_until = None
         if (
             policy.human_evidence_required
             and request.effective_execution_mode is not ExecutionMode.PREVIEW_ONLY
         ):
-            evidence_id = _validate_human_evidence(
+            evidence_id, valid_until = _validate_human_evidence(
                 request,
                 evidence,
                 current_context=normalized_context,
@@ -150,6 +160,7 @@ class OrchestrationGuard:
             evaluated_at=(
                 evaluated_at.isoformat() if evaluated_at is not None else None
             ),
+            valid_until=valid_until,
         )
 
 
@@ -157,6 +168,10 @@ def enforce_adapter_dispatch(
     request: RequestEnvelope,
     descriptor: CapabilityDescriptor,
     expected_kind: AdapterKind,
+    *,
+    authorization: OrchestrationAuthorization | None = None,
+    current_context: GateContext | None = None,
+    evaluated_at: datetime | None = None,
 ) -> None:
     """ADR-004 point 4: recheck immediately before an external process."""
 
@@ -170,3 +185,48 @@ def enforce_adapter_dispatch(
         _reject("provider dispatch is disabled; use a human handoff")
     if request.effective_execution_mode is not ExecutionMode.AUTOMATED:
         _reject("external executor dispatch requires automated mode")
+    if authorization is None:
+        _reject("executor dispatch requires orchestration authorization")
+    if current_context is None:
+        _reject("executor dispatch requires current gate context")
+    if (
+        evaluated_at is None
+        or evaluated_at.tzinfo is None
+        or evaluated_at.utcoffset() is None
+    ):
+        _reject("executor dispatch requires timezone-aware evaluation time")
+    try:
+        normalized_context = gate_context_from_mapping(
+            gate_context_to_mapping(current_context)
+        )
+    except ValueError:
+        _reject("executor dispatch current gate context is invalid")
+    if normalized_context.effective_config_sha256 != request.effective_config_sha256:
+        _reject("executor request config does not match current gate context")
+    if authorization.request_id != str(request.request_id):
+        _reject("executor authorization is bound to another request")
+    if authorization.capability_id != request.capability_id:
+        _reject("executor authorization is bound to another capability")
+    if authorization.execution_mode is not request.effective_execution_mode:
+        _reject("executor authorization is bound to another execution mode")
+    if authorization.gate_context_sha256 != str(
+        gate_context_sha256(normalized_context)
+    ):
+        _reject("executor authorization is bound to another gate context")
+    if authorization.evaluated_at is None:
+        _reject("executor authorization evaluation time is missing")
+    try:
+        authorized_at = parse_rfc3339_datetime(authorization.evaluated_at)
+    except ValueError:
+        _reject("executor authorization evaluation time is invalid")
+    if authorized_at > evaluated_at:
+        _reject("executor authorization is not yet valid")
+    if authorization.human_evidence_id is not None:
+        if authorization.valid_until is None:
+            _reject("executor authorization evidence expiry is missing")
+        try:
+            valid_until = parse_rfc3339_datetime(authorization.valid_until)
+        except ValueError:
+            _reject("executor authorization evidence expiry is invalid")
+        if evaluated_at >= valid_until:
+            _reject("executor authorization evidence has expired")

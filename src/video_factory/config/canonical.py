@@ -9,10 +9,14 @@ import json
 import math
 
 from video_factory.domain import HashDigest
+from video_factory.json_boundary import decimal_fixed_point_length
 
 
 class CanonicalizationError(ValueError):
     """Raised when a value cannot be represented by the canonical JSON contract."""
+
+
+MAX_CANONICAL_NUMBER_CHARS = 1_024
 
 
 def _number_text(value: int | float | Decimal) -> str:
@@ -29,6 +33,10 @@ def _number_text(value: int | float | Decimal) -> str:
 
     if decimal_value.is_zero():
         return "0"
+    if decimal_fixed_point_length(decimal_value) > MAX_CANONICAL_NUMBER_CHARS:
+        raise CanonicalizationError(
+            "number fixed-point representation exceeds canonical safety limit"
+        )
     rendered = format(decimal_value, "f")
     if "." in rendered:
         rendered = rendered.rstrip("0").rstrip(".")

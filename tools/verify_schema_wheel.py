@@ -3,7 +3,12 @@
 from __future__ import annotations
 
 import argparse
+import base64
+import csv
+from email import policy
+from email.parser import BytesParser
 import hashlib
+import io
 import json
 import os
 from pathlib import Path, PurePosixPath
@@ -14,6 +19,74 @@ import zipfile
 
 
 SCHEMA_PREFIX = "video_factory/resources/schemas/"
+EXPECTED_WHEEL_TAG = "py3-none-any"
+
+
+def _record_digest(payload: bytes) -> str:
+    encoded = base64.urlsafe_b64encode(hashlib.sha256(payload).digest())
+    return "sha256=" + encoded.rstrip(b"=").decode("ascii")
+
+
+def _validate_dist_info(
+    archive: zipfile.ZipFile,
+    names: list[str],
+    wheel_path: Path,
+) -> None:
+    records = [name for name in names if name.endswith(".dist-info/RECORD")]
+    if len(records) != 1:
+        raise ValueError(f"wheel must contain exactly one RECORD; found {len(records)}")
+    record_name = records[0]
+    dist_info = record_name.removesuffix("/RECORD")
+    metadata_name = f"{dist_info}/METADATA"
+    wheel_name = f"{dist_info}/WHEEL"
+    for required in (metadata_name, wheel_name):
+        if required not in names:
+            raise ValueError(f"wheel metadata member is missing: {required}")
+
+    rows: dict[str, tuple[str, str]] = {}
+    reader = csv.reader(io.StringIO(archive.read(record_name).decode("utf-8")))
+    for row in reader:
+        if len(row) != 3:
+            raise ValueError("wheel RECORD row must have exactly three fields")
+        member, digest, size = row
+        if member in rows:
+            raise ValueError(f"wheel RECORD contains duplicate row: {member}")
+        rows[member] = (digest, size)
+    if set(rows) != set(names):
+        missing = sorted(set(names) - set(rows))
+        extra = sorted(set(rows) - set(names))
+        raise ValueError(f"wheel RECORD member set mismatch: missing={missing} extra={extra}")
+    if rows[record_name] != ("", ""):
+        raise ValueError("wheel RECORD self row must have empty digest and size")
+    for name in names:
+        if name == record_name:
+            continue
+        payload = archive.read(name)
+        digest, size = rows[name]
+        if digest != _record_digest(payload):
+            raise ValueError(f"wheel RECORD digest mismatch: {name}")
+        if size != str(len(payload)):
+            raise ValueError(f"wheel RECORD size mismatch: {name}")
+
+    metadata = BytesParser(policy=policy.default).parsebytes(
+        archive.read(metadata_name)
+    )
+    if metadata.get("Metadata-Version") != "2.1":
+        raise ValueError("wheel METADATA version must be 2.1")
+    if metadata.get("Name") != "video-production-core":
+        raise ValueError("wheel METADATA distribution name mismatch")
+    if not metadata.get("Version") or not metadata.get("Requires-Python"):
+        raise ValueError("wheel METADATA version or Requires-Python is missing")
+
+    wheel = BytesParser(policy=policy.default).parsebytes(archive.read(wheel_name))
+    if wheel.get("Wheel-Version") != "1.0":
+        raise ValueError("wheel contract version must be 1.0")
+    if wheel.get("Root-Is-Purelib") != "true":
+        raise ValueError("wheel must declare Root-Is-Purelib: true")
+    if wheel.get_all("Tag", []) != [EXPECTED_WHEEL_TAG]:
+        raise ValueError("wheel compatibility tag mismatch")
+    if not wheel_path.name.endswith(f"-{EXPECTED_WHEEL_TAG}.whl"):
+        raise ValueError("wheel filename compatibility tag mismatch")
 
 
 def _strict_object(payload: bytes, label: str) -> Mapping[str, object]:
@@ -48,6 +121,7 @@ def inspect_wheel(path: Path) -> tuple[int, int, str]:
             member = PurePosixPath(name)
             if member.is_absolute() or ".." in member.parts or "\\" in name:
                 raise ValueError(f"unsafe wheel member: {name}")
+        _validate_dist_info(archive, names, path)
         schema_names = sorted(
             name
             for name in names

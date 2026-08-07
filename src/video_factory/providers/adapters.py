@@ -4,11 +4,13 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections.abc import Iterable, Mapping, Sequence
+from datetime import datetime
 from decimal import Decimal
 from pathlib import PurePosixPath
 import re
 from typing import final
 
+from video_factory.approvals import GateContext
 from video_factory.domain import ArtifactReference, IdempotencyKey
 from video_factory.engine.contracts import ExecutionMode
 
@@ -32,7 +34,7 @@ from .contracts import (
     UncertaintyEvidence,
     ValidationReport,
 )
-from .enforcement import enforce_adapter_dispatch
+from .enforcement import OrchestrationAuthorization, enforce_adapter_dispatch
 
 
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
@@ -362,12 +364,23 @@ class ExecutorAdapter(ABC):
         self,
         request: RequestEnvelope,
         context: ExecutorDispatchContext,
+        *,
+        authorization: OrchestrationAuthorization | None = None,
+        current_context: GateContext | None = None,
+        evaluated_at: datetime | None = None,
     ) -> ResultEnvelope:
         if request.idempotency_key in self._unresolved:
             raise AdapterContractError("reconcile is required before executor redispatch")
         validate_request_envelope(request, self.descriptor, AdapterKind.EXECUTOR)
         self._validate_context(request, context)
-        enforce_adapter_dispatch(request, self.descriptor, AdapterKind.EXECUTOR)
+        enforce_adapter_dispatch(
+            request,
+            self.descriptor,
+            AdapterKind.EXECUTOR,
+            authorization=authorization,
+            current_context=current_context,
+            evaluated_at=evaluated_at,
+        )
 
         try:
             normalized = tuple(

@@ -14,6 +14,7 @@ from video_factory.approvals import (
     ApprovalState,
     GateContext,
     approval_evidence_to_mapping,
+    assert_evidence_binding,
     build_approval_requirement,
     gate_context_to_mapping,
     requirement_from_mapping,
@@ -119,12 +120,15 @@ def test_requirement_mapping_roundtrip() -> None:
 
 
 def test_evidence_binding_match_and_mismatches() -> None:
+    context = _context()
+    evaluation = datetime(2026, 7, 21, 1, 0, tzinfo=timezone.utc)
     req = build_approval_requirement(
         "packet",
         [_artifact()],
         _CONFIG,
         requirement_id="req-bind-1",
         capability_id="generation_approval",
+        gate_context=context,
     )
     good = ApprovalEvidence(
         evidence_id=OpaqueId("ev-1"),
@@ -133,8 +137,11 @@ def test_evidence_binding_match_and_mismatches() -> None:
         approver_role=RoleId("human-operator"),
         created_at="2026-07-21T00:00:00Z",
         record_sha256=HashDigest(_HASH_B),
+        expires_at="2026-07-21T02:00:00Z",
     )
-    ok = validate_evidence_binding(req, good)
+    ok = validate_evidence_binding(
+        req, good, current_context=context, evaluated_at=evaluation
+    )
     assert ok.ok is True
     assert ok.evidence_id == "ev-1"
 
@@ -144,6 +151,7 @@ def test_evidence_binding_match_and_mismatches() -> None:
         capability_id=req.capability_id,
         bound_artifacts=req.bound_artifacts,
         effective_config_sha256=HashDigest(_CONFIG_OTHER),
+        gate_context=_context(_CONFIG_OTHER),
     )
     bad_config_ev = ApprovalEvidence(
         evidence_id=OpaqueId("ev-2"),
@@ -152,8 +160,11 @@ def test_evidence_binding_match_and_mismatches() -> None:
         approver_role=RoleId("human-operator"),
         created_at="2026-07-21T00:00:00Z",
         record_sha256=HashDigest(_HASH_B),
+        expires_at="2026-07-21T02:00:00Z",
     )
-    rejected = validate_evidence_binding(req, bad_config_ev)
+    rejected = validate_evidence_binding(
+        req, bad_config_ev, current_context=context, evaluated_at=evaluation
+    )
     assert rejected.ok is False
     assert "effective config" in rejected.message
 
@@ -163,6 +174,7 @@ def test_evidence_binding_match_and_mismatches() -> None:
         capability_id=req.capability_id,
         bound_artifacts=(_artifact("other.json", _HASH_B),),
         effective_config_sha256=req.effective_config_sha256,
+        gate_context=context,
     )
     bad_art_ev = ApprovalEvidence(
         evidence_id=OpaqueId("ev-3"),
@@ -171,13 +183,18 @@ def test_evidence_binding_match_and_mismatches() -> None:
         approver_role=RoleId("human-operator"),
         created_at="2026-07-21T00:00:00Z",
         record_sha256=HashDigest(_HASH_B),
+        expires_at="2026-07-21T02:00:00Z",
     )
-    rejected_art = validate_evidence_binding(req, bad_art_ev)
+    rejected_art = validate_evidence_binding(
+        req, bad_art_ev, current_context=context, evaluated_at=evaluation
+    )
     assert rejected_art.ok is False
     assert "different input artifacts" in rejected_art.message
 
     # missing evidence
-    missing = validate_evidence_binding(req, None)
+    missing = validate_evidence_binding(
+        req, None, current_context=context, evaluated_at=evaluation
+    )
     assert missing.ok is False
     assert "missing" in missing.message
 
@@ -267,14 +284,41 @@ def test_current_context_and_validity_window_are_required_for_authorization() ->
     assert accepted.reason_code == "approval.binding_match"
 
     no_context = validate_evidence_binding(
-        requirement, evidence, evaluated_at=evaluation
+        requirement, evidence, current_context=None, evaluated_at=evaluation
     )
     assert no_context.reason_code == "approval.current_context_missing"
 
     no_time = validate_evidence_binding(
-        requirement, evidence, current_context=context
+        requirement, evidence, current_context=context, evaluated_at=None
     )
     assert no_time.reason_code == "approval.evaluation_time_missing"
+
+
+def test_fully_legacy_evidence_is_loadable_but_cannot_authorize() -> None:
+    requirement = build_approval_requirement("packet", [_artifact()], _CONFIG)
+    evidence = ApprovalEvidence(
+        evidence_id=OpaqueId("legacy-evidence"),
+        requirement=requirement,
+        state=ApprovalState.GRANTED,
+        approver_role=RoleId("human-operator"),
+        created_at="2026-07-21T00:00:00Z",
+        record_sha256=HashDigest(_HASH_B),
+    )
+    result = validate_evidence_binding(
+        requirement,
+        evidence,
+        current_context=None,
+        evaluated_at=None,
+    )
+    assert result.ok is False
+    assert result.reason_code == "approval.current_context_missing"
+    with pytest.raises(ApprovalRequirementError, match="current gate context"):
+        assert_evidence_binding(
+            requirement,
+            evidence,
+            current_context=None,
+            evaluated_at=None,
+        )
 
 
 @pytest.mark.parametrize(

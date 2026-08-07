@@ -272,6 +272,36 @@ def _executor_context(request: RequestEnvelope) -> ExecutorDispatchContext:
     )
 
 
+_DISPATCH_TIME = datetime(2026, 7, 21, 1, 0, tzinfo=timezone.utc)
+
+
+def _executor_authorization(request: RequestEnvelope):
+    return OrchestrationGuard().authorize(
+        request,
+        OrchestrationPolicy(
+            request.capability_id,
+            AdapterKind.EXECUTOR,
+            ExecutionMode.AUTOMATED,
+            False,
+        ),
+        current_context=_gate_context(),
+        evaluated_at=_DISPATCH_TIME,
+    )
+
+
+def _authorized_dispatch(
+    adapter: SyntheticExecutor,
+    request: RequestEnvelope,
+):
+    return adapter.dispatch(
+        request,
+        _executor_context(request),
+        authorization=_executor_authorization(request),
+        current_context=_gate_context(),
+        evaluated_at=_DISPATCH_TIME,
+    )
+
+
 def _effective_mode_snapshot(
     requested: str,
     limits: ExecutionModeLimits,
@@ -317,7 +347,7 @@ def test_provider_human_only_returns_awaiting_without_external_call() -> None:
 def test_executor_timeout_is_external_uncertain_and_blocks_retry_until_reconcile() -> None:
     adapter = SyntheticExecutor(timeout=True)
     request = _request(TASK_CAPABILITY, ExecutionMode.AUTOMATED)
-    result = adapter.dispatch(request, _executor_context(request))
+    result = _authorized_dispatch(adapter, request)
     assert result.outcome is Outcome.EXTERNAL_UNCERTAIN
     assert result.outcome is not Outcome.FAILED
     assert result.external_reference == ExternalReference(
@@ -325,7 +355,7 @@ def test_executor_timeout_is_external_uncertain_and_blocks_retry_until_reconcile
     )
     assert result.uncertainty.uncertain is True
     with pytest.raises(AdapterContractError, match="reconcile"):
-        adapter.dispatch(request, _executor_context(request))
+        _authorized_dispatch(adapter, request)
     assert adapter.external_calls == 1
     reconciled = adapter.reconcile(request)
     assert reconciled.outcome is Outcome.SUCCEEDED
@@ -559,7 +589,7 @@ def test_descriptor_validates_injected_generation_constraints() -> None:
         validate_descriptor(invalid)
 
 
-def test_regression_omitting_each_enforcement_point_exposes_its_boundary() -> None:
+def test_executor_side_effect_boundary_rejects_missing_or_mismatched_authorization() -> None:
     exposed: set[str] = set()
 
     raw_request = _request(MEDIA_CAPABILITY, ExecutionMode.AUTOMATED, key="raw-mode")
@@ -576,9 +606,38 @@ def test_regression_omitting_each_enforcement_point_exposes_its_boundary() -> No
         exposed.add("orchestrator")
 
     request = _request(TASK_CAPABILITY, ExecutionMode.AUTOMATED, key="direct-binding")
-    result_without_registry = executor.dispatch(request, _executor_context(request))
-    if result_without_registry.outcome is Outcome.SUCCEEDED:
-        exposed.add("registry")
+    with pytest.raises(ModeEnforcementError, match="authorization"):
+        executor.dispatch(request, _executor_context(request))
+    assert executor.external_calls == 0
+
+    other_request = _request(
+        TASK_CAPABILITY, ExecutionMode.AUTOMATED, key="other-binding"
+    )
+    with pytest.raises(ModeEnforcementError, match="another request"):
+        executor.dispatch(
+            request,
+            _executor_context(request),
+            authorization=_executor_authorization(other_request),
+            current_context=_gate_context(),
+            evaluated_at=_DISPATCH_TIME,
+        )
+    assert executor.external_calls == 0
+
+    stale_context = replace(
+        _gate_context(), policy_bundle_sha256=HashDigest("e" * 64)
+    )
+    with pytest.raises(ModeEnforcementError, match="another gate context"):
+        executor.dispatch(
+            request,
+            _executor_context(request),
+            authorization=_executor_authorization(request),
+            current_context=stale_context,
+            evaluated_at=_DISPATCH_TIME,
+        )
+    assert executor.external_calls == 0
+
+    result = _authorized_dispatch(executor, request)
+    assert result.outcome is Outcome.SUCCEEDED
 
     human_request = _request(TASK_CAPABILITY, ExecutionMode.HUMAN_ONLY, key="direct-process")
     tuple(executor._dispatch_stream(human_request, _executor_context(human_request)))
@@ -588,9 +647,40 @@ def test_regression_omitting_each_enforcement_point_exposes_its_boundary() -> No
     assert exposed == {
         "effective-config",
         "orchestrator",
-        "registry",
         "adapter-boundary",
     }
+
+
+def test_executor_rechecks_authorization_time_before_external_call() -> None:
+    executor = SyntheticExecutor()
+    request = _request(TASK_CAPABILITY, ExecutionMode.AUTOMATED, key="time-binding")
+    authorization = _executor_authorization(request)
+
+    future = replace(authorization, evaluated_at="2026-07-21T02:00:00Z")
+    with pytest.raises(ModeEnforcementError, match="not yet valid"):
+        executor.dispatch(
+            request,
+            _executor_context(request),
+            authorization=future,
+            current_context=_gate_context(),
+            evaluated_at=_DISPATCH_TIME,
+        )
+    assert executor.external_calls == 0
+
+    expired = replace(
+        authorization,
+        human_evidence_id="evidence-expired",
+        valid_until="2026-07-21T01:00:00Z",
+    )
+    with pytest.raises(ModeEnforcementError, match="expired"):
+        executor.dispatch(
+            request,
+            _executor_context(request),
+            authorization=expired,
+            current_context=_gate_context(),
+            evaluated_at=_DISPATCH_TIME,
+        )
+    assert executor.external_calls == 0
 
 
 def test_no_literal_opaque_adapter_id_comparison_exists_in_core_source() -> None:

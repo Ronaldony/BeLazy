@@ -14,6 +14,13 @@ from video_factory.artifacts import (
     validate_artifact_mapping,
     validate_artifact_path,
 )
+from video_factory.config import (
+    CanonicalizationError,
+    ConfigLayer,
+    ConfigValidationError,
+    canonical_json_bytes,
+    config_source_from_document_bytes,
+)
 from video_factory.json_boundary import (
     JsonErrorCode,
     JsonInputError,
@@ -91,6 +98,59 @@ def test_numeric_range_and_token_limits_are_enforced(token: bytes) -> None:
             limits=JsonLimits(max_number_chars=8),
         )
     _assert_code(caught, JsonErrorCode.NUMBER_OUT_OF_RANGE)
+
+
+@pytest.mark.parametrize("token", [b"1e1000000", b"1e-1000000"])
+def test_decimal_fixed_point_expansion_is_rejected_from_bytes(token: bytes) -> None:
+    with pytest.raises(JsonInputError) as caught:
+        parse_json_bytes(b'{"value":' + token + b"}", decimal_numbers=True)
+    _assert_code(caught, JsonErrorCode.NUMBER_OUT_OF_RANGE)
+
+
+@pytest.mark.parametrize("value", [Decimal("1e1000000"), Decimal("1e-1000000")])
+def test_decimal_fixed_point_expansion_is_rejected_from_mapping(
+    value: Decimal,
+) -> None:
+    with pytest.raises(JsonInputError) as caught:
+        validate_json_mapping({"value": value})
+    _assert_code(caught, JsonErrorCode.NUMBER_OUT_OF_RANGE)
+
+
+def test_runtime_integer_conversion_limit_is_a_stable_domain_error() -> None:
+    with pytest.raises(JsonInputError) as caught:
+        parse_json_bytes(
+            b'{"value":' + (b"9" * 5_000) + b"}",
+            limits=JsonLimits(max_bytes=8_000, max_number_chars=6_000),
+        )
+    _assert_code(caught, JsonErrorCode.NUMBER_OUT_OF_RANGE)
+
+
+@pytest.mark.parametrize("token", [b"1e1000000", b"1e-1000000"])
+def test_config_source_rejects_decimal_expansion_before_canonicalization(
+    token: bytes,
+) -> None:
+    payload = (
+        b'{"artifact_version":"workspace-config/1.0",'
+        b'"config_contract":"1.0","workspace_id":"workspace-a",'
+        b'"settings":{},"extensions":{"extension-a":{'
+        b'"contract_version":"1.0","payload":{"value":'
+        + token
+        + b"}}}}"
+    )
+    with pytest.raises(ConfigValidationError, match="json.number_out_of_range"):
+        config_source_from_document_bytes(
+            layer=ConfigLayer.WORKSPACE,
+            path="config/workspace.json",
+            payload=payload,
+        )
+
+
+@pytest.mark.parametrize("value", [Decimal("1e1000000"), Decimal("1e-1000000")])
+def test_canonical_serializer_has_an_independent_decimal_expansion_guard(
+    value: Decimal,
+) -> None:
+    with pytest.raises(CanonicalizationError, match="safety limit"):
+        canonical_json_bytes({"value": value})
 
 
 def test_mapping_cycles_keys_surrogates_and_custom_values_are_rejected() -> None:

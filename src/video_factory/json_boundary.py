@@ -106,7 +106,12 @@ def _contains_lone_surrogate(value: str) -> bool:
 def _bounded_int(token: str, limits: JsonLimits) -> int:
     if len(token.lstrip("-")) > limits.max_number_chars:
         raise _NumberOutOfRange("integer token exceeds max_number_chars")
-    return int(token)
+    try:
+        return int(token)
+    except ValueError as error:
+        raise _NumberOutOfRange(
+            "integer exceeds the runtime conversion safety limit"
+        ) from error
 
 
 def _bounded_float(token: str, limits: JsonLimits) -> float:
@@ -128,7 +133,39 @@ def _bounded_decimal(token: str, limits: JsonLimits) -> Decimal:
     value = Decimal(token)
     if not value.is_finite():
         raise _NonfiniteNumber("non-finite Decimal is forbidden")
+    if decimal_fixed_point_length(value) > limits.max_number_chars:
+        raise _NumberOutOfRange(
+            "number fixed-point representation exceeds max_number_chars"
+        )
     return value
+
+
+def decimal_fixed_point_length(value: Decimal) -> int:
+    """Return the allocation-free upper bound for ``format(value, 'f')``.
+
+    Scientific notation can be tiny while its fixed-point representation is
+    enormous.  Computing the length from ``Decimal.as_tuple()`` prevents an
+    attacker-controlled exponent from triggering that allocation.
+    """
+
+    if not value.is_finite():
+        raise ValueError("non-finite Decimal has no bounded fixed-point form")
+    if value.is_zero():
+        return 1
+    parts = value.as_tuple()
+    exponent = parts.exponent
+    if not isinstance(exponent, int):  # pragma: no cover - finite invariant
+        raise ValueError("finite Decimal exponent must be an integer")
+    digit_count = len(parts.digits)
+    decimal_point = digit_count + exponent
+    sign_chars = 1 if parts.sign else 0
+    if exponent >= 0:
+        body_chars = digit_count + exponent
+    elif decimal_point > 0:
+        body_chars = digit_count + 1
+    else:
+        body_chars = 2 + (-decimal_point) + digit_count
+    return sign_chars + body_chars
 
 
 def _reject_constant(token: str) -> float:
@@ -217,10 +254,13 @@ def _validate_value(
                     source=source,
                     path=path,
                 )
-            if len(str(item)) > limits.max_number_chars:
+            if (
+                len(str(item)) > limits.max_number_chars
+                or decimal_fixed_point_length(item) > limits.max_number_chars
+            ):
                 raise JsonInputError(
                     JsonErrorCode.NUMBER_OUT_OF_RANGE,
-                    "Decimal exceeds max_number_chars",
+                    "Decimal fixed-point representation exceeds max_number_chars",
                     source=source,
                     path=path,
                 )

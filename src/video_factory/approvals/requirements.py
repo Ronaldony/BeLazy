@@ -493,14 +493,13 @@ def validate_evidence_binding(
     evidence: ApprovalEvidence | None,
     *,
     require_granted: bool = True,
-    current_context: GateContext | Mapping[str, object] | None = None,
-    evaluated_at: datetime | str | None = None,
+    current_context: GateContext | Mapping[str, object] | None,
+    evaluated_at: datetime | str | None,
 ) -> EvidenceBindingResult:
-    """Compare caller-supplied evidence to a requirement and current context.
+    """Authorize only evidence bound to an explicit current context and time.
 
-    Legacy context-free documents remain loadable. They can pass the historical
-    pairwise check only when no current context is requested; every production
-    authorization entry point supplies current context and evaluation time.
+    Legacy documents remain schema-loadable, but this authority API never
+    treats a context-free or timeless document as authorization.
     """
 
     if evidence is None:
@@ -558,117 +557,109 @@ def validate_evidence_binding(
             reason_code="approval.artifact_mismatch",
         )
 
-    enforce_context = (
-        current_context is not None
-        or evaluated_at is not None
-        or requirement.gate_context is not None
-        or bound.gate_context is not None
-        or evidence.expires_at is not None
-    )
-    if enforce_context:
-        if current_context is None:
-            return _binding_result(
-                requirement,
-                evidence,
-                ok=False,
-                message="current gate context is missing",
-                reason_code="approval.current_context_missing",
-            )
-        try:
-            current = _gate_context(current_context)
-        except ApprovalRequirementError as error:
-            return _binding_result(
-                requirement,
-                evidence,
-                ok=False,
-                message=str(error),
-                reason_code="approval.current_context_invalid",
-            )
-        if requirement.gate_context is None or bound.gate_context is None:
-            return _binding_result(
-                requirement,
-                evidence,
-                ok=False,
-                message="approval gate context is missing",
-                reason_code="approval.bound_context_missing",
-            )
-        if requirement.gate_context != current or bound.gate_context != current:
-            return _binding_result(
-                requirement,
-                evidence,
-                ok=False,
-                message="human evidence is bound to another material context",
-                reason_code="approval.context_mismatch",
-            )
-        if current.effective_config_sha256 != requirement.effective_config_sha256:
-            return _binding_result(
-                requirement,
-                evidence,
-                ok=False,
-                message="current context effective config is inconsistent",
-                reason_code="approval.context_config_inconsistent",
-            )
-        try:
-            evaluation = _evaluation_time(evaluated_at)
-        except ApprovalRequirementError as error:
-            return _binding_result(
-                requirement,
-                evidence,
-                ok=False,
-                message=str(error),
-                reason_code="approval.evaluation_time_invalid",
-            )
-        if evaluation is None:
-            return _binding_result(
-                requirement,
-                evidence,
-                ok=False,
-                message="approval evaluation time is missing",
-                reason_code="approval.evaluation_time_missing",
-            )
-        if evidence.expires_at is None:
-            return _binding_result(
-                requirement,
-                evidence,
-                ok=False,
-                message="human evidence expiry is missing",
-                reason_code="approval.expiry_missing",
-            )
-        try:
-            approved = parse_rfc3339_datetime(evidence.created_at)
-            expires = parse_rfc3339_datetime(evidence.expires_at)
-        except ValueError:
-            return _binding_result(
-                requirement,
-                evidence,
-                ok=False,
-                message="approval validity window is not valid RFC 3339",
-                reason_code="approval.validity_window_invalid",
-            )
-        if approved >= expires:
-            return _binding_result(
-                requirement,
-                evidence,
-                ok=False,
-                message="approval expiry must be after approval time",
-                reason_code="approval.validity_window_invalid",
-            )
-        if approved > evaluation:
-            return _binding_result(
-                requirement,
-                evidence,
-                ok=False,
-                message="approval was issued after the evaluation time",
-                reason_code="approval.not_yet_valid",
-            )
-        if evaluation >= expires:
-            return _binding_result(
-                requirement,
-                evidence,
-                ok=False,
-                message="human evidence has expired",
-                reason_code="approval.expired",
-            )
+    if current_context is None:
+        return _binding_result(
+            requirement,
+            evidence,
+            ok=False,
+            message="current gate context is missing",
+            reason_code="approval.current_context_missing",
+        )
+    try:
+        current = _gate_context(current_context)
+    except ApprovalRequirementError as error:
+        return _binding_result(
+            requirement,
+            evidence,
+            ok=False,
+            message=str(error),
+            reason_code="approval.current_context_invalid",
+        )
+    if requirement.gate_context is None or bound.gate_context is None:
+        return _binding_result(
+            requirement,
+            evidence,
+            ok=False,
+            message="approval gate context is missing",
+            reason_code="approval.bound_context_missing",
+        )
+    if requirement.gate_context != current or bound.gate_context != current:
+        return _binding_result(
+            requirement,
+            evidence,
+            ok=False,
+            message="human evidence is bound to another material context",
+            reason_code="approval.context_mismatch",
+        )
+    if current.effective_config_sha256 != requirement.effective_config_sha256:
+        return _binding_result(
+            requirement,
+            evidence,
+            ok=False,
+            message="current context effective config is inconsistent",
+            reason_code="approval.context_config_inconsistent",
+        )
+    try:
+        evaluation = _evaluation_time(evaluated_at)
+    except ApprovalRequirementError as error:
+        return _binding_result(
+            requirement,
+            evidence,
+            ok=False,
+            message=str(error),
+            reason_code="approval.evaluation_time_invalid",
+        )
+    if evaluation is None:
+        return _binding_result(
+            requirement,
+            evidence,
+            ok=False,
+            message="approval evaluation time is missing",
+            reason_code="approval.evaluation_time_missing",
+        )
+    if evidence.expires_at is None:
+        return _binding_result(
+            requirement,
+            evidence,
+            ok=False,
+            message="human evidence expiry is missing",
+            reason_code="approval.expiry_missing",
+        )
+    try:
+        approved = parse_rfc3339_datetime(evidence.created_at)
+        expires = parse_rfc3339_datetime(evidence.expires_at)
+    except ValueError:
+        return _binding_result(
+            requirement,
+            evidence,
+            ok=False,
+            message="approval validity window is not valid RFC 3339",
+            reason_code="approval.validity_window_invalid",
+        )
+    if approved >= expires:
+        return _binding_result(
+            requirement,
+            evidence,
+            ok=False,
+            message="approval expiry must be after approval time",
+            reason_code="approval.validity_window_invalid",
+        )
+    if approved > evaluation:
+        return _binding_result(
+            requirement,
+            evidence,
+            ok=False,
+            message="approval was issued after the evaluation time",
+            reason_code="approval.not_yet_valid",
+        )
+    if evaluation >= expires:
+        return _binding_result(
+            requirement,
+            evidence,
+            ok=False,
+            message="human evidence has expired",
+            reason_code="approval.expired",
+        )
 
     if not _requirements_equal(bound, requirement):
         return _binding_result(
@@ -692,8 +683,8 @@ def assert_evidence_binding(
     evidence: ApprovalEvidence | None,
     *,
     require_granted: bool = True,
-    current_context: GateContext | Mapping[str, object] | None = None,
-    evaluated_at: datetime | str | None = None,
+    current_context: GateContext | Mapping[str, object] | None,
+    evaluated_at: datetime | str | None,
 ) -> str:
     """Like ``validate_evidence_binding`` but raises on failure; returns evidence_id."""
 

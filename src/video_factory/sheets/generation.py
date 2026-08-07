@@ -3,13 +3,16 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from datetime import datetime
 import hashlib
 import json
 from typing import Any
 
+from video_factory.approvals import GateContext, gate_context_sha256
 from video_factory.artifacts import validate_artifact_mapping
 from video_factory.config import CanonicalizationError, canonical_json_bytes
 from video_factory.engine.orchestration import GenerationReadinessPlan
+from video_factory.json_boundary import parse_rfc3339_datetime
 
 
 class GenerationSheetError(ValueError):
@@ -39,6 +42,8 @@ def render_generation_sheet(
     packet_doc: Mapping[str, Any],
     *,
     readiness: GenerationReadinessPlan | None = None,
+    current_context: GateContext | None = None,
+    evaluated_at: datetime | None = None,
 ) -> str:
     """Render a packet to deterministic human copy-paste Markdown.
 
@@ -83,14 +88,32 @@ def render_generation_sheet(
             raise GenerationSheetError(
                 "generation readiness is bound to different packet content"
             )
-        if readiness.ready and (
-            readiness.feasibility_review is None
-            or readiness.approval_evidence is None
-        ):
-            raise GenerationSheetError(
-                "ready plan lacks feasibility or human approval evidence"
-            )
-        generation_authorized = readiness.ready
+        if readiness.authorization_ready:
+            if current_context is None:
+                raise GenerationSheetError(
+                    "authorization-ready plan requires current gate context"
+                )
+            if str(gate_context_sha256(current_context)) != readiness.gate_context_sha256:
+                raise GenerationSheetError(
+                    "generation readiness is bound to another gate context"
+                )
+            if (
+                evaluated_at is None
+                or evaluated_at.tzinfo is None
+                or evaluated_at.utcoffset() is None
+            ):
+                raise GenerationSheetError(
+                    "authorization-ready plan requires timezone-aware evaluation time"
+                )
+            assert readiness.valid_from is not None
+            assert readiness.valid_until is not None
+            valid_from = parse_rfc3339_datetime(readiness.valid_from)
+            valid_until = parse_rfc3339_datetime(readiness.valid_until)
+            if evaluated_at < valid_from:
+                raise GenerationSheetError("generation readiness is not yet valid")
+            if evaluated_at >= valid_until:
+                raise GenerationSheetError("generation readiness has expired")
+            generation_authorized = True
     total_candidates = 0
     for index, shot in enumerate(shots):
         if not isinstance(shot, Mapping):
@@ -117,6 +140,15 @@ def render_generation_sheet(
         f"- total_candidates: **{total_candidates}**",
     ]
     if readiness is not None:
+        if readiness.gate_context_sha256 is not None:
+            lines.append(
+                f"- gate_context_sha256: `{readiness.gate_context_sha256}`"
+            )
+        if readiness.valid_from is not None and readiness.valid_until is not None:
+            lines.append(
+                f"- authorization_window: `{readiness.valid_from}` to "
+                f"`{readiness.valid_until}`"
+            )
         if readiness.feasibility_review is not None:
             lines.append(
                 "- feasibility_evidence: "

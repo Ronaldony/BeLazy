@@ -178,6 +178,20 @@ def _assessment_references(
     )
 
 
+def _director_evidence_references(
+    tasks: Iterable[DirectorTaskPlan],
+    assessments: Iterable[DirectorAssessment],
+) -> tuple[ArtifactReference, ...]:
+    return (
+        *(reference for task in tasks for reference in task.input_refs),
+        *(
+            reference
+            for assessment in assessments
+            for reference in _assessment_references(assessment)
+        ),
+    )
+
+
 def _task_identity_mapping(task: DirectorTaskPlan) -> dict[str, object]:
     if not TOKEN.fullmatch(str(task.director_id)) or not VERSION.fullmatch(
         task.director_version
@@ -987,6 +1001,8 @@ def synthesize_director_assessments(
         f"director-conflict-session-{str(session_digest)[:20]}"
     )
     previous_synthesis_sha256: HashDigest | None = None
+    previous_task_values: tuple[DirectorTaskPlan, ...] = ()
+    previous_assessment_values: tuple[DirectorAssessment, ...] = ()
     rounds_used = 1
     if previous_synthesis is None and (
         previous_tasks is not None or previous_assessments is not None
@@ -1018,13 +1034,15 @@ def synthesize_director_assessments(
                 "director.synthesis.predecessor_evidence",
                 "round two requires the complete round-one task and assessment evidence",
             )
+        previous_task_values = tuple(previous_tasks)
+        previous_assessment_values = tuple(previous_assessments)
         expected_previous = synthesize_director_assessments(
             blueprint=blueprint,
             charters=charter_values,
             activation=activation,
             source_bundle=source_bundle,
-            tasks=tuple(previous_tasks),
-            assessments=tuple(previous_assessments),
+            tasks=previous_task_values,
+            assessments=previous_assessment_values,
         )
         if (
             expected_previous.synthesis != previous_synthesis
@@ -1085,12 +1103,11 @@ def synthesize_director_assessments(
         )
     _require_reference_identity_consistency(
         (
-            *common_input_refs,
-            *(
-                reference
-                for assessment in assessment_values
-                for reference in _assessment_references(assessment)
+            *_director_evidence_references(
+                previous_task_values,
+                previous_assessment_values,
             ),
+            *_director_evidence_references(task_values, assessment_values),
         )
     )
 

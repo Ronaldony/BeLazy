@@ -1214,6 +1214,94 @@ def test_round_two_recomputes_exact_blocked_predecessor_evidence() -> None:
         )
 
 
+def test_round_two_rejects_cross_round_reference_identity_conflicts() -> None:
+    _, _, _, sources, charters, activation, blueprint = _blueprint_fixture()
+    tasks = _tasks(blueprint, charters, activation, sources)
+    by_id = {str(item.director_id): item for item in charters}
+    previous_reference = _reference_at("artifacts/round-evidence.json", "a")
+    previous_assessments = tuple(
+        _assessment(
+            task,
+            by_id[str(task.director_id)],
+            blueprint,
+            activation,
+            confidence=(5_999 if index == 0 else 9_000),
+            evidence_refs=(previous_reference,),
+        )
+        for index, task in enumerate(tasks)
+    )
+    first = synthesize_director_assessments(
+        blueprint=blueprint,
+        charters=charters,
+        activation=activation,
+        source_bundle=sources,
+        tasks=tasks,
+        assessments=previous_assessments,
+    )
+    matching_current = tuple(
+        _assessment(
+            task,
+            by_id[str(task.director_id)],
+            blueprint,
+            activation,
+            evidence_refs=(previous_reference,),
+        )
+        for task in tasks
+    )
+    second = synthesize_director_assessments(
+        blueprint=blueprint,
+        charters=charters,
+        activation=activation,
+        source_bundle=sources,
+        tasks=tasks,
+        assessments=matching_current,
+        previous_synthesis=first.synthesis,
+        previous_tasks=tasks,
+        previous_assessments=previous_assessments,
+    )
+    assert second.blueprint is not None
+
+    conflicting_reference = _reference_at(
+        "ARTIFACTS/ROUND-EVIDENCE.JSON", "b"
+    )
+    conflicting_current = tuple(
+        _assessment(
+            task,
+            by_id[str(task.director_id)],
+            blueprint,
+            activation,
+            evidence_refs=(conflicting_reference,),
+        )
+        for task in tasks
+    )
+    with pytest.raises(DirectorMeshError, match="multiple identities"):
+        synthesize_director_assessments(
+            blueprint=blueprint,
+            charters=charters,
+            activation=activation,
+            source_bundle=sources,
+            tasks=tasks,
+            assessments=conflicting_current,
+            previous_synthesis=first.synthesis,
+            previous_tasks=tasks,
+            previous_assessments=previous_assessments,
+        )
+    with pytest.raises(DirectorMeshError, match="multiple identities"):
+        verify_coherent_blueprint_promotion(
+            promoted_blueprint=second.blueprint,
+            synthesis=second.synthesis,
+            base_blueprint=blueprint,
+            charters=charters,
+            activation=activation,
+            source_bundle=sources,
+            tasks=tasks,
+            assessments=conflicting_current,
+            previous_synthesis=first.synthesis,
+            previous_tasks=tasks,
+            previous_assessments=previous_assessments,
+        )
+
+
 def test_synthesis_revalidates_activation_registry_coverage_and_task_scope() -> None:
     _, _, _, sources, charters, activation, blueprint = _blueprint_fixture()
     tasks = _tasks(blueprint, charters, activation, sources)

@@ -1,7 +1,7 @@
 {
   "manifest_version": "video-factory-schema-manifest/1.0",
-  "schema_count": 52,
-  "registered_version_count": 48,
+  "schema_count": 61,
+  "registered_version_count": 57,
   "schemas": [
     {
       "filename": "analytics-record.schema.json",
@@ -17,9 +17,21 @@
     },
     {
       "filename": "artifact-common.schema.json",
-      "sha256": "cdf305592f0449ce10c5563409ac9b519c6969b5cf16bf27f5aaaf8b92ca750d",
+      "sha256": "14f0b540e96d52165c9841d6950dfaa009931e6543374fb887778f25f3d1b81e",
       "schema_id": "https://schemas.video-factory.invalid/artifact/artifact-common.schema.json",
       "artifact_version": null
+    },
+    {
+      "filename": "blueprint-conflict.schema.json",
+      "sha256": "a55827f8618d3c111aa1fdbb621e1d4e93d0c72d1afe7a116a8e41fb9806f8a3",
+      "schema_id": "https://schemas.video-factory.invalid/director/blueprint-conflict.schema.json",
+      "artifact_version": "blueprint-conflict/1.0"
+    },
+    {
+      "filename": "blueprint-projection.schema.json",
+      "sha256": "6a446e7e2240b7510e0d7f8b45fd9befd09c7dd23dd784ceea922c71fcbe735a",
+      "schema_id": "https://schemas.video-factory.invalid/blueprint/blueprint-projection.schema.json",
+      "artifact_version": "blueprint-projection/1.0"
     },
     {
       "filename": "brand-entity.schema.json",
@@ -58,10 +70,22 @@
       "artifact_version": "channel-config/1.0"
     },
     {
+      "filename": "channel-constitution.schema.json",
+      "sha256": "097b8a05f6e3137714cefb8ceb9e39a61f9240c176b06b10bd82f0ae7680c636",
+      "schema_id": "https://schemas.video-factory.invalid/blueprint/channel-constitution.schema.json",
+      "artifact_version": "channel-constitution/1.0"
+    },
+    {
       "filename": "concept-config.schema.json",
       "sha256": "2e3ce48989e3f3a923baad8eaa2cefd207e5e8e24089e1fc11f483a761147a93",
       "schema_id": "https://schemas.video-factory.invalid/config/concept-config.schema.json",
       "artifact_version": "concept-config/1.0"
+    },
+    {
+      "filename": "concept-constitution.schema.json",
+      "sha256": "f2073d33eb58d11ca08645d77f1c37cd2e304c6de04458080ac640c40df4ccdf",
+      "schema_id": "https://schemas.video-factory.invalid/blueprint/concept-constitution.schema.json",
+      "artifact_version": "concept-constitution/1.0"
     },
     {
       "filename": "config-layer.schema.json",
@@ -74,6 +98,24 @@
       "sha256": "1e66faa4f4d698b121e79655196a3be1b4899bd8348909b3b18ef9b5afd46a6a",
       "schema_id": "https://schemas.video-factory.invalid/artifact/continuity-qc.schema.json",
       "artifact_version": "continuity-qc/1.0"
+    },
+    {
+      "filename": "director-assessment.schema.json",
+      "sha256": "1df7b5fd9d20df49367d7bfea44fd3d01a2bc2e8c684a8eebbf026de3f1354ae",
+      "schema_id": "https://schemas.video-factory.invalid/director/director-assessment.schema.json",
+      "artifact_version": "director-assessment/1.0"
+    },
+    {
+      "filename": "director-charter.schema.json",
+      "sha256": "0389bd0aa9500b80f2d58f8a72d08d8646e36222acb692d7212233ffe5882827",
+      "schema_id": "https://schemas.video-factory.invalid/director/director-charter.schema.json",
+      "artifact_version": "director-charter/1.0"
+    },
+    {
+      "filename": "director-synthesis.schema.json",
+      "sha256": "b51ff79050d16b1b778aecfe192f8b729e5afd26672b67e98a2f2e9f1ebee86c",
+      "schema_id": "https://schemas.video-factory.invalid/director/director-synthesis.schema.json",
+      "artifact_version": "director-synthesis/1.0"
     },
     {
       "filename": "drift-report.schema.json",
@@ -110,6 +152,12 @@
       "sha256": "a980de92d6300006a0cd6fd344a9bb0ef2872189446fa381a9a49b3a2e0fa6ca",
       "schema_id": "https://schemas.video-factory.invalid/config/episode-config.schema.json",
       "artifact_version": "episode-config/1.0"
+    },
+    {
+      "filename": "episode-intent.schema.json",
+      "sha256": "33d0b10f0b4d5b85a902eed416b39add826288aeaf6e9feec8df5fd21a04f50e",
+      "schema_id": "https://schemas.video-factory.invalid/blueprint/episode-intent.schema.json",
+      "artifact_version": "episode-intent/1.0"
     },
     {
       "filename": "external-call-reservation.schema.json",
@@ -230,6 +278,12 @@
       "sha256": "7a2bd05740e0bac7a913138f1317604ac3a0131393778c1c03cf7e85b81fcc50",
       "schema_id": "https://schemas.video-factory.invalid/artifact/packet-review.schema.json",
       "artifact_version": "packet-review/1.0"
+    },
+    {
+      "filename": "production-blueprint.schema.json",
+      "sha256": "cb8878bee92c8f2b895077922e18f398da9cdfc23cce2098574dba457b377013",
+      "schema_id": "https://schemas.video-factory.invalid/blueprint/production-blueprint.schema.json",
+      "artifact_version": "production-blueprint/1.0"
     },
     {
       "filename": "publish-approval.schema.json",

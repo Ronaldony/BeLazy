@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.video-factory.invalid/blueprint/blueprint-projection.schema.json",
+  "title": "Read-only non-authoritative Blueprint projection envelope",
+  "type": "object",
+  "required": [
+    "artifact_version", "projection_id", "projection_sha256", "source_blueprint_id",
+    "source_blueprint_sha256", "source_blueprint_ref", "blueprint_context_sha256",
+    "compiler_id", "compiler_version", "compiler_sha256", "view_kind",
+    "legacy_artifact_version", "payload_sha256", "shadow_only", "authority_effect",
+    "editable", "read_only", "fields"
+  ],
+  "properties": {
+    "artifact_version": { "const": "blueprint-projection/1.0" },
+    "projection_id": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" },
+    "projection_sha256": { "$ref": "artifact-common.schema.json#/$defs/sha256" },
+    "source_blueprint_id": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" },
+    "source_blueprint_sha256": { "$ref": "artifact-common.schema.json#/$defs/sha256" },
+    "source_blueprint_ref": { "$ref": "artifact-common.schema.json#/$defs/boundArtifact" },
+    "blueprint_context_sha256": { "$ref": "artifact-common.schema.json#/$defs/sha256" },
+    "compiler_id": { "const": "blueprint-shadow-compiler" },
+    "compiler_version": { "const": "1.0" },
+    "compiler_sha256": { "$ref": "artifact-common.schema.json#/$defs/sha256" },
+    "view_kind": { "type": "string", "enum": ["brief", "storyboard", "generation", "edit", "sound", "publish"] },
+    "legacy_artifact_version": { "$ref": "artifact-common.schema.json#/$defs/artifactVersion" },
+    "payload_sha256": { "$ref": "artifact-common.schema.json#/$defs/sha256" },
+    "shadow_only": { "const": true },
+    "authority_effect": { "const": "none" },
+    "editable": { "const": false },
+    "read_only": { "const": true },
+    "fields": {
+      "type": "array", "minItems": 1,
+      "items": { "$ref": "artifact-common.schema.json#/$defs/blueprintField" }
+    }
+  },
+  "additionalProperties": false,
+  "x-artifact-migration": {
+    "id_pattern": "^blueprint-projection/[1-9][0-9]*-to-[1-9][0-9]*/[1-9][0-9]*$",
+    "single_major_step": true,
+    "in_place": false,
+    "automatic_downgrade": false
+  }
+}

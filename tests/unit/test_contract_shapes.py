@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import fields, is_dataclass
 
+from video_factory.blueprint import BlueprintProjection, ProductionBlueprint
 from video_factory.config import (
     CONFIG_LAYER_ORDER,
     ChannelConfig,
@@ -17,6 +18,11 @@ from video_factory.providers import (
     ProviderAdapter,
     RequestEnvelope,
     ResultEnvelope,
+)
+from video_factory.directors import (
+    DirectorAssessment,
+    DirectorRuntimePort,
+    DirectorTaskPlan,
 )
 
 
@@ -95,3 +101,58 @@ def test_provider_and_executor_ports_are_behaviorally_separate() -> None:
     assert "plan_generation" not in ExecutorAdapter.__dict__
     assert "execute" not in ProviderAdapter.__dict__
     assert "execute" not in ExecutorAdapter.__dict__
+
+
+def test_blueprint_and_director_contract_shapes_are_explicit() -> None:
+    assert _field_names(ProductionBlueprint) == (
+        "blueprint_id",
+        "blueprint_sha256",
+        "episode_id",
+        "revision",
+        "status",
+        "context",
+        "fields",
+        "ownership",
+        "director_provenance",
+        "unresolved_blockers",
+    )
+    assert _field_names(BlueprintProjection) == (
+        "projection_id",
+        "projection_sha256",
+        "source_blueprint_id",
+        "source_blueprint_sha256",
+        "source_blueprint_ref",
+        "blueprint_context_sha256",
+        "compiler_id",
+        "compiler_version",
+        "compiler_sha256",
+        "view_kind",
+        "legacy_artifact_version",
+        "payload_sha256",
+        "shadow_only",
+        "authority_effect",
+        "editable",
+        "read_only",
+        "fields",
+    )
+    assert _field_names(DirectorTaskPlan) == (
+        "task_id",
+        "task_sha256",
+        "director_id",
+        "director_version",
+        "charter_sha256",
+        "registry_sha256",
+        "activation_id",
+        "activation_sha256",
+        "activation_policy_sha256",
+        "episode_intent_sha256",
+        "base_blueprint_sha256",
+        "blueprint_context_sha256",
+        "input_refs",
+        "owned_fields",
+        "verified_fields",
+    )
+    assert "activation_sha256" in _field_names(DirectorAssessment)
+    assert "execution_receipt" in _field_names(DirectorAssessment)
+    assert "assess" in DirectorRuntimePort.__dict__
+    assert "execute" not in DirectorRuntimePort.__dict__

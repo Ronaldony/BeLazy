@@ -49,15 +49,15 @@ def _rewrite(
 def _built_wheel(tmp_path: Path) -> Path:
     root = Path(__file__).resolve().parents[2]
     wheel, members = build_wheel(root, tmp_path / "wheel")
-    assert members == 148
+    assert members == 172
     return wheel
 
 
 def test_offline_wheel_record_metadata_and_tag_are_verified(tmp_path: Path) -> None:
     wheel = _built_wheel(tmp_path)
     members, schemas, digest = inspect_wheel(wheel)
-    assert members == 148
-    assert schemas == 52
+    assert members == 172
+    assert schemas == 61
     assert digest == hashlib.sha256(wheel.read_bytes()).hexdigest()
 
 
@@ -68,6 +68,16 @@ def test_wheel_rejects_record_digest_corruption(tmp_path: Path) -> None:
     target = "video_factory/resources/schemas/artifact-common.schema.json"
     _rewrite(wheel, damaged, {target: b"{}\n"}, refresh_record=False)
     with pytest.raises(ValueError, match="RECORD digest mismatch"):
+        inspect_wheel(damaged)
+
+
+def test_wheel_rejects_director_resource_digest_corruption(tmp_path: Path) -> None:
+    wheel = _built_wheel(tmp_path)
+    damaged = tmp_path / "director-damaged" / wheel.name
+    damaged.parent.mkdir()
+    target = "video_factory/resources/directors/director-registry.json"
+    _rewrite(wheel, damaged, {target: b"{}\n"}, refresh_record=True)
+    with pytest.raises(ValueError, match="Director resource digest mismatch"):
         inspect_wheel(damaged)
 
 

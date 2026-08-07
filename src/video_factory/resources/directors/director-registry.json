@@ -1,0 +1,381 @@
+{
+  "registry_version": "director-registry/1.0",
+  "registry_sha256": "ad2ddadc59e30f361b11e86c9c2dff9c56d3c0ced143a9e4f004fa74f1153ce5",
+  "charters": [
+    {
+      "artifact_version": "director-charter/1.0",
+      "charter_id": "director-charter-73ccaf221c99ddede5e8",
+      "charter_sha256": "73ccaf221c99ddede5e864ee7a56bba5383b8fbb910515338443fafc183b6647",
+      "director_id": "art-director",
+      "director_version": "1.0",
+      "kind": "core",
+      "owned_patterns": [
+        "asset_and_reference_locks",
+        "shot_graph.*.lighting_and_color",
+        "visual_language"
+      ],
+      "verified_patterns": [
+        "shot_graph.*.camera"
+      ],
+      "activation_signals": [],
+      "veto_patterns": [],
+      "conflict_priority": 55,
+      "rules_version": "director-charter-rules/1.0"
+    },
+    {
+      "artifact_version": "director-charter/1.0",
+      "charter_id": "director-charter-f48acf7a26e4ff469957",
+      "charter_sha256": "f48acf7a26e4ff469957a7d0e01cd615d50d228f760ce81f6644760d4e7b80c8",
+      "director_id": "audience-distribution-director",
+      "director_version": "1.0",
+      "kind": "core",
+      "owned_patterns": [
+        "audience_and_success",
+        "delivery_and_distribution"
+      ],
+      "verified_patterns": [
+        "intent",
+        "narrative"
+      ],
+      "activation_signals": [],
+      "veto_patterns": [],
+      "conflict_priority": 55,
+      "rules_version": "director-charter-rules/1.0"
+    },
+    {
+      "artifact_version": "director-charter/1.0",
+      "charter_id": "director-charter-53effb7a69ea34088aec",
+      "charter_sha256": "53effb7a69ea34088aecd688273a6c1f27feebac8fb33eba022d4d269049863a",
+      "director_id": "cinematography-director",
+      "director_version": "1.0",
+      "kind": "core",
+      "owned_patterns": [
+        "shot_graph.*.camera"
+      ],
+      "verified_patterns": [
+        "shot_graph.*.lighting_and_color",
+        "shot_graph.*.motion"
+      ],
+      "activation_signals": [],
+      "veto_patterns": [],
+      "conflict_priority": 60,
+      "rules_version": "director-charter-rules/1.0"
+    },
+    {
+      "artifact_version": "director-charter/1.0",
+      "charter_id": "director-charter-b54393e30a1c5e3021cf",
+      "charter_sha256": "b54393e30a1c5e3021cfaf5174a21bbace78b8db8bbedf0c01ee2aa26541d03f",
+      "director_id": "continuity-director",
+      "director_version": "1.0",
+      "kind": "core",
+      "owned_patterns": [
+        "continuity_state",
+        "shot_graph.*.continuity"
+      ],
+      "verified_patterns": [
+        "shot_graph.*.state"
+      ],
+      "activation_signals": [],
+      "veto_patterns": [
+        "continuity_state",
+        "shot_graph.*.continuity"
+      ],
+      "conflict_priority": 85,
+      "rules_version": "director-charter-rules/1.0"
+    },
+    {
+      "artifact_version": "director-charter/1.0",
+      "charter_id": "director-charter-9fc0a2a11d8ef3b1ec85",
+      "charter_sha256": "9fc0a2a11d8ef3b1ec8582a33a79e3fe3b55bb761dd994c9835067dbd88b42ad",
+      "director_id": "dialogue-voice-director",
+      "director_version": "1.0",
+      "kind": "conditional",
+      "owned_patterns": [
+        "dialogue"
+      ],
+      "verified_patterns": [
+        "dialogue"
+      ],
+      "activation_signals": [
+        "dialogue_or_voice_present"
+      ],
+      "veto_patterns": [
+        "dialogue"
+      ],
+      "conflict_priority": 92,
+      "rules_version": "director-charter-rules/1.0"
+    },
+    {
+      "artifact_version": "director-charter/1.0",
+      "charter_id": "director-charter-e474978625092f1a2aa7",
+      "charter_sha256": "e474978625092f1a2aa75442ae328b37e7b336ba14507b5776ef5c00e3d5d050",
+      "director_id": "editing-rhythm-director",
+      "director_version": "1.0",
+      "kind": "core",
+      "owned_patterns": [
+        "edit_timeline",
+        "shot_graph.*.timing",
+        "shot_graph.*.transition"
+      ],
+      "verified_patterns": [
+        "narrative"
+      ],
+      "activation_signals": [],
+      "veto_patterns": [],
+      "conflict_priority": 50,
+      "rules_version": "director-charter-rules/1.0"
+    },
+    {
+      "artifact_version": "director-charter/1.0",
+      "charter_id": "director-charter-552b08ac963c6554244e",
+      "charter_sha256": "552b08ac963c6554244e22868c8cb02df606a8cbd0d61c0621207c48314fb3b6",
+      "director_id": "fact-research-director",
+      "director_version": "1.0",
+      "kind": "conditional",
+      "owned_patterns": [
+        "factual"
+      ],
+      "verified_patterns": [
+        "factual"
+      ],
+      "activation_signals": [
+        "factual_claims_present"
+      ],
+      "veto_patterns": [
+        "factual"
+      ],
+      "conflict_priority": 92,
+      "rules_version": "director-charter-rules/1.0"
+    },
+    {
+      "artifact_version": "director-charter/1.0",
+      "charter_id": "director-charter-507168ef84461fac0287",
+      "charter_sha256": "507168ef84461fac0287850be78e49a770e79c5ba6acfa2adf16f81218ff1cbb",
+      "director_id": "generative-technical-director",
+      "director_version": "1.0",
+      "kind": "core",
+      "owned_patterns": [
+        "generation_strategy",
+        "shot_graph.*.generation"
+      ],
+      "verified_patterns": [
+        "asset_and_reference_locks"
+      ],
+      "activation_signals": [],
+      "veto_patterns": [
+        "generation_strategy",
+        "shot_graph.*.generation"
+      ],
+      "conflict_priority": 80,
+      "rules_version": "director-charter-rules/1.0"
+    },
+    {
+      "artifact_version": "director-charter/1.0",
+      "charter_id": "director-charter-15db1b2352ba25fa7acd",
+      "charter_sha256": "15db1b2352ba25fa7acd00d593c8c32de077d4a5ff12a58876fc32f42266c07c",
+      "director_id": "live-production-director",
+      "director_version": "1.0",
+      "kind": "conditional",
+      "owned_patterns": [
+        "live_production"
+      ],
+      "verified_patterns": [
+        "live_production"
+      ],
+      "activation_signals": [
+        "live_production_required"
+      ],
+      "veto_patterns": [
+        "live_production"
+      ],
+      "conflict_priority": 92,
+      "rules_version": "director-charter-rules/1.0"
+    },
+    {
+      "artifact_version": "director-charter/1.0",
+      "charter_id": "director-charter-44569787d307434fc964",
+      "charter_sha256": "44569787d307434fc964cb17f1ef742d9642b55e4da3b95653e68ab2de345050",
+      "director_id": "localization-accessibility-director",
+      "director_version": "1.0",
+      "kind": "conditional",
+      "owned_patterns": [
+        "localization"
+      ],
+      "verified_patterns": [
+        "localization"
+      ],
+      "activation_signals": [
+        "localization_or_accessibility"
+      ],
+      "veto_patterns": [
+        "localization"
+      ],
+      "conflict_priority": 92,
+      "rules_version": "director-charter-rules/1.0"
+    },
+    {
+      "artifact_version": "director-charter/1.0",
+      "charter_id": "director-charter-99439d6fd4ab0aa2747e",
+      "charter_sha256": "99439d6fd4ab0aa2747e1302097ffe833fdc5871f1ead404136307668140c09f",
+      "director_id": "motion-performance-director",
+      "director_version": "1.0",
+      "kind": "core",
+      "owned_patterns": [
+        "shot_graph.*.motion"
+      ],
+      "verified_patterns": [
+        "shot_graph.*.subjects"
+      ],
+      "activation_signals": [],
+      "veto_patterns": [],
+      "conflict_priority": 60,
+      "rules_version": "director-charter-rules/1.0"
+    },
+    {
+      "artifact_version": "director-charter/1.0",
+      "charter_id": "director-charter-cf742c403511a4f50a85",
+      "charter_sha256": "cf742c403511a4f50a85055c9bfeedc6bd91c6f52d4ea8ece7584f0ed7c32a46",
+      "director_id": "narrative-director",
+      "director_version": "1.0",
+      "kind": "core",
+      "owned_patterns": [
+        "narrative",
+        "shot_graph.*.purpose"
+      ],
+      "verified_patterns": [
+        "intent",
+        "narrative"
+      ],
+      "activation_signals": [],
+      "veto_patterns": [],
+      "conflict_priority": 60,
+      "rules_version": "director-charter-rules/1.0"
+    },
+    {
+      "artifact_version": "director-charter/1.0",
+      "charter_id": "director-charter-ee90b130ad029417259e",
+      "charter_sha256": "ee90b130ad029417259e69406624b445f0b74bd95bdd835fff2d818d88baa74e",
+      "director_id": "quality-director",
+      "director_version": "1.0",
+      "kind": "core",
+      "owned_patterns": [
+        "risks_and_acceptance",
+        "shot_graph.*.acceptance"
+      ],
+      "verified_patterns": [
+        "*"
+      ],
+      "activation_signals": [],
+      "veto_patterns": [
+        "risks_and_acceptance",
+        "shot_graph.*.acceptance"
+      ],
+      "conflict_priority": 95,
+      "rules_version": "director-charter-rules/1.0"
+    },
+    {
+      "artifact_version": "director-charter/1.0",
+      "charter_id": "director-charter-a643cb22764087a963a9",
+      "charter_sha256": "a643cb22764087a963a9aa0ef86feba58d3ead2955db789930efe6d78b9a00ef",
+      "director_id": "rights-brand-safety-director",
+      "director_version": "1.0",
+      "kind": "conditional",
+      "owned_patterns": [
+        "rights"
+      ],
+      "verified_patterns": [
+        "rights"
+      ],
+      "activation_signals": [
+        "rights_or_policy_risk"
+      ],
+      "veto_patterns": [
+        "rights"
+      ],
+      "conflict_priority": 92,
+      "rules_version": "director-charter-rules/1.0"
+    },
+    {
+      "artifact_version": "director-charter/1.0",
+      "charter_id": "director-charter-21fe3b22c52b0cf7aed9",
+      "charter_sha256": "21fe3b22c52b0cf7aed922500b6c6e48fb8f5e49d7157aca6dee6654d725c9f3",
+      "director_id": "showrunner",
+      "director_version": "1.0",
+      "kind": "core",
+      "owned_patterns": [
+        "identity",
+        "intent"
+      ],
+      "verified_patterns": [
+        "*"
+      ],
+      "activation_signals": [],
+      "veto_patterns": [
+        "intent"
+      ],
+      "conflict_priority": 90,
+      "rules_version": "director-charter-rules/1.0"
+    },
+    {
+      "artifact_version": "director-charter/1.0",
+      "charter_id": "director-charter-21bb4259be2faea8fd3f",
+      "charter_sha256": "21bb4259be2faea8fd3f5f5b075ae66aaed493d46f46e3924522fa791878702a",
+      "director_id": "sound-director",
+      "director_version": "1.0",
+      "kind": "core",
+      "owned_patterns": [
+        "shot_graph.*.sound",
+        "sound_design"
+      ],
+      "verified_patterns": [
+        "shot_graph.*.timing"
+      ],
+      "activation_signals": [],
+      "veto_patterns": [],
+      "conflict_priority": 50,
+      "rules_version": "director-charter-rules/1.0"
+    },
+    {
+      "artifact_version": "director-charter/1.0",
+      "charter_id": "director-charter-7ebe0acfafd748972f36",
+      "charter_sha256": "7ebe0acfafd748972f36c38526a7b79c21cacc89875902e92132e277e29dbbcf",
+      "director_id": "staging-director",
+      "director_version": "1.0",
+      "kind": "core",
+      "owned_patterns": [
+        "shot_graph.*.environment",
+        "shot_graph.*.state",
+        "shot_graph.*.subjects"
+      ],
+      "verified_patterns": [
+        "shot_graph.*.motion"
+      ],
+      "activation_signals": [],
+      "veto_patterns": [],
+      "conflict_priority": 55,
+      "rules_version": "director-charter-rules/1.0"
+    },
+    {
+      "artifact_version": "director-charter/1.0",
+      "charter_id": "director-charter-0b946a209eaf73a9096d",
+      "charter_sha256": "0b946a209eaf73a9096d9637276c50c5fff04a07de726fd4147d21a92928da2a",
+      "director_id": "vfx-compositing-director",
+      "director_version": "1.0",
+      "kind": "conditional",
+      "owned_patterns": [
+        "vfx"
+      ],
+      "verified_patterns": [
+        "vfx"
+      ],
+      "activation_signals": [
+        "vfx_required"
+      ],
+      "veto_patterns": [
+        "vfx"
+      ],
+      "conflict_priority": 92,
+      "rules_version": "director-charter-rules/1.0"
+    }
+  ]
+}

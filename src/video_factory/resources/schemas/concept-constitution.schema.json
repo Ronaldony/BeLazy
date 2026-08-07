@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.video-factory.invalid/blueprint/concept-constitution.schema.json",
+  "title": "Immutable concept constitution",
+  "type": "object",
+  "required": [
+    "artifact_version", "constitution_id", "constitution_sha256", "concept_id",
+    "channel_constitution_sha256", "rules_version", "fields"
+  ],
+  "properties": {
+    "artifact_version": { "const": "concept-constitution/1.0" },
+    "constitution_id": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" },
+    "constitution_sha256": { "$ref": "artifact-common.schema.json#/$defs/sha256" },
+    "concept_id": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" },
+    "channel_constitution_sha256": { "$ref": "artifact-common.schema.json#/$defs/sha256" },
+    "rules_version": { "$ref": "artifact-common.schema.json#/$defs/rulesVersion" },
+    "fields": {
+      "type": "array",
+      "minItems": 4,
+      "items": { "$ref": "artifact-common.schema.json#/$defs/blueprintField" }
+    }
+  },
+  "additionalProperties": false,
+  "x-artifact-migration": {
+    "id_pattern": "^concept-constitution/[1-9][0-9]*-to-[1-9][0-9]*/[1-9][0-9]*$",
+    "single_major_step": true,
+    "in_place": false,
+    "automatic_downgrade": false
+  }
+}

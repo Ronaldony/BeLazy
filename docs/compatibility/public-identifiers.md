@@ -17,3 +17,10 @@ These identifiers do not rename the target repository back to the source.
 `T90-PUBLIC-IDENTIFIERS` / `MIG-002` is explicitly deferred. Any future change
 requires a separate compatibility mandate, consumer inventory, coexistence and
 deprecation window, converters, rollback evidence, and no implicit publication.
+
+W03 adds the public packages `video_factory.blueprint` and
+`video_factory.directors` and nine new `/1.0` artifact versions. These are
+additive identifiers. Existing distribution, import namespace, CLI command
+count, legacy artifact versions, and orchestration authority semantics remain
+unchanged. `blueprint-projection/1.0` intentionally does not impersonate any
+legacy artifact family; authority cutover is deferred under ADR-MIG-001.

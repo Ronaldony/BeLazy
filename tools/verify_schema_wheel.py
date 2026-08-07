@@ -20,6 +20,7 @@ import zipfile
 
 
 SCHEMA_PREFIX = "video_factory/resources/schemas/"
+DIRECTOR_PREFIX = "video_factory/resources/directors/"
 EXPECTED_WHEEL_TAG = "py3-none-any"
 
 
@@ -137,6 +138,73 @@ def _strict_object(payload: bytes, label: str) -> Mapping[str, object]:
     return value
 
 
+def _validate_director_resources(
+    archive: zipfile.ZipFile, names: list[str]
+) -> None:
+    manifest_name = DIRECTOR_PREFIX + "director-resource-manifest.json"
+    expected_documents = {
+        "director-activation-policy.json",
+        "director-registry.json",
+    }
+    expected_members = {
+        DIRECTOR_PREFIX + "__init__.py",
+        manifest_name,
+        *(DIRECTOR_PREFIX + name for name in expected_documents),
+    }
+    if not expected_members.issubset(names):
+        missing = sorted(expected_members - set(names))
+        raise ValueError(f"wheel Director resources are incomplete: {missing}")
+    actual_json = {
+        name
+        for name in names
+        if name.startswith(DIRECTOR_PREFIX) and name.endswith(".json")
+    }
+    expected_json = expected_members - {DIRECTOR_PREFIX + "__init__.py"}
+    if actual_json != expected_json:
+        raise ValueError("wheel Director resource member set is invalid")
+    manifest = _strict_object(archive.read(manifest_name), manifest_name)
+    entries = manifest.get("resources")
+    if manifest.get("resource_count") != 2 or not isinstance(entries, list):
+        raise ValueError("wheel Director resource manifest count is invalid")
+    filenames: list[str] = []
+    for entry in entries:
+        if not isinstance(entry, Mapping):
+            raise ValueError("wheel Director resource entry is not an object")
+        filename = entry.get("filename")
+        if not isinstance(filename, str):
+            raise ValueError("wheel Director resource filename is invalid")
+        filenames.append(filename)
+        data = archive.read(DIRECTOR_PREFIX + filename)
+        if hashlib.sha256(data).hexdigest() != entry.get("sha256"):
+            raise ValueError(f"wheel Director resource digest mismatch: {filename}")
+    if filenames != sorted(filenames) or set(filenames) != expected_documents:
+        raise ValueError("wheel Director resource manifest set is invalid")
+    registry = _strict_object(
+        archive.read(DIRECTOR_PREFIX + "director-registry.json"),
+        "wheel Director registry",
+    )
+    charters = registry.get("charters")
+    if not isinstance(charters, list) or len(charters) != 18:
+        raise ValueError("wheel Director registry must contain 18 charters")
+    director_ids = {
+        item.get("director_id") for item in charters if isinstance(item, Mapping)
+    }
+    if len(director_ids) != 18 or "live-production-director" not in director_ids:
+        raise ValueError("wheel Director registry identity set is invalid")
+    activation = _strict_object(
+        archive.read(DIRECTOR_PREFIX + "director-activation-policy.json"),
+        "wheel Director activation policy",
+    )
+    conditional = activation.get("conditional")
+    if (
+        activation.get("sequential_stages_forbidden") is not True
+        or activation.get("maximum_conflict_rounds") != 2
+        or not isinstance(conditional, list)
+        or len(conditional) != 6
+    ):
+        raise ValueError("wheel Director activation policy is invalid")
+
+
 def inspect_wheel(path: Path) -> tuple[int, int, str]:
     payload = path.read_bytes()
     with zipfile.ZipFile(path) as archive:
@@ -148,6 +216,7 @@ def inspect_wheel(path: Path) -> tuple[int, int, str]:
             if member.is_absolute() or ".." in member.parts or "\\" in name:
                 raise ValueError(f"unsafe wheel member: {name}")
         _validate_dist_info(archive, names, path)
+        _validate_director_resources(archive, names)
         schema_names = sorted(
             name
             for name in names
@@ -238,11 +307,13 @@ def install_and_probe(wheel: Path, python: Path, work_dir: Path) -> str:
         )
     probe = """
 import json
+from importlib.resources import files
 from pathlib import Path
 import sys
 install = Path(sys.argv[1]).resolve()
 sys.path.insert(0, str(install))
 import video_factory
+from video_factory import blueprint, directors
 from video_factory.artifacts import ArtifactSchemaRegistry, validate_artifact_mapping
 package_file = Path(video_factory.__file__).resolve()
 if not package_file.is_relative_to(install):
@@ -252,6 +323,14 @@ expected_schemas = int(sys.argv[2])
 expected_versions = int(sys.argv[3])
 if len(registry.all_schemas()) != expected_schemas or len(registry.list_versions()) != expected_versions:
     raise SystemExit('installed registry counts mismatch')
+if len(directors.default_director_charters()) != 18:
+    raise SystemExit('installed Director registry count mismatch')
+director_resources = files('video_factory.resources.directors')
+for name in ('director-registry.json', 'director-activation-policy.json', 'director-resource-manifest.json'):
+    if not director_resources.joinpath(name).is_file():
+        raise SystemExit(f'installed Director resource missing: {name}')
+if not hasattr(blueprint, 'ProductionBlueprint'):
+    raise SystemExit('installed Blueprint public contract missing')
 valid = {'artifact_version': 'approval-requirement/1.0', 'rules_version': 'rules', 'episode_id': 'ep', 'requirement_id': 'req', 'capability_id': 'cap', 'bound_artifacts': [{'path': 'a.json', 'sha256': 'a'*64, 'artifact_version': 'brief/1.0'}], 'effective_config_sha256': 'b'*64, 'kind': 'packet', 'creates_evidence': False}
 if not validate_artifact_mapping(valid, registry=registry).ok:
     raise SystemExit('installed registry could not validate a valid artifact')

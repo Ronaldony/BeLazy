@@ -297,6 +297,18 @@ def build_artifact_graph(
             )
 
     current = tuple(snapshot for snapshot in snapshots if snapshot.is_current)
+    for snapshot in current:
+        if snapshot.family == "blueprint-projection":
+            findings.append(
+                ArtifactGraphFinding(
+                    code="blueprint_projection_shadow_current_forbidden",
+                    message=(
+                        f"{snapshot.path}: Blueprint projections are read-only shadow "
+                        "views and cannot be current authority inputs"
+                    ),
+                    path=str(snapshot.path),
+                )
+            )
     episode_ids = sorted(
         {
             episode_id

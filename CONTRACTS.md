@@ -44,6 +44,8 @@ Production planning is evidence-based, not presence-based:
 | `video_factory.continuity` | cross-shot comparison of one opaque element between two generated clips (relative-scale / orientation-shape / presence); plan-only, caller-supplied finite nonnegative tolerances, closed measurement serialization, and pure serialized-document rejudgment |
 | `video_factory.media` | pure observed-output matching, double-extension warning recovery, and caller-injected aspect validation |
 | `video_factory.mutation` | six strict managed-mutation artifacts, deterministic exact-before/CAS planner, canonical semantic diff, immutable revision/tombstone derivation, drift quarantine, and typed serialization; never writes |
+| `video_factory.blueprint` | immutable channel/concept constitutions, EpisodeIntent, detailed ProductionBlueprint with exact field ownership/provenance, strict typed JSON boundaries, and read-only non-authoritative shadow projections |
+| `video_factory.directors` | target-owned 12-core/6-conditional Director registry, deterministic activation and parallel task plans, hash-bound assessments, two-round conflict synthesis, and a runtime Protocol only |
 | `video_factory.storage` | no-overwrite artifact store ports, frozen-index guards, **planning-only and non-authorizing** workspace init/export; source trees containing links, reparse points, or special nodes are rejected |
 | `video_factory.review` | creator/reviewer-separated request, result, revision policy, and review port |
 | `video_factory.security` | path guard, secret reference, purity-scanner port, and in-process `scan_repository` / `RepositoryPurityScanner` |
@@ -84,6 +86,28 @@ This generalizes the existing `EncodeCommandPlan` pattern (`executed=False` alwa
 
 Gate: `tools/check_side_effect_free.py` statically scans `src/` (AST-first, regex backup) and exits 1 on
 write/process APIs. Complements `check_core_purity.py` and `check_repo_isolation.py`.
+
+## ProductionBlueprint and Director shadow plane (W03)
+
+`ProductionBlueprint` is the detailed design source of truth. Its identity
+includes eight material context digests, every canonical active field, exact
+owner/verifier coverage, Director provenance, status, and blockers. Required
+root and per-shot detail is validated in Python in addition to the closed JSON
+Schema contract.
+
+Director work is logically parallel. Every task and assessment binds the exact
+base Blueprint, context, registry, activation policy, charter, immutable input
+references, model/prompt identity, request/response digests, and execution
+receipt. Any blocker, uncertain result, low confidence, stale patch, incomplete
+coverage, or unresolved conflict blocks synthesis. Conflict resolution has a
+hard maximum of two rounds.
+
+`blueprint-projection/1.0` is the only serialized projection family. Brief,
+storyboard, generation, edit, sound, and publish are nested view kinds, not
+top-level legacy artifacts. Projections are always shadow-only, read-only,
+non-editable, and have `authority_effect=none`; supplying one as current input
+adds a blocking ArtifactGraph finding. Neither a coherent Blueprint, a Director
+PASS, nor a matching shadow comparison grants readiness or execution authority.
 
 ## Managed mutation plane (W02)
 

@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.video-factory.invalid/director/blueprint-conflict.schema.json",
+  "title": "Bounded Director patch conflict result",
+  "type": "object",
+  "required": [
+    "artifact_version", "conflict_id", "conflict_sha256", "base_blueprint_sha256",
+    "blueprint_context_sha256", "field_path", "proposal_assessment_ids", "status",
+    "selected_assessment_id", "rejected_assessment_ids", "selected_replacement_sha256",
+    "reason_code", "rounds_used", "evidence_refs"
+  ],
+  "properties": {
+    "artifact_version": { "const": "blueprint-conflict/1.0" },
+    "conflict_id": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" },
+    "conflict_sha256": { "$ref": "artifact-common.schema.json#/$defs/sha256" },
+    "base_blueprint_sha256": { "$ref": "artifact-common.schema.json#/$defs/sha256" },
+    "blueprint_context_sha256": { "$ref": "artifact-common.schema.json#/$defs/sha256" },
+    "field_path": { "$ref": "artifact-common.schema.json#/$defs/blueprintFieldPath" },
+    "proposal_assessment_ids": {
+      "type": "array", "minItems": 2, "uniqueItems": true,
+      "items": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" }
+    },
+    "status": { "type": "string", "enum": ["resolved", "blocked"] },
+    "selected_assessment_id": {
+      "oneOf": [{ "type": "null" }, { "$ref": "artifact-common.schema.json#/$defs/opaqueId" }]
+    },
+    "rejected_assessment_ids": {
+      "type": "array", "minItems": 1, "uniqueItems": true,
+      "items": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" }
+    },
+    "selected_replacement_sha256": {
+      "oneOf": [{ "type": "null" }, { "$ref": "artifact-common.schema.json#/$defs/sha256" }]
+    },
+    "reason_code": { "$ref": "artifact-common.schema.json#/$defs/canonicalReasonCode" },
+    "rounds_used": { "type": "integer", "minimum": 1, "maximum": 2 },
+    "evidence_refs": {
+      "type": "array", "uniqueItems": true,
+      "items": { "$ref": "artifact-common.schema.json#/$defs/boundArtifact" }
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "status": { "const": "resolved" } } },
+      "then": {
+        "properties": {
+          "selected_assessment_id": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" },
+          "selected_replacement_sha256": { "$ref": "artifact-common.schema.json#/$defs/sha256" }
+        }
+      },
+      "else": {
+        "properties": {
+          "selected_assessment_id": { "type": "null" },
+          "selected_replacement_sha256": { "type": "null" }
+        }
+      }
+    }
+  ],
+  "additionalProperties": false,
+  "x-artifact-migration": {
+    "id_pattern": "^blueprint-conflict/[1-9][0-9]*-to-[1-9][0-9]*/[1-9][0-9]*$",
+    "single_major_step": true,
+    "in_place": false,
+    "automatic_downgrade": false
+  }
+}

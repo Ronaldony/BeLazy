@@ -108,6 +108,51 @@
       },
       "additionalProperties": false
     },
+    "blueprintFieldPath": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_-]*(?:\\.[a-z0-9][a-z0-9_-]*)+$"
+    },
+    "canonicalReasonCode": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)+$"
+    },
+    "blueprintField": {
+      "type": "object",
+      "required": ["path", "value_json"],
+      "properties": {
+        "path": { "$ref": "#/$defs/blueprintFieldPath" },
+        "value_json": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": false
+    },
+    "blueprintContext": {
+      "type": "object",
+      "required": [
+        "channel_constitution_sha256",
+        "concept_constitution_sha256",
+        "episode_intent_sha256",
+        "policy_bundle_sha256",
+        "rules_bundle_sha256",
+        "effective_config_sha256",
+        "current_manifest_sha256",
+        "evidence_graph_sha256"
+      ],
+      "properties": {
+        "channel_constitution_sha256": { "$ref": "#/$defs/sha256" },
+        "concept_constitution_sha256": { "$ref": "#/$defs/sha256" },
+        "episode_intent_sha256": { "$ref": "#/$defs/sha256" },
+        "policy_bundle_sha256": { "$ref": "#/$defs/sha256" },
+        "rules_bundle_sha256": { "$ref": "#/$defs/sha256" },
+        "effective_config_sha256": { "$ref": "#/$defs/sha256" },
+        "current_manifest_sha256": { "$ref": "#/$defs/sha256" },
+        "evidence_graph_sha256": { "$ref": "#/$defs/sha256" }
+      },
+      "additionalProperties": false
+    },
+    "directorScopePattern": {
+      "type": "string",
+      "pattern": "^(?:\\*|[a-z][a-z0-9_-]*)(?:\\.(?:\\*|[a-z0-9][a-z0-9_-]*))*$"
+    },
     "marketingReason": {
       "type": "object",
       "required": [

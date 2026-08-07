@@ -1,0 +1,44 @@
+{
+  "activation_policy_version": "director-activation-policy/1.0",
+  "activation_policy_sha256": "fb5bf5167a5675165da95863b0453bc9e99fb73d942b13768395ba94e1e9f233",
+  "sequential_stages_forbidden": true,
+  "maximum_conflict_rounds": 2,
+  "conditional": [
+    {
+      "director_id": "dialogue-voice-director",
+      "signals": [
+        "dialogue_or_voice_present"
+      ]
+    },
+    {
+      "director_id": "fact-research-director",
+      "signals": [
+        "factual_claims_present"
+      ]
+    },
+    {
+      "director_id": "live-production-director",
+      "signals": [
+        "live_production_required"
+      ]
+    },
+    {
+      "director_id": "localization-accessibility-director",
+      "signals": [
+        "localization_or_accessibility"
+      ]
+    },
+    {
+      "director_id": "rights-brand-safety-director",
+      "signals": [
+        "rights_or_policy_risk"
+      ]
+    },
+    {
+      "director_id": "vfx-compositing-director",
+      "signals": [
+        "vfx_required"
+      ]
+    }
+  ]
+}

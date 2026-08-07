@@ -1,0 +1,107 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.video-factory.invalid/director/director-assessment.schema.json",
+  "title": "Hash-bound Director assessment",
+  "type": "object",
+  "$defs": {
+    "patch": {
+      "type": "object",
+      "required": [
+        "field_path", "proposal_kind", "expected_value_sha256",
+        "replacement_value_json", "reason_code", "hard_constraint", "evidence_refs"
+      ],
+      "properties": {
+        "field_path": { "$ref": "artifact-common.schema.json#/$defs/blueprintFieldPath" },
+        "proposal_kind": { "type": "string", "enum": ["owner", "verifier"] },
+        "expected_value_sha256": { "$ref": "artifact-common.schema.json#/$defs/sha256" },
+        "replacement_value_json": { "type": "string", "minLength": 1 },
+        "reason_code": { "$ref": "artifact-common.schema.json#/$defs/canonicalReasonCode" },
+        "hard_constraint": { "type": "boolean" },
+        "evidence_refs": {
+          "type": "array", "minItems": 1, "uniqueItems": true,
+          "items": { "$ref": "artifact-common.schema.json#/$defs/boundArtifact" }
+        }
+      },
+      "additionalProperties": false
+    },
+    "blocker": {
+      "type": "object",
+      "required": ["reason_code", "field_path", "hard", "evidence_refs"],
+      "properties": {
+        "reason_code": { "$ref": "artifact-common.schema.json#/$defs/canonicalReasonCode" },
+        "field_path": { "$ref": "artifact-common.schema.json#/$defs/blueprintFieldPath" },
+        "hard": { "type": "boolean" },
+        "evidence_refs": {
+          "type": "array", "minItems": 1, "uniqueItems": true,
+          "items": { "$ref": "artifact-common.schema.json#/$defs/boundArtifact" }
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "artifact_version", "assessment_id", "assessment_sha256", "task_id",
+    "task_plan_sha256", "director_id", "director_version", "charter_sha256",
+    "registry_sha256", "activation_id", "activation_sha256",
+    "activation_policy_sha256", "episode_intent_sha256", "base_blueprint_sha256",
+    "blueprint_context_sha256", "model_id", "prompt_charter_version",
+    "request_sha256", "response_sha256", "execution_receipt", "verdict",
+    "patches", "blockers", "recommendations", "confidence_basis_points",
+    "assumptions", "evidence_refs"
+  ],
+  "properties": {
+    "artifact_version": { "const": "director-assessment/1.0" },
+    "assessment_id": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" },
+    "assessment_sha256": { "$ref": "artifact-common.schema.json#/$defs/sha256" },
+    "task_id": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" },
+    "task_plan_sha256": { "$ref": "artifact-common.schema.json#/$defs/sha256" },
+    "director_id": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" },
+    "director_version": { "type": "string", "minLength": 1 },
+    "charter_sha256": { "$ref": "artifact-common.schema.json#/$defs/sha256" },
+    "registry_sha256": { "$ref": "artifact-common.schema.json#/$defs/sha256" },
+    "activation_id": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" },
+    "activation_sha256": { "$ref": "artifact-common.schema.json#/$defs/sha256" },
+    "activation_policy_sha256": { "$ref": "artifact-common.schema.json#/$defs/sha256" },
+    "episode_intent_sha256": { "$ref": "artifact-common.schema.json#/$defs/sha256" },
+    "base_blueprint_sha256": { "$ref": "artifact-common.schema.json#/$defs/sha256" },
+    "blueprint_context_sha256": { "$ref": "artifact-common.schema.json#/$defs/sha256" },
+    "model_id": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" },
+    "prompt_charter_version": { "type": "string", "pattern": "^[a-z][a-z0-9._-]{0,127}$" },
+    "request_sha256": { "$ref": "artifact-common.schema.json#/$defs/sha256" },
+    "response_sha256": { "$ref": "artifact-common.schema.json#/$defs/sha256" },
+    "execution_receipt": { "$ref": "artifact-common.schema.json#/$defs/boundArtifact" },
+    "verdict": { "type": "string", "enum": ["pass", "patch", "blocked", "uncertain"] },
+    "patches": { "type": "array", "items": { "$ref": "#/$defs/patch" } },
+    "blockers": { "type": "array", "items": { "$ref": "#/$defs/blocker" } },
+    "recommendations": { "type": "array", "uniqueItems": true, "items": { "type": "string", "minLength": 1 } },
+    "confidence_basis_points": { "type": "integer", "minimum": 0, "maximum": 10000 },
+    "assumptions": { "type": "array", "uniqueItems": true, "items": { "type": "string", "minLength": 1 } },
+    "evidence_refs": {
+      "type": "array", "minItems": 1, "uniqueItems": true,
+      "items": { "$ref": "artifact-common.schema.json#/$defs/boundArtifact" }
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "verdict": { "const": "pass" } } },
+      "then": {
+        "properties": { "patches": { "maxItems": 0 }, "blockers": { "maxItems": 0 } }
+      }
+    },
+    {
+      "if": { "properties": { "verdict": { "const": "patch" } } },
+      "then": { "properties": { "patches": { "minItems": 1 } } }
+    },
+    {
+      "if": { "properties": { "verdict": { "const": "blocked" } } },
+      "then": { "properties": { "blockers": { "minItems": 1 } } }
+    }
+  ],
+  "additionalProperties": false,
+  "x-artifact-migration": {
+    "id_pattern": "^director-assessment/[1-9][0-9]*-to-[1-9][0-9]*/[1-9][0-9]*$",
+    "single_major_step": true,
+    "in_place": false,
+    "automatic_downgrade": false
+  }
+}

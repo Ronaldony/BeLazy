@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.video-factory.invalid/director/director-charter.schema.json",
+  "title": "Versioned Director responsibility charter",
+  "type": "object",
+  "required": [
+    "artifact_version", "charter_id", "charter_sha256", "director_id",
+    "director_version", "kind", "owned_patterns", "verified_patterns",
+    "activation_signals", "veto_patterns", "conflict_priority", "rules_version"
+  ],
+  "properties": {
+    "artifact_version": { "const": "director-charter/1.0" },
+    "charter_id": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" },
+    "charter_sha256": { "$ref": "artifact-common.schema.json#/$defs/sha256" },
+    "director_id": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" },
+    "director_version": { "type": "string", "minLength": 1 },
+    "kind": { "type": "string", "enum": ["core", "conditional"] },
+    "owned_patterns": {
+      "type": "array", "uniqueItems": true,
+      "items": { "$ref": "artifact-common.schema.json#/$defs/directorScopePattern" }
+    },
+    "verified_patterns": {
+      "type": "array", "uniqueItems": true,
+      "items": { "$ref": "artifact-common.schema.json#/$defs/directorScopePattern" }
+    },
+    "activation_signals": {
+      "type": "array", "uniqueItems": true,
+      "items": { "type": "string", "pattern": "^[a-z][a-z0-9._-]{0,127}$" }
+    },
+    "veto_patterns": {
+      "type": "array", "uniqueItems": true,
+      "items": { "$ref": "artifact-common.schema.json#/$defs/directorScopePattern" }
+    },
+    "conflict_priority": { "type": "integer", "minimum": 0, "maximum": 100 },
+    "rules_version": { "$ref": "artifact-common.schema.json#/$defs/rulesVersion" }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "kind": { "const": "core" } } },
+      "then": { "properties": { "activation_signals": { "maxItems": 0 } } },
+      "else": { "properties": { "activation_signals": { "minItems": 1 } } }
+    }
+  ],
+  "additionalProperties": false,
+  "x-artifact-migration": {
+    "id_pattern": "^director-charter/[1-9][0-9]*-to-[1-9][0-9]*/[1-9][0-9]*$",
+    "single_major_step": true,
+    "in_place": false,
+    "automatic_downgrade": false
+  }
+}

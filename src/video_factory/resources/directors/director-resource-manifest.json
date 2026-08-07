@@ -1,0 +1,14 @@
+{
+  "manifest_version": "director-resource-manifest/1.0",
+  "resource_count": 2,
+  "resources": [
+    {
+      "filename": "director-activation-policy.json",
+      "sha256": "f0af3280f5b30191400b40a9cda381d8f0c1acd5d24b19baa555a72be72cfb02"
+    },
+    {
+      "filename": "director-registry.json",
+      "sha256": "94213073eb576684f4e5bd4321f75d0b751b8f858c1bea6060193fcf36bf27a6"
+    }
+  ]
+}

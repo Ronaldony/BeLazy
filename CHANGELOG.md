@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- Added the W03 ProductionBlueprint shadow plane with nine packaged artifact
+  contracts, complete root/per-shot design validation, exact field ownership
+  and distinct verification, material-context binding, and strict typed JSON
+  round trips.
+- Added a target-owned logical Director Mesh: twelve core and six conditional
+  charters, deterministic activation, parallel task plans, model/prompt/receipt
+  bound assessments, and deterministic conflict synthesis capped at two rounds.
+- Added deterministic brief/storyboard/generation/edit/sound/publish shadow
+  views inside the read-only `blueprint-projection/1.0` envelope. Projections
+  and parity comparisons have no authority effect, and current projection
+  snapshots now fail the ArtifactGraph gate. Legacy authority paths are not cut
+  over in W03.
 - Added the pure managed-mutation contract and guard plane: six packaged
   artifacts, deterministic exact-before planning, immutable revision and
   tombstone derivation, drift quarantine, strict cross-platform path policy,

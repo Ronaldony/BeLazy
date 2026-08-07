@@ -1,0 +1,84 @@
+{
+  "protocol_version": "be-lazy-wave-recovery-anchor/1.0",
+  "wave": "W02-MANAGED-MUTATION",
+  "created_at": "2026-08-07T14:32:05.452Z",
+  "checkpoint": {
+    "commit": "17107e815996e18032132a739140aeeae0b2716e",
+    "tree": "0e61d782d1ecd8fb05b11a929b44a04824f83cc5",
+    "parent": "2582150be4cdcdd0ecf49c72d3e0c0d0d0213fa1",
+    "subject": "autopilot(W02): introduce managed mutation plane"
+  },
+  "implementation": {
+    "commit": "0fa62c81bcd2fa9537aa93db47403a73b388073a",
+    "tree": "cc7e398710addb03a5febdd86d435a0d9a037aad"
+  },
+  "evidence": {
+    "commit": "2582150be4cdcdd0ecf49c72d3e0c0d0d0213fa1",
+    "tree": "1911bd532756fad8943883e8c6f47f844f5f5d66",
+    "provenance_path": "docs/provenance/w02-managed-mutation.json",
+    "provenance_sha256": "b3a134336fc2f8d5adf2761b5626ceb3b46341bb2d76898d040fb3932545645e",
+    "receipt_path": "reports/autopilot/waves/W02/test-receipt.json",
+    "receipt_sha256": "023c6aede0dba022c7a709ca528a7a0f3422d124505ebdff3ca9a26cf7fd47ee",
+    "review_path": "reports/autopilot/waves/W02/review-round-4.md",
+    "review_sha256": "cb71e348edce4a8754f7c0171460e695948925a27f9184108946ad3f219fd985",
+    "execplan_path": ".agent/execplans/be-lazy-autopilot.md",
+    "execplan_sha256": "8968895d33ae86b8ef3ec7f56f5aa3982a6f2a7b4584b79887b7e19a775bb52d"
+  },
+  "inputs": {
+    "source_archive_sha256": "954325b77028bcf7d36a88136d8e1ed0ec2348ad15014623710614cced94034a",
+    "handoff_manifest_sha256": "1bd3aa1687299c15f81539641afcd1563097b0ff8cebc9c24a793e132386244a"
+  },
+  "state": {
+    "location": ".be-lazy/autopilot/state.json",
+    "tracking": "REPOSITORY_LOCAL_IGNORED",
+    "schema_path": ".be-lazy/autopilot/schemas/autopilot-state.schema.json",
+    "schema_sha256": "bf102391da9c2797bbf37067efa8520fcae05ba2b115b33dfe9b15ba0f7155aa",
+    "semantic_canonicalization": "sha256-utf8-json-sort-keys-compact-ensure-ascii-false-v1",
+    "semantic_projection": {
+      "protocol_version": "be-lazy-prompt-autopilot-state/1.0",
+      "program_id": "be-lazy-successor-redesign",
+      "source": {
+        "expected_sha256": "954325b77028bcf7d36a88136d8e1ed0ec2348ad15014623710614cced94034a",
+        "observed_sha256": "954325b77028bcf7d36a88136d8e1ed0ec2348ad15014623710614cced94034a",
+        "unchanged": true
+      },
+      "handoff": {
+        "manifest_sha256": "1bd3aa1687299c15f81539641afcd1563097b0ff8cebc9c24a793e132386244a",
+        "verified": true
+      },
+      "target": {
+        "branch": "agent/autopilot-v4",
+        "initial_commit": "b7aaaf2ac43ca99970c317a7d505316a07d320e9"
+      },
+      "passed_wave": {
+        "id": "W02-MANAGED-MUTATION",
+        "status": "passed",
+        "attempts": 4,
+        "task_ids": ["MUT-001", "MUT-002", "MUT-003", "MUT-004"],
+        "checkpoint_commit": "17107e815996e18032132a739140aeeae0b2716e",
+        "tests": [
+          {"id": "w02-focused", "status": "passed", "result": "73 passed on implementation commit 0fa62c81bcd2fa9537aa93db47403a73b388073a"},
+          {"id": "w02-full", "status": "passed", "result": "527 passed on exact implementation commit/tree"},
+          {"id": "w02-boundaries", "status": "passed", "result": "core_purity 273, side_effect_free 90, repo_isolation 197, target_boundary 330 files/59 directories"},
+          {"id": "w02-schema-wheel", "status": "passed", "result": "two identical 148-member wheels afb79cc2b46cec41325d592cda22bb5395c87337b60a07423b5fc9dabb6e7cd3; 52 schemas and 48 versions loaded in isolation"},
+          {"id": "w02-standard-backend", "status": "environment_blocked", "result": "No module named build; stdlib PEP 427 verification is not claimed as backend verification"},
+          {"id": "w02-input-postcheck", "status": "passed", "result": "handoff 49 files and source 211 members verified unchanged"}
+        ],
+        "latest_reviews": [
+          {"round": 4, "role": "architecture_contract", "status": "approved", "critical": 0, "high": 0},
+          {"round": 4, "role": "security_authority_boundary", "status": "approved", "critical": 0, "high": 0},
+          {"round": 4, "role": "test_compatibility_packaging", "status": "approved", "critical": 0, "high": 0}
+        ],
+        "unresolved_findings": []
+      }
+    },
+    "semantic_sha256": "f665c89d2233bde7c016c084cd95bc99d12183fd12a5cee8af44708a2fbe9432"
+  },
+  "recovery_checks": [
+    "checkpoint commit resolves to the recorded tree, parent, and subject",
+    "implementation and evidence commits are ancestors of the checkpoint",
+    "tracked evidence and final ExecPlan digests match",
+    "ignored state matches the canonical W02 semantic projection",
+    "source and handoff identities remain unchanged"
+  ]
+}

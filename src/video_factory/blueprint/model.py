@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping
 import hashlib
 import re
+import unicodedata
 
 from video_factory.config.canonical import canonical_json_bytes, canonical_sha256
 from video_factory.domain import HashDigest, OpaqueId
@@ -169,12 +170,16 @@ def _require_material_paths(
         )
 
 
-def _validate_reference_locks(value: object, *, path: str) -> None:
+def _validate_reference_locks(
+    value: object, *, path: str
+) -> tuple[tuple[str, str, str, str], ...]:
     if not isinstance(value, list) or not value:
         raise BlueprintContractError(
             "blueprint.coherent.reference_lock",
             f"{path} must be a non-empty reference-lock list",
         )
+    validated: list[tuple[str, str, str, str]] = []
+    seen: set[str] = set()
     for item in value:
         if not isinstance(item, dict) or set(item) != {
             "path",
@@ -189,10 +194,12 @@ def _validate_reference_locks(value: object, *, path: str) -> None:
         if (
             not isinstance(reference_path, str)
             or not reference_path
+            or unicodedata.normalize("NFC", reference_path) != reference_path
             or reference_path.startswith(("/", "\\"))
             or "\\" in reference_path
             or ".." in reference_path.split("/")
             or re.match(r"^[A-Za-z]:", reference_path)
+            or any(ord(character) < 32 for character in reference_path)
         ):
             raise BlueprintContractError(
                 "blueprint.coherent.reference_lock",
@@ -212,6 +219,30 @@ def _validate_reference_locks(value: object, *, path: str) -> None:
                 "blueprint.coherent.reference_lock",
                 f"{path} contains an invalid artifact version",
             )
+        collision_key = unicodedata.normalize("NFC", reference_path).casefold()
+        if collision_key in seen:
+            raise BlueprintContractError(
+                "blueprint.coherent.reference_lock_duplicate",
+                f"{path} contains duplicate or colliding reference paths",
+            )
+        seen.add(collision_key)
+        validated.append(
+            (
+                collision_key,
+                reference_path,
+                item["sha256"],
+                item["artifact_version"],
+            )
+        )
+    canonical = tuple(
+        sorted(validated, key=lambda item: (item[0], item[1], item[2], item[3]))
+    )
+    if tuple(validated) != canonical:
+        raise BlueprintContractError(
+            "blueprint.coherent.reference_lock_order",
+            f"{path} reference locks must use canonical path order",
+        )
+    return canonical
 
 
 def _validate_coherent_detail_semantics(fields: tuple[BlueprintField, ...]) -> None:
@@ -225,6 +256,7 @@ def _validate_coherent_detail_semantics(fields: tuple[BlueprintField, ...]) -> N
     string_suffixes = {"purpose", "generation.prompt"}
     list_suffixes = {"subjects", "acceptance.criteria"}
     reference_suffixes = {"generation.references"}
+    reference_identities: dict[str, tuple[str, str, str]] = {}
     for field in fields:
         value = parse_json_bytes(field.value_json.encode("utf-8"))
         suffix = (
@@ -233,7 +265,16 @@ def _validate_coherent_detail_semantics(fields: tuple[BlueprintField, ...]) -> N
             else ""
         )
         if field.path in reference_paths or suffix in reference_suffixes:
-            _validate_reference_locks(value, path=field.path)
+            locks = _validate_reference_locks(value, path=field.path)
+            for collision_key, reference_path, digest, artifact_version in locks:
+                identity = (reference_path, digest, artifact_version)
+                previous = reference_identities.get(collision_key)
+                if previous is not None and previous != identity:
+                    raise BlueprintContractError(
+                        "blueprint.coherent.reference_lock_conflict",
+                        "one reference path cannot identify different immutable artifacts",
+                    )
+                reference_identities[collision_key] = identity
         elif field.path in string_paths or suffix in string_suffixes:
             if not isinstance(value, str) or not value.strip():
                 raise BlueprintContractError(
@@ -316,8 +357,8 @@ def channel_constitution_to_mapping(value: ChannelConstitution) -> dict[str, obj
         label="channel constitution",
     )
     identity = {
-        "channel_id": str(value.channel_id),
-        "rules_version": value.rules_version,
+        "channel_id": _token(str(value.channel_id), "channel_id"),
+        "rules_version": _token(value.rules_version, "rules_version"),
         "fields": _fields_mapping(value.fields),
     }
     expected_id, expected_sha = _identity("channel-constitution", identity)
@@ -367,9 +408,11 @@ def concept_constitution_to_mapping(value: ConceptConstitution) -> dict[str, obj
         label="concept constitution",
     )
     identity = {
-        "concept_id": str(value.concept_id),
-        "channel_constitution_sha256": str(value.channel_constitution_sha256),
-        "rules_version": value.rules_version,
+        "concept_id": _token(str(value.concept_id), "concept_id"),
+        "channel_constitution_sha256": str(
+            _sha(str(value.channel_constitution_sha256), "channel constitution")
+        ),
+        "rules_version": _token(value.rules_version, "rules_version"),
         "fields": _fields_mapping(value.fields),
     }
     _sha(identity["channel_constitution_sha256"], "channel_constitution_sha256")
@@ -425,12 +468,28 @@ def episode_intent_to_mapping(value: EpisodeIntent) -> dict[str, object]:
         reason_code="blueprint.intent.required",
         label="episode intent",
     )
+    if value.needs_complexity not in COMPLEXITIES:
+        raise BlueprintContractError(
+            "blueprint.intent.complexity", "invalid needs complexity"
+        )
+    signals = tuple(value.activation_signals)
+    if signals != tuple(sorted(set(signals))) or any(
+        not TOKEN.fullmatch(item) for item in signals
+    ):
+        raise BlueprintContractError(
+            "blueprint.intent.signals",
+            "activation signals must be sorted unique tokens",
+        )
     identity = {
-        "episode_id": str(value.episode_id),
-        "channel_constitution_sha256": str(value.channel_constitution_sha256),
-        "concept_constitution_sha256": str(value.concept_constitution_sha256),
+        "episode_id": _token(str(value.episode_id), "episode_id"),
+        "channel_constitution_sha256": str(
+            _sha(str(value.channel_constitution_sha256), "channel constitution")
+        ),
+        "concept_constitution_sha256": str(
+            _sha(str(value.concept_constitution_sha256), "concept constitution")
+        ),
         "needs_complexity": value.needs_complexity,
-        "activation_signals": list(value.activation_signals),
+        "activation_signals": list(signals),
         "fields": _fields_mapping(value.fields),
     }
     expected_id, expected_sha = _identity("episode-intent", identity)
@@ -702,7 +761,7 @@ def validate_blueprint_source_bundle(
         )
 
 
-def build_production_blueprint(
+def _assemble_production_blueprint(
     *,
     episode_id: str,
     revision: int,
@@ -747,6 +806,88 @@ def build_production_blueprint(
         ownership=value.ownership,
         director_provenance=value.director_provenance,
         unresolved_blockers=value.unresolved_blockers,
+    )
+
+
+def build_production_blueprint(
+    *,
+    episode_id: str,
+    revision: int,
+    status: BlueprintStatus,
+    context: BlueprintContext,
+    fields: Iterable[BlueprintField],
+    ownership: Iterable[FieldOwnership],
+    director_provenance: Iterable[DirectorProvenance] = (),
+    unresolved_blockers: Iterable[str] = (),
+) -> ProductionBlueprint:
+    """Build an unevaluated draft or blocked Blueprint.
+
+    ``coherent`` is a verified Director-synthesis promotion state and cannot be
+    minted by the general-purpose builder.  Persisted coherent artifacts remain
+    loadable for observation, while callers that rely on the promotion claim
+    must use the Director Mesh verifier with the complete evidence bundle.
+    """
+
+    if status is BlueprintStatus.COHERENT:
+        raise BlueprintContractError(
+            "blueprint.coherent.promotion_required",
+            "coherent Blueprints must be produced by verified Director synthesis",
+        )
+    return _assemble_production_blueprint(
+        episode_id=episode_id,
+        revision=revision,
+        status=status,
+        context=context,
+        fields=fields,
+        ownership=ownership,
+        director_provenance=director_provenance,
+        unresolved_blockers=unresolved_blockers,
+    )
+
+
+def _load_production_blueprint(
+    *,
+    episode_id: str,
+    revision: int,
+    status: BlueprintStatus,
+    context: BlueprintContext,
+    fields: Iterable[BlueprintField],
+    ownership: Iterable[FieldOwnership],
+    director_provenance: Iterable[DirectorProvenance],
+    unresolved_blockers: Iterable[str],
+) -> ProductionBlueprint:
+    """Rehydrate a structurally valid artifact without asserting promotion evidence."""
+
+    return _assemble_production_blueprint(
+        episode_id=episode_id,
+        revision=revision,
+        status=status,
+        context=context,
+        fields=fields,
+        ownership=ownership,
+        director_provenance=director_provenance,
+        unresolved_blockers=unresolved_blockers,
+    )
+
+
+def _build_synthesized_production_blueprint(
+    *,
+    base_blueprint: ProductionBlueprint,
+    fields: Iterable[BlueprintField],
+    director_provenance: Iterable[DirectorProvenance],
+) -> ProductionBlueprint:
+    """Internal constructor for an already revalidated Director synthesis."""
+
+    production_blueprint_to_mapping(base_blueprint)
+    return _assemble_production_blueprint(
+        episode_id=str(base_blueprint.episode_id),
+        revision=base_blueprint.revision + 1,
+        status=BlueprintStatus.COHERENT,
+        context=base_blueprint.context,
+        fields=fields,
+        ownership=base_blueprint.ownership,
+        director_provenance=director_provenance,
+        unresolved_blockers=(),
     )
 
 

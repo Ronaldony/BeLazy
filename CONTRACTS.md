@@ -93,9 +93,13 @@ write/process APIs. Complements `check_core_purity.py` and `check_repo_isolation
 includes eight material context digests, every canonical active field, exact
 owner/verifier coverage, Director provenance, status, and blockers. Required
 root and per-shot detail is validated in Python in addition to the closed JSON
-Schema contract. `coherent` requires non-empty path-specific values, valid
-reference locks, and provenance that exactly covers every active owner and
-verifier. Task planning and synthesis additionally require the actual validated
+Schema contract. `coherent` requires non-empty path-specific values, canonical
+non-conflicting reference locks, and provenance that exactly covers every
+active owner and verifier. The general Blueprint builder cannot mint this
+state. Director synthesis derives it from the validated evidence set, and a
+caller relying on a persisted promotion must recompute that exact source,
+activation, task, assessment, synthesis, base, and context binding. Task
+planning and synthesis additionally require the actual validated
 Channel -> Concept -> EpisodeIntent source bundle and exact episode identity;
 opaque context digests alone are insufficient.
 
@@ -114,9 +118,11 @@ storyboard, generation, edit, sound, and publish are nested view kinds, not
 top-level legacy artifacts. Projections are always shadow-only, read-only,
 non-editable, and have `authority_effect=none`; supplying one as current input
 adds a blocking ArtifactGraph finding. Neither a coherent Blueprint, a Director
-PASS, nor a matching shadow comparison grants readiness or execution authority.
-Shadow comparison consumes a normalization receipt that binds the exact legacy
-document bytes, fixed normalizer/rules identity, and normalized field digest.
+PASS, nor a shadow diagnostic grants readiness or execution authority. W03 has
+no semantic legacy-to-Blueprint normalizer. It records caller-asserted fields as
+an explicit `unverified`, `diagnostic_only` observation bound to exact legacy
+bytes. Equality means only that those asserted fields equal the projection; it
+is not parity, migration, cutover, readiness, or authorization evidence.
 `ArtifactReference.sha256` always means exact serialized bytes; logical
 Blueprint/projection identity digests remain separate fields.
 

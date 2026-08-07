@@ -15,7 +15,7 @@ from .contracts import (
     ProductionBlueprint,
     ShadowComparison,
     ShadowFieldDifference,
-    ShadowNormalizationReceipt,
+    UnverifiedShadowObservation,
 )
 from .model import (
     BlueprintContractError,
@@ -42,13 +42,13 @@ from .projections import (
     AUTHORITY_EFFECT,
     blueprint_projection_to_mapping,
     blueprint_projection_artifact_sha256,
-    build_shadow_normalization_receipt,
     compare_shadow_projection,
     project_all_blueprint_views,
     project_blueprint,
     projection_compiler_sha256,
     shadow_comparison_to_mapping,
-    shadow_normalization_receipt_to_mapping,
+    record_unverified_shadow_observation,
+    unverified_shadow_observation_to_mapping,
     validate_projection_current,
 )
 from .serialization import (
@@ -85,7 +85,7 @@ __all__ = [
     "SHOT_REQUIRED_SUFFIXES",
     "ShadowComparison",
     "ShadowFieldDifference",
-    "ShadowNormalizationReceipt",
+    "UnverifiedShadowObservation",
     "blueprint_artifact_from_bytes",
     "blueprint_artifact_from_mapping",
     "blueprint_artifact_to_bytes",
@@ -100,7 +100,6 @@ __all__ = [
     "build_episode_intent",
     "build_blueprint_source_bundle",
     "build_production_blueprint",
-    "build_shadow_normalization_receipt",
     "channel_constitution_from_mapping",
     "channel_constitution_to_mapping",
     "compare_shadow_projection",
@@ -118,7 +117,8 @@ __all__ = [
     "project_blueprint",
     "projection_compiler_sha256",
     "shadow_comparison_to_mapping",
-    "shadow_normalization_receipt_to_mapping",
+    "record_unverified_shadow_observation",
+    "unverified_shadow_observation_to_mapping",
     "validate_projection_current",
     "validate_blueprint_source_bundle",
 ]

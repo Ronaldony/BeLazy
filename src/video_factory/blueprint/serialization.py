@@ -36,10 +36,10 @@ from .contracts import (
 )
 from .model import (
     BlueprintContractError,
+    _load_production_blueprint,
     build_channel_constitution,
     build_concept_constitution,
     build_episode_intent,
-    build_production_blueprint,
     channel_constitution_to_mapping,
     concept_constitution_to_mapping,
     episode_intent_to_mapping,
@@ -184,7 +184,7 @@ def production_blueprint_from_mapping(
         )
         for item in cast(list[dict[str, object]], payload["director_provenance"])
     )
-    value = build_production_blueprint(
+    value = _load_production_blueprint(
         episode_id=str(payload["episode_id"]),
         revision=int(payload["revision"]),
         status=BlueprintStatus(str(payload["status"])),

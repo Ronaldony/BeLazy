@@ -11,16 +11,18 @@
   bound assessments, and deterministic conflict synthesis capped at two rounds.
 - Added deterministic brief/storyboard/generation/edit/sound/publish shadow
   views inside the read-only `blueprint-projection/1.0` envelope. Projections
-  and parity comparisons have no authority effect, and current projection
-  snapshots now fail the ArtifactGraph gate. Legacy authority paths are not cut
-  over in W03.
+  and diagnostic comparisons have no authority effect, and current projection
+  snapshots now fail the ArtifactGraph gate. Caller-asserted legacy fields are
+  labeled unverified diagnostics rather than parity evidence. Legacy authority
+  paths are not cut over in W03.
 - Bound Blueprint task/projection references to exact canonical artifact bytes,
   while retaining separate logical identity digests. Coherent promotion now
   requires material typed detail and complete Director provenance; task and
   synthesis consumers revalidate the exact Channel/Concept/EpisodeIntent chain
-  and re-derive conditional activation. Conflict round two carries an exact
-  blocked predecessor, and shadow comparison uses a byte-bound normalization
-  receipt with fixed rules.
+  and re-derive conditional activation. The general builder cannot mint a
+  coherent state; persisted promotion claims require complete synthesis-evidence
+  recomputation. Reference locks reject duplicate, colliding, or conflicting
+  identities. Conflict round two carries an exact blocked predecessor.
 - Added the pure managed-mutation contract and guard plane: six packaged
   artifacts, deterministic exact-before planning, immutable revision and
   tombstone derivation, drift quarantine, strict cross-platform path policy,

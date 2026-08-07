@@ -143,16 +143,15 @@ class ShadowFieldDifference:
 
 
 @dataclass(frozen=True, slots=True)
-class ShadowNormalizationReceipt:
-    receipt_id: OpaqueId
-    receipt_sha256: HashDigest
+class UnverifiedShadowObservation:
+    observation_id: OpaqueId
+    observation_sha256: HashDigest
     legacy_artifact_ref: ArtifactReference
     legacy_document_sha256: HashDigest
-    normalizer_id: OpaqueId
-    normalizer_version: str
-    normalizer_sha256: HashDigest
-    normalization_rules_sha256: HashDigest
-    normalized_view_sha256: HashDigest
+    trust_state: str
+    diagnostic_only: bool
+    authority_effect: str
+    observed_view_sha256: HashDigest
     fields: tuple[BlueprintField, ...]
 
 
@@ -163,15 +162,15 @@ class ShadowComparison:
     legacy_artifact_ref: ArtifactReference
     projection_ref: ArtifactReference
     projection_sha256: HashDigest
-    normalization_receipt_sha256: HashDigest
+    observation_sha256: HashDigest
     observed_view_sha256: HashDigest
     comparator_id: OpaqueId
     comparator_version: str
     comparator_sha256: HashDigest
-    normalization_rules_sha256: HashDigest
+    comparison_semantics: str
     authority_effect: str
     differences: tuple[ShadowFieldDifference, ...]
 
     @property
-    def matches(self) -> bool:
+    def diagnostic_equal(self) -> bool:
         return not self.differences

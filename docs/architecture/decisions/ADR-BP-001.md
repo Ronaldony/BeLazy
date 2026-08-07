@@ -39,6 +39,15 @@ safe relative paths plus exact byte digests and artifact versions, and Director
 provenance must exactly cover every active owner and verifier. Incomplete design
 objects remain `draft` or `blocked`.
 
+The general Blueprint builder cannot create `coherent`. Director synthesis
+derives the promoted object only after validating the complete source bundle,
+registry, activation, tasks, charters, assessments, base Blueprint, and context.
+A deserialized coherent artifact is structurally loadable for observation, but
+its promotion claim is trusted only after the same evidence is recomputed by
+`verify_coherent_blueprint_promotion`. Reference-lock lists use canonical path
+order, forbid duplicates/collisions, and cannot bind one path to different byte
+digests or artifact versions across root and per-shot fields.
+
 Logical identity digests (`blueprint_sha256`, `projection_sha256`) and immutable
 artifact byte digests have different meanings. `ArtifactReference.sha256`
 always hashes the exact canonical serialized bytes. The logical digest remains
@@ -59,6 +68,8 @@ human evidence, and later authority decisions.
 - More detail is required before a Blueprint can be coherent.
 - Legacy consumers continue operating during W03 through non-authoritative
   projections; no cutover occurs in this decision.
+- Until a versioned legacy semantic normalizer exists, shadow observations are
+  explicitly unverified diagnostics. Field equality is not parity evidence.
 
 ## Rejected alternatives
 

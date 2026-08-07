@@ -183,3 +183,13 @@ class SynthesisOutcome:
     synthesis: DirectorSynthesis
     blueprint: ProductionBlueprint | None
     conflicts: tuple[ConflictResult, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class VerifiedBlueprintPromotion:
+    """Ephemeral proof that a coherent Blueprint was recomputed from its evidence."""
+
+    blueprint: ProductionBlueprint
+    synthesis: DirectorSynthesis
+    activation_sha256: HashDigest
+    authority_effect: str

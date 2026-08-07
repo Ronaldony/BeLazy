@@ -6,7 +6,7 @@ from video_factory.blueprint import (
     BlueprintProjection,
     BlueprintSourceBundle,
     ProductionBlueprint,
-    ShadowNormalizationReceipt,
+    UnverifiedShadowObservation,
 )
 from video_factory.config import (
     CONFIG_LAYER_ORDER,
@@ -28,6 +28,7 @@ from video_factory.directors import (
     DirectorAssessment,
     DirectorRuntimePort,
     DirectorTaskPlan,
+    VerifiedBlueprintPromotion,
 )
 
 
@@ -145,17 +146,22 @@ def test_blueprint_and_director_contract_shapes_are_explicit() -> None:
         "read_only",
         "fields",
     )
-    assert _field_names(ShadowNormalizationReceipt) == (
-        "receipt_id",
-        "receipt_sha256",
+    assert _field_names(UnverifiedShadowObservation) == (
+        "observation_id",
+        "observation_sha256",
         "legacy_artifact_ref",
         "legacy_document_sha256",
-        "normalizer_id",
-        "normalizer_version",
-        "normalizer_sha256",
-        "normalization_rules_sha256",
-        "normalized_view_sha256",
+        "trust_state",
+        "diagnostic_only",
+        "authority_effect",
+        "observed_view_sha256",
         "fields",
+    )
+    assert _field_names(VerifiedBlueprintPromotion) == (
+        "blueprint",
+        "synthesis",
+        "activation_sha256",
+        "authority_effect",
     )
     assert _field_names(DirectorTaskPlan) == (
         "task_id",

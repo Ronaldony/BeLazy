@@ -31,13 +31,13 @@ from video_factory.blueprint import (
     build_concept_constitution,
     build_episode_intent,
     build_production_blueprint,
-    build_shadow_normalization_receipt,
     compare_shadow_projection,
     field_index,
     field_value_sha256,
     project_all_blueprint_views,
     production_blueprint_to_mapping,
     production_blueprint_artifact_sha256,
+    record_unverified_shadow_observation,
     shadow_comparison_to_mapping,
     validate_projection_current,
 )
@@ -71,11 +71,13 @@ from video_factory.directors import (
     plan_director_tasks,
     synthesize_director_assessments,
     validate_director_assessment,
+    verify_coherent_blueprint_promotion,
 )
 from video_factory.domain import (
     ArtifactReference,
     ArtifactVersion,
     HashDigest,
+    OpaqueId,
     RelativeArtifactPath,
 )
 from video_factory.engine import build_artifact_graph, make_artifact_snapshot
@@ -318,9 +320,89 @@ def test_detailed_blueprint_is_deterministic_and_fully_owned() -> None:
     assert validate_artifact_mapping(empty_coherent_mapping).ok is False
 
 
+def test_public_blueprint_serializers_reject_self_rehashed_schema_invalid_values() -> None:
+    channel, concept, intent, _, _, _, blueprint = _blueprint_fixture()
+
+    channel_mapping = blueprint_artifact_to_mapping(channel)
+    channel_mapping["channel_id"] = "bad id"
+    channel_identity = {
+        key: value
+        for key, value in channel_mapping.items()
+        if key not in {"artifact_version", "constitution_id", "constitution_sha256"}
+    }
+    channel_digest = canonical_sha256(channel_identity)
+    rebound_channel = replace(
+        channel,
+        constitution_id=OpaqueId(f"channel-constitution-{str(channel_digest)[:20]}"),
+        constitution_sha256=channel_digest,
+        channel_id=OpaqueId("bad id"),
+    )
+    with pytest.raises(BlueprintContractError, match="invalid channel_id"):
+        blueprint_artifact_to_mapping(rebound_channel)
+
+    concept_mapping = blueprint_artifact_to_mapping(concept)
+    concept_mapping["rules_version"] = ""
+    concept_identity = {
+        key: value
+        for key, value in concept_mapping.items()
+        if key not in {"artifact_version", "constitution_id", "constitution_sha256"}
+    }
+    concept_digest = canonical_sha256(concept_identity)
+    rebound_concept = replace(
+        concept,
+        constitution_id=OpaqueId(f"concept-constitution-{str(concept_digest)[:20]}"),
+        constitution_sha256=concept_digest,
+        rules_version="",
+    )
+    with pytest.raises(BlueprintContractError, match="invalid rules_version"):
+        blueprint_artifact_to_mapping(rebound_concept)
+
+    intent_mapping = blueprint_artifact_to_mapping(intent)
+    intent_mapping["activation_signals"] = ["z", "a"]
+    intent_identity = {
+        key: value
+        for key, value in intent_mapping.items()
+        if key not in {"artifact_version", "intent_id", "intent_sha256"}
+    }
+    intent_digest = canonical_sha256(intent_identity)
+    rebound_intent = replace(
+        intent,
+        intent_id=OpaqueId(f"episode-intent-{str(intent_digest)[:20]}"),
+        intent_sha256=intent_digest,
+        activation_signals=("z", "a"),
+    )
+    with pytest.raises(BlueprintContractError, match="sorted unique"):
+        blueprint_artifact_to_mapping(rebound_intent)
+
+    source_ref = ArtifactReference(
+        path=RelativeArtifactPath("artifacts/production-blueprint.json"),
+        sha256=production_blueprint_artifact_sha256(blueprint),
+        artifact_version=ArtifactVersion("production-blueprint/1.0"),
+    )
+    projection = project_all_blueprint_views(
+        blueprint, source_blueprint_ref=source_ref
+    )[0]
+    projection_mapping = blueprint_projection_to_mapping(projection)
+    projection_mapping["source_blueprint_id"] = "bad id"
+    projection_identity = {
+        key: value
+        for key, value in projection_mapping.items()
+        if key not in {"artifact_version", "projection_id", "projection_sha256"}
+    }
+    projection_digest = canonical_sha256(projection_identity)
+    rebound_projection = replace(
+        projection,
+        projection_id=OpaqueId(f"blueprint-projection-{str(projection_digest)[:20]}"),
+        projection_sha256=projection_digest,
+        source_blueprint_id=OpaqueId("bad id"),
+    )
+    with pytest.raises(BlueprintContractError, match="source identity"):
+        blueprint_projection_to_mapping(rebound_projection)
+
+
 def test_blueprint_rejects_missing_detail_and_owner_verifier_gaps() -> None:
     _, _, _, _, _, _, blueprint = _blueprint_fixture()
-    with pytest.raises(BlueprintContractError, match="required Blueprint fields"):
+    with pytest.raises(BlueprintContractError, match="verified Director synthesis"):
         build_production_blueprint(
             episode_id="episode-demo",
             revision=1,
@@ -329,18 +411,14 @@ def test_blueprint_rejects_missing_detail_and_owner_verifier_gaps() -> None:
             fields=blueprint.fields[:-1],
             ownership=blueprint.ownership[:-1],
         )
-    broken = replace(
-        blueprint.ownership[0],
-        verifier_director_ids=(blueprint.ownership[0].owner_director_id,),
-    )
-    with pytest.raises(BlueprintContractError, match="distinct"):
+    with pytest.raises(BlueprintContractError, match="verified Director synthesis"):
         build_production_blueprint(
             episode_id="episode-demo",
             revision=1,
             status=BlueprintStatus.COHERENT,
             context=blueprint.context,
             fields=blueprint.fields,
-            ownership=(broken, *blueprint.ownership[1:]),
+            ownership=blueprint.ownership,
         )
 
 
@@ -353,7 +431,7 @@ def test_coherent_blueprint_requires_material_detail_and_exact_provenance() -> N
         )
         for item in blueprint.fields
     )
-    with pytest.raises(BlueprintContractError, match="material values"):
+    with pytest.raises(BlueprintContractError, match="verified Director synthesis"):
         build_production_blueprint(
             episode_id="episode-demo",
             revision=1,
@@ -362,7 +440,7 @@ def test_coherent_blueprint_requires_material_detail_and_exact_provenance() -> N
             fields=empty_fields,
             ownership=blueprint.ownership,
         )
-    with pytest.raises(BlueprintContractError, match="exactly cover"):
+    with pytest.raises(BlueprintContractError, match="verified Director synthesis"):
         build_production_blueprint(
             episode_id="episode-demo",
             revision=1,
@@ -370,6 +448,111 @@ def test_coherent_blueprint_requires_material_detail_and_exact_provenance() -> N
             context=blueprint.context,
             fields=blueprint.fields,
             ownership=blueprint.ownership,
+        )
+
+
+@pytest.mark.parametrize(
+    "field_path",
+    (
+        "asset_and_reference_locks.references",
+        "shot_graph.s01.generation.references",
+    ),
+)
+@pytest.mark.parametrize("variant", ("exact_duplicate", "digest", "version"))
+def test_coherent_promotion_rejects_duplicate_reference_lock_identity(
+    field_path: str, variant: str
+) -> None:
+    _, _, _, sources, charters, activation, blueprint = _blueprint_fixture()
+    original = {
+        "path": "artifacts/same.json",
+        "sha256": "a" * 64,
+        "artifact_version": "analytics-record/1.0",
+    }
+    duplicate = dict(original)
+    if variant == "digest":
+        duplicate["sha256"] = "b" * 64
+    elif variant == "version":
+        duplicate["artifact_version"] = "brief/1.0"
+    current = field_index(blueprint)
+    current[field_path] = blueprint_field(field_path, [original, duplicate])
+    candidate = build_production_blueprint(
+        episode_id=str(blueprint.episode_id),
+        revision=blueprint.revision,
+        status=BlueprintStatus.DRAFT,
+        context=blueprint.context,
+        fields=tuple(current[path] for path in sorted(current)),
+        ownership=blueprint.ownership,
+    )
+    tasks = _tasks(candidate, charters, activation, sources)
+    assessments = _all_assessments(candidate, charters, activation, tasks)
+    with pytest.raises(BlueprintContractError, match="duplicate or colliding"):
+        synthesize_director_assessments(
+            blueprint=candidate,
+            charters=charters,
+            activation=activation,
+            source_bundle=sources,
+            tasks=tasks,
+            assessments=assessments,
+        )
+
+
+def test_coherent_promotion_rejects_cross_field_reference_conflict_and_order() -> None:
+    _, _, _, sources, charters, activation, blueprint = _blueprint_fixture()
+
+    def synthesize_with(changes: dict[str, object]) -> None:
+        current = field_index(blueprint)
+        for path, value in changes.items():
+            current[path] = blueprint_field(path, value)
+        candidate = build_production_blueprint(
+            episode_id=str(blueprint.episode_id),
+            revision=blueprint.revision,
+            status=BlueprintStatus.DRAFT,
+            context=blueprint.context,
+            fields=tuple(current[path] for path in sorted(current)),
+            ownership=blueprint.ownership,
+        )
+        tasks = _tasks(candidate, charters, activation, sources)
+        assessments = _all_assessments(candidate, charters, activation, tasks)
+        synthesize_director_assessments(
+            blueprint=candidate,
+            charters=charters,
+            activation=activation,
+            source_bundle=sources,
+            tasks=tasks,
+            assessments=assessments,
+        )
+
+    common = {
+        "path": "artifacts/shared.json",
+        "artifact_version": "analytics-record/1.0",
+    }
+    with pytest.raises(BlueprintContractError, match="different immutable artifacts"):
+        synthesize_with(
+            {
+                "asset_and_reference_locks.references": [
+                    {**common, "sha256": "a" * 64}
+                ],
+                "shot_graph.s01.generation.references": [
+                    {**common, "sha256": "b" * 64}
+                ],
+            }
+        )
+    with pytest.raises(BlueprintContractError, match="canonical path order"):
+        synthesize_with(
+            {
+                "asset_and_reference_locks.references": [
+                    {
+                        "path": "artifacts/z.json",
+                        "sha256": "a" * 64,
+                        "artifact_version": "analytics-record/1.0",
+                    },
+                    {
+                        "path": "artifacts/a.json",
+                        "sha256": "b" * 64,
+                        "artifact_version": "analytics-record/1.0",
+                    },
+                ]
+            }
         )
 
 
@@ -636,6 +819,55 @@ def test_synthesis_is_deterministic_and_bounded_to_two_rounds() -> None:
     ) == first.synthesis
     assert first.synthesis.rounds_used == 1
     assert first.synthesis.previous_synthesis_sha256 is None
+    verified = verify_coherent_blueprint_promotion(
+        promoted_blueprint=first.blueprint,
+        synthesis=first.synthesis,
+        base_blueprint=blueprint,
+        charters=charters,
+        activation=activation,
+        source_bundle=sources,
+        tasks=tasks,
+        assessments=assessments,
+    )
+    assert verified.blueprint == first.blueprint
+    assert verified.synthesis == first.synthesis
+    assert verified.authority_effect == "none"
+
+    tampered_mapping = production_blueprint_to_mapping(first.blueprint)
+    provenance = tampered_mapping["director_provenance"]
+    assert isinstance(provenance, list)
+    provenance[0]["assessment_sha256"] = "f" * 64
+    identity = {
+        key: value
+        for key, value in tampered_mapping.items()
+        if key not in {"artifact_version", "blueprint_id", "blueprint_sha256"}
+    }
+    rebound_digest = canonical_sha256(identity)
+    tampered_mapping["blueprint_id"] = f"production-blueprint-{str(rebound_digest)[:20]}"
+    tampered_mapping["blueprint_sha256"] = str(rebound_digest)
+    tampered = blueprint_artifact_from_mapping(tampered_mapping)
+    with pytest.raises(DirectorMeshError, match="complete evidence bundle"):
+        verify_coherent_blueprint_promotion(
+            promoted_blueprint=tampered,
+            synthesis=first.synthesis,
+            base_blueprint=blueprint,
+            charters=charters,
+            activation=activation,
+            source_bundle=sources,
+            tasks=tasks,
+            assessments=assessments,
+        )
+    with pytest.raises(DirectorMeshError, match="exactly one task and assessment"):
+        verify_coherent_blueprint_promotion(
+            promoted_blueprint=first.blueprint,
+            synthesis=first.synthesis,
+            base_blueprint=blueprint,
+            charters=charters,
+            activation=activation,
+            source_bundle=sources,
+            tasks=tasks,
+            assessments=assessments[:-1],
+        )
     with pytest.raises(DirectorMeshError, match="assessment digests"):
         director_artifact_to_mapping(
             replace(first.synthesis, assessment_sha256s=(HashDigest("bad"),))
@@ -1006,7 +1238,7 @@ def test_projection_envelope_is_deterministic_read_only_and_non_authoritative() 
         )
 
 
-def test_shadow_comparison_is_observational_and_projection_cannot_be_current() -> None:
+def test_shadow_comparison_is_unverified_diagnostic_and_cannot_be_current() -> None:
     _, _, _, _, _, _, blueprint = _blueprint_fixture()
     source_ref = ArtifactReference(
         path=RelativeArtifactPath("artifacts/production-blueprint.json"),
@@ -1031,40 +1263,45 @@ def test_shadow_comparison_is_observational_and_projection_cannot_be_current() -
         sha256=HashDigest(hashlib.sha256(legacy_bytes).hexdigest()),
         artifact_version=ArtifactVersion(projection.legacy_artifact_version),
     )
-    receipt = build_shadow_normalization_receipt(
+    observation = record_unverified_shadow_observation(
         legacy_artifact_ref=legacy_ref,
         legacy_document_bytes=legacy_bytes,
-        normalized_fields=reversed(projection.fields),
+        observed_fields=reversed(projection.fields),
     )
     comparison = compare_shadow_projection(
         projection,
         projection_ref=projection_ref,
-        normalization_receipt=receipt,
+        observation=observation,
     )
-    assert comparison.matches is True
+    assert comparison.diagnostic_equal is True
+    assert comparison.comparison_semantics == "diagnostic_only"
+    assert observation.trust_state == "unverified"
+    assert observation.diagnostic_only is True
     assert comparison.authority_effect == "none"
+    assert not hasattr(comparison, "matches")
     changed_fields = (
         blueprint_field(projection.fields[0].path, "changed"),
         *projection.fields[1:],
     )
-    changed_receipt = build_shadow_normalization_receipt(
+    changed_observation = record_unverified_shadow_observation(
         legacy_artifact_ref=legacy_ref,
         legacy_document_bytes=legacy_bytes,
-        normalized_fields=changed_fields,
+        observed_fields=changed_fields,
     )
     changed = compare_shadow_projection(
         projection,
         projection_ref=projection_ref,
-        normalization_receipt=changed_receipt,
+        observation=changed_observation,
     )
-    assert changed.matches is False
+    assert changed.diagnostic_equal is False
+    assert changed_observation.observation_sha256 != observation.observation_sha256
     with pytest.raises(BlueprintContractError, match="do not match"):
-        build_shadow_normalization_receipt(
+        record_unverified_shadow_observation(
             legacy_artifact_ref=legacy_ref,
             legacy_document_bytes=b"different",
-            normalized_fields=projection.fields,
+            observed_fields=projection.fields,
         )
-    with pytest.raises(BlueprintContractError, match="fixed comparator"):
+    with pytest.raises(BlueprintContractError, match="remain diagnostic"):
         shadow_comparison_to_mapping(
             replace(comparison, comparator_version="2.0")
         )

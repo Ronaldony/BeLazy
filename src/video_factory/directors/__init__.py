@@ -17,6 +17,7 @@ from .contracts import (
     ProposalKind,
     SynthesisOutcome,
     SynthesisStatus,
+    VerifiedBlueprintPromotion,
 )
 from .mesh import (
     MIN_SYNTHESIS_CONFIDENCE_BPS,
@@ -28,6 +29,7 @@ from .mesh import (
     director_task_plan_to_mapping,
     plan_director_tasks,
     synthesize_director_assessments,
+    verify_coherent_blueprint_promotion,
     validate_director_assessment,
 )
 from .registry import (
@@ -86,6 +88,7 @@ __all__ = [
     "ProposalKind",
     "SynthesisOutcome",
     "SynthesisStatus",
+    "VerifiedBlueprintPromotion",
     "activate_directors",
     "activation_policy_sha256",
     "build_director_assessment",
@@ -110,6 +113,7 @@ __all__ = [
     "plan_director_tasks",
     "scope_matches",
     "synthesize_director_assessments",
+    "verify_coherent_blueprint_promotion",
     "validate_director_assessment",
     "validate_director_activation",
     "validate_field_ownership",

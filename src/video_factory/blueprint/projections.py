@@ -27,7 +27,7 @@ from .contracts import (
     ProductionBlueprint,
     ShadowComparison,
     ShadowFieldDifference,
-    ShadowNormalizationReceipt,
+    UnverifiedShadowObservation,
 )
 from .model import (
     BlueprintContractError,
@@ -43,11 +43,12 @@ PROJECTION_COMPILER_ID = OpaqueId("blueprint-shadow-compiler")
 PROJECTION_COMPILER_VERSION = "1.0"
 COMPARATOR_ID = OpaqueId("blueprint-shadow-comparator")
 COMPARATOR_VERSION = "1.0"
-NORMALIZER_ID = OpaqueId("blueprint-shadow-normalizer")
-NORMALIZER_VERSION = "1.0"
 AUTHORITY_EFFECT = "none"
+OBSERVATION_TRUST_STATE = "unverified"
+COMPARISON_SEMANTICS = "diagnostic_only"
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 _ARTIFACT_VERSION = re.compile(r"^[a-z][a-z0-9-]*/[1-9][0-9]*\.[0-9]+$")
+_OPAQUE_ID = re.compile(r"^[a-z][a-z0-9._-]{0,127}$")
 
 _VIEW_PREFIXES: dict[BlueprintProjectionKind, tuple[str, ...]] = {
     BlueprintProjectionKind.BRIEF: (
@@ -188,6 +189,13 @@ def _projection_identity_mapping(value: BlueprintProjection) -> dict[str, object
         raise BlueprintContractError(
             "blueprint.projection.source", "projection source logical digest is invalid"
         )
+    if not _OPAQUE_ID.fullmatch(str(value.source_blueprint_id)) or not _SHA256.fullmatch(
+        str(value.blueprint_context_sha256)
+    ):
+        raise BlueprintContractError(
+            "blueprint.projection.source",
+            "projection source identity and context digest must be canonical",
+        )
     _reference_mapping(value.source_blueprint_ref)
     fields = normalize_fields(value.fields)
     payload_sha256 = canonical_sha256({"fields": _field_mappings(fields)})
@@ -325,119 +333,107 @@ def validate_projection_current(
         )
 
 
-def _normalization_rules_sha256() -> HashDigest:
+def _comparator_sha256() -> HashDigest:
     return canonical_sha256(
         {
-            "rules_version": "blueprint-shadow-normalization/1.0",
+            "comparator_id": str(COMPARATOR_ID),
+            "comparator_version": COMPARATOR_VERSION,
+            "comparison_semantics": COMPARISON_SEMANTICS,
             "field_path": "exact",
             "value_json": "canonical-json-exact",
         }
     )
 
 
-def _normalizer_sha256() -> HashDigest:
-    return canonical_sha256(
-        {
-            "normalizer_id": str(NORMALIZER_ID),
-            "normalizer_version": NORMALIZER_VERSION,
-            "normalization_rules_sha256": str(_normalization_rules_sha256()),
-        }
-    )
-
-
-def _comparator_sha256() -> HashDigest:
-    return canonical_sha256(
-        {
-            "comparator_id": str(COMPARATOR_ID),
-            "comparator_version": COMPARATOR_VERSION,
-            "normalization_rules_sha256": str(_normalization_rules_sha256()),
-        }
-    )
-
-
-def _normalization_receipt_identity_mapping(
-    value: ShadowNormalizationReceipt,
+def _unverified_observation_identity_mapping(
+    value: UnverifiedShadowObservation,
 ) -> dict[str, object]:
     _reference_mapping(value.legacy_artifact_ref)
     fields = normalize_fields(value.fields)
     observed_sha = canonical_sha256({"fields": _field_mappings(fields)})
     if (
         value.legacy_document_sha256 != value.legacy_artifact_ref.sha256
-        or value.normalizer_id != NORMALIZER_ID
-        or value.normalizer_version != NORMALIZER_VERSION
-        or value.normalizer_sha256 != _normalizer_sha256()
-        or value.normalization_rules_sha256 != _normalization_rules_sha256()
-        or value.normalized_view_sha256 != observed_sha
+        or value.trust_state != OBSERVATION_TRUST_STATE
+        or value.diagnostic_only is not True
+        or value.authority_effect != AUTHORITY_EFFECT
+        or value.observed_view_sha256 != observed_sha
     ):
         raise BlueprintContractError(
-            "blueprint.normalization.binding",
-            "normalization receipt is not bound to fixed rules, input bytes, and output fields",
+            "blueprint.observation.binding",
+            "unverified observation is not bound to its source bytes and asserted fields",
         )
     return {
         "legacy_artifact_ref": _reference_mapping(value.legacy_artifact_ref),
         "legacy_document_sha256": str(value.legacy_document_sha256),
-        "normalizer_id": str(value.normalizer_id),
-        "normalizer_version": value.normalizer_version,
-        "normalizer_sha256": str(value.normalizer_sha256),
-        "normalization_rules_sha256": str(value.normalization_rules_sha256),
-        "normalized_view_sha256": str(value.normalized_view_sha256),
+        "trust_state": value.trust_state,
+        "diagnostic_only": value.diagnostic_only,
+        "authority_effect": value.authority_effect,
+        "observed_view_sha256": str(value.observed_view_sha256),
         "fields": _field_mappings(fields),
     }
 
 
-def shadow_normalization_receipt_to_mapping(
-    value: ShadowNormalizationReceipt,
+def unverified_shadow_observation_to_mapping(
+    value: UnverifiedShadowObservation,
 ) -> dict[str, object]:
-    identity = _normalization_receipt_identity_mapping(value)
+    identity = _unverified_observation_identity_mapping(value)
     digest = canonical_sha256(identity)
-    if value.receipt_sha256 != digest or value.receipt_id != OpaqueId(
-        f"shadow-normalization-{str(digest)[:20]}"
+    if value.observation_sha256 != digest or value.observation_id != OpaqueId(
+        f"unverified-shadow-observation-{str(digest)[:20]}"
     ):
         raise BlueprintContractError(
-            "blueprint.normalization.identity", "normalization receipt identity mismatch"
+            "blueprint.observation.identity", "shadow observation identity mismatch"
         )
     return {
-        "receipt_version": "blueprint-shadow-normalization-receipt/1.0",
-        "receipt_id": str(value.receipt_id),
-        "receipt_sha256": str(value.receipt_sha256),
+        "observation_version": "blueprint-unverified-shadow-observation/1.0",
+        "observation_id": str(value.observation_id),
+        "observation_sha256": str(value.observation_sha256),
         **identity,
     }
 
 
-def build_shadow_normalization_receipt(
+def record_unverified_shadow_observation(
     *,
     legacy_artifact_ref: ArtifactReference,
     legacy_document_bytes: bytes,
-    normalized_fields: Iterable[BlueprintField],
-) -> ShadowNormalizationReceipt:
+    observed_fields: Iterable[BlueprintField],
+) -> UnverifiedShadowObservation:
+    """Bind caller-asserted fields to exact legacy bytes for diagnostics only.
+
+    W03 has no versioned semantic legacy-to-Blueprint normalizer.  Consequently
+    this record deliberately makes no normalization or parity claim and cannot
+    be used as cutover, readiness, or execution evidence.
+    """
+
     _reference_mapping(legacy_artifact_ref)
     document_sha = HashDigest(hashlib.sha256(legacy_document_bytes).hexdigest())
     if document_sha != legacy_artifact_ref.sha256:
         raise BlueprintContractError(
-            "blueprint.normalization.input_digest",
+            "blueprint.observation.input_digest",
             "legacy document bytes do not match the immutable artifact reference",
         )
-    fields = normalize_fields(sorted(normalized_fields, key=lambda item: item.path))
-    provisional = ShadowNormalizationReceipt(
-        receipt_id=OpaqueId("pending"),
-        receipt_sha256=HashDigest("0" * 64),
+    fields = normalize_fields(sorted(observed_fields, key=lambda item: item.path))
+    provisional = UnverifiedShadowObservation(
+        observation_id=OpaqueId("pending"),
+        observation_sha256=HashDigest("0" * 64),
         legacy_artifact_ref=legacy_artifact_ref,
         legacy_document_sha256=document_sha,
-        normalizer_id=NORMALIZER_ID,
-        normalizer_version=NORMALIZER_VERSION,
-        normalizer_sha256=_normalizer_sha256(),
-        normalization_rules_sha256=_normalization_rules_sha256(),
-        normalized_view_sha256=canonical_sha256(
+        trust_state=OBSERVATION_TRUST_STATE,
+        diagnostic_only=True,
+        authority_effect=AUTHORITY_EFFECT,
+        observed_view_sha256=canonical_sha256(
             {"fields": _field_mappings(fields)}
         ),
         fields=fields,
     )
-    identity = _normalization_receipt_identity_mapping(provisional)
+    identity = _unverified_observation_identity_mapping(provisional)
     digest = canonical_sha256(identity)
     return replace(
         provisional,
-        receipt_id=OpaqueId(f"shadow-normalization-{str(digest)[:20]}"),
-        receipt_sha256=digest,
+        observation_id=OpaqueId(
+            f"unverified-shadow-observation-{str(digest)[:20]}"
+        ),
+        observation_sha256=digest,
     )
 
 
@@ -459,25 +455,25 @@ def _comparison_identity_mapping(value: ShadowComparison) -> dict[str, object]:
         value.comparator_id != COMPARATOR_ID
         or value.comparator_version != COMPARATOR_VERSION
         or value.comparator_sha256 != _comparator_sha256()
-        or value.normalization_rules_sha256 != _normalization_rules_sha256()
-        or not _SHA256.fullmatch(str(value.normalization_receipt_sha256))
+        or value.comparison_semantics != COMPARISON_SEMANTICS
+        or not _SHA256.fullmatch(str(value.observation_sha256))
         or not _SHA256.fullmatch(str(value.observed_view_sha256))
         or not _SHA256.fullmatch(str(value.projection_sha256))
     ):
         raise BlueprintContractError(
             "blueprint.comparison.rules",
-            "comparison must use the fixed comparator and bound normalization receipt",
+            "comparison must remain diagnostic and bind one unverified observation",
         )
     return {
         "legacy_artifact_ref": _reference_mapping(value.legacy_artifact_ref),
         "projection_ref": _reference_mapping(value.projection_ref),
         "projection_sha256": str(value.projection_sha256),
-        "normalization_receipt_sha256": str(value.normalization_receipt_sha256),
+        "observation_sha256": str(value.observation_sha256),
         "observed_view_sha256": str(value.observed_view_sha256),
         "comparator_id": str(value.comparator_id),
         "comparator_version": value.comparator_version,
         "comparator_sha256": str(value.comparator_sha256),
-        "normalization_rules_sha256": str(value.normalization_rules_sha256),
+        "comparison_semantics": value.comparison_semantics,
         "authority_effect": value.authority_effect,
         "differences": [
             {
@@ -518,7 +514,7 @@ def compare_shadow_projection(
     projection: BlueprintProjection,
     *,
     projection_ref: ArtifactReference,
-    normalization_receipt: ShadowNormalizationReceipt,
+    observation: UnverifiedShadowObservation,
 ) -> ShadowComparison:
     blueprint_projection_to_mapping(projection)
     if projection_ref.sha256 != blueprint_projection_artifact_sha256(projection) or str(
@@ -527,13 +523,13 @@ def compare_shadow_projection(
         raise BlueprintContractError(
             "blueprint.comparison.projection", "comparison projection reference mismatch"
         )
-    shadow_normalization_receipt_to_mapping(normalization_receipt)
-    legacy_artifact_ref = normalization_receipt.legacy_artifact_ref
+    unverified_shadow_observation_to_mapping(observation)
+    legacy_artifact_ref = observation.legacy_artifact_ref
     if str(legacy_artifact_ref.artifact_version) != projection.legacy_artifact_version:
         raise BlueprintContractError(
             "blueprint.comparison.legacy", "legacy reference version mismatch"
         )
-    observed = normalization_receipt.fields
+    observed = observation.fields
     projected_by_path = {item.path: item for item in projection.fields}
     observed_by_path = {item.path: item for item in observed}
     differences: list[ShadowFieldDifference] = []
@@ -550,7 +546,6 @@ def compare_shadow_projection(
                     observed_value_sha256=actual_sha,
                 )
             )
-    normalization_rules = _normalization_rules_sha256()
     comparator_sha = _comparator_sha256()
     provisional = ShadowComparison(
         comparison_id=OpaqueId("pending"),
@@ -558,12 +553,12 @@ def compare_shadow_projection(
         legacy_artifact_ref=legacy_artifact_ref,
         projection_ref=projection_ref,
         projection_sha256=projection.projection_sha256,
-        normalization_receipt_sha256=normalization_receipt.receipt_sha256,
-        observed_view_sha256=normalization_receipt.normalized_view_sha256,
+        observation_sha256=observation.observation_sha256,
+        observed_view_sha256=observation.observed_view_sha256,
         comparator_id=COMPARATOR_ID,
         comparator_version=COMPARATOR_VERSION,
         comparator_sha256=comparator_sha,
-        normalization_rules_sha256=normalization_rules,
+        comparison_semantics=COMPARISON_SEMANTICS,
         authority_effect=AUTHORITY_EFFECT,
         differences=tuple(differences),
     )
@@ -584,12 +579,12 @@ __all__ = [
     "PROJECTION_COMPILER_VERSION",
     "blueprint_projection_to_mapping",
     "blueprint_projection_artifact_sha256",
-    "build_shadow_normalization_receipt",
+    "record_unverified_shadow_observation",
     "compare_shadow_projection",
     "project_all_blueprint_views",
     "project_blueprint",
     "projection_compiler_sha256",
     "shadow_comparison_to_mapping",
-    "shadow_normalization_receipt_to_mapping",
+    "unverified_shadow_observation_to_mapping",
     "validate_projection_current",
 ]

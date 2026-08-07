@@ -8,15 +8,14 @@ import re
 
 from video_factory.blueprint.contracts import (
     BlueprintField,
-    BlueprintStatus,
     BlueprintSourceBundle,
     DirectorProvenance,
     ProductionBlueprint,
 )
 from video_factory.blueprint.model import (
     BlueprintContractError,
+    _build_synthesized_production_blueprint,
     blueprint_context_sha256,
-    build_production_blueprint,
     field_index,
     field_value_sha256,
     normalize_fields,
@@ -41,6 +40,7 @@ from .contracts import (
     ProposalKind,
     SynthesisOutcome,
     SynthesisStatus,
+    VerifiedBlueprintPromotion,
 )
 from .registry import (
     MAX_CONFLICT_ROUNDS,
@@ -1114,15 +1114,10 @@ def synthesize_director_assessments(
                 key=lambda item: (str(item.director_id), str(item.assessment_sha256)),
             )
         )
-        result_blueprint = build_production_blueprint(
-            episode_id=str(blueprint.episode_id),
-            revision=blueprint.revision + 1,
-            status=BlueprintStatus.COHERENT,
-            context=blueprint.context,
+        result_blueprint = _build_synthesized_production_blueprint(
+            base_blueprint=blueprint,
             fields=tuple(current[path] for path in sorted(current)),
-            ownership=blueprint.ownership,
             director_provenance=provenance,
-            unresolved_blockers=(),
         )
 
     provisional = DirectorSynthesis(
@@ -1162,4 +1157,52 @@ def synthesize_director_assessments(
         synthesis=synthesis,
         blueprint=result_blueprint,
         conflicts=tuple(conflicts),
+    )
+
+
+def verify_coherent_blueprint_promotion(
+    *,
+    promoted_blueprint: ProductionBlueprint,
+    synthesis: DirectorSynthesis,
+    base_blueprint: ProductionBlueprint,
+    charters: Iterable[DirectorCharter],
+    activation: DirectorActivation,
+    source_bundle: BlueprintSourceBundle,
+    tasks: Iterable[DirectorTaskPlan],
+    assessments: Iterable[DirectorAssessment],
+    previous_synthesis: DirectorSynthesis | None = None,
+) -> VerifiedBlueprintPromotion:
+    """Recompute a promotion from the complete evidence bundle.
+
+    Loading a coherent artifact only proves structural validity.  This verifier
+    is the semantic boundary for callers that need to rely on its Director
+    promotion claim.  It still grants no generation, mutation, dispatch, or
+    publication authority.
+    """
+
+    production_blueprint_to_mapping(promoted_blueprint)
+    expected = synthesize_director_assessments(
+        blueprint=base_blueprint,
+        charters=tuple(charters),
+        activation=activation,
+        source_bundle=source_bundle,
+        tasks=tuple(tasks),
+        assessments=tuple(assessments),
+        previous_synthesis=previous_synthesis,
+    )
+    if expected.blueprint is None or expected.synthesis.status is not SynthesisStatus.COHERENT:
+        raise DirectorMeshError(
+            "director.promotion.not_coherent",
+            "the supplied evidence does not produce a coherent Blueprint",
+        )
+    if expected.synthesis != synthesis or expected.blueprint != promoted_blueprint:
+        raise DirectorMeshError(
+            "director.promotion.binding",
+            "coherent Blueprint and synthesis do not match the complete evidence bundle",
+        )
+    return VerifiedBlueprintPromotion(
+        blueprint=promoted_blueprint,
+        synthesis=synthesis,
+        activation_sha256=activation.activation_sha256,
+        authority_effect="none",
     )

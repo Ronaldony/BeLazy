@@ -1,0 +1,93 @@
+{
+  "protocol_version": "be-lazy-wave-recovery-anchor/1.0",
+  "wave": "W00-BOOTSTRAP-BASELINE",
+  "created_at": "2026-08-07T07:32:38.402Z",
+  "checkpoint": {
+    "commit": "d00856550f7f66618e3d365725e6b2d9054380c1",
+    "tree": "86c42f4611f21878976ebf6522e60dad3cbe281f",
+    "parent": "591c317630897f8efe29062ee263520a68167a36",
+    "subject": "autopilot(W00): bootstrap be-lazy and import verified baseline"
+  },
+  "tested_evidence": {
+    "commit": "0b29525b93b8e203481fca2282b9f4393b2c4a7a",
+    "tree": "ee2c38d36c1eddb6be2b1857b453bad9a0e79a6a"
+  },
+  "inputs": {
+    "source_archive_sha256": "954325b77028bcf7d36a88136d8e1ed0ec2348ad15014623710614cced94034a",
+    "handoff_manifest_sha256": "1bd3aa1687299c15f81539641afcd1563097b0ff8cebc9c24a793e132386244a",
+    "source_inventory_digest_sha256": "cc292a59d8b3a46e9ec15a5b3f4da6da8f5f57b2c2d31987a54b9fb5855d0709",
+    "import_plan_digest_sha256": "0bb4c713ca8e7c14e9d9a376c7e778e2983994fa006f08637cb628f63b9b48e1"
+  },
+  "review": {
+    "receipt_path": "reports/autopilot/waves/W00/review-round-2.md",
+    "receipt_sha256": "b7c66b260becfcd28733b92dbfb041d01aac8ddd790e5f3f57476ae2c4ea84cd",
+    "critical": 0,
+    "high": 0,
+    "reviewer_count": 3
+  },
+  "state": {
+    "location": ".be-lazy/autopilot/state.json",
+    "tracking": "REPOSITORY_LOCAL_IGNORED",
+    "schema_path": ".be-lazy/autopilot/schemas/autopilot-state.schema.json",
+    "schema_sha256": "bf102391da9c2797bbf37067efa8520fcae05ba2b115b33dfe9b15ba0f7155aa",
+    "semantic_canonicalization": "sha256-utf8-json-sort-keys-compact-ensure-ascii-false-v1",
+    "semantic_projection": {
+      "protocol_version": "be-lazy-prompt-autopilot-state/1.0",
+      "program_id": "be-lazy-successor-redesign",
+      "source": {
+        "expected_sha256": "954325b77028bcf7d36a88136d8e1ed0ec2348ad15014623710614cced94034a",
+        "observed_sha256": "954325b77028bcf7d36a88136d8e1ed0ec2348ad15014623710614cced94034a",
+        "unchanged": true
+      },
+      "handoff": {
+        "manifest_sha256": "1bd3aa1687299c15f81539641afcd1563097b0ff8cebc9c24a793e132386244a",
+        "verified": true
+      },
+      "target": {
+        "branch": "agent/autopilot-v4",
+        "initial_commit": "b7aaaf2ac43ca99970c317a7d505316a07d320e9"
+      },
+      "wave_identity_contract": [
+        {"id": "W00-BOOTSTRAP-BASELINE", "task_ids": ["BOOT-001", "BOOT-002", "BOOT-003", "BOOT-004", "BOOT-005"]},
+        {"id": "W01-TRUST-BOUNDARY", "task_ids": ["P0-PKG-001", "P0-JSON-001", "P0-AUTH-001"]},
+        {"id": "W02-MANAGED-MUTATION", "task_ids": ["MUT-001", "MUT-002", "MUT-003", "MUT-004"]},
+        {"id": "W03-DIRECTOR-BLUEPRINT", "task_ids": ["BP-001", "DIR-001", "DIR-002", "BP-002"]},
+        {"id": "W04-WORKFLOW-AUTHORITY", "task_ids": ["WF-001", "AUTH-001", "AUTH-002", "WF-002"]},
+        {"id": "W05-AUTOMATION-QUALITY-RELEASE", "task_ids": ["SEL-001", "QA-001", "REL-001"]},
+        {"id": "W06-RUNTIME-MIGRATION", "task_ids": ["RUN-001", "RUN-002", "MIG-001", "REL-002"]},
+        {"id": "W07-FINAL-AUDIT", "task_ids": ["AUDIT-001", "AUDIT-002", "AUDIT-003"]}
+      ],
+      "passed_wave": {
+        "id": "W00-BOOTSTRAP-BASELINE",
+        "status": "passed",
+        "attempts": 2,
+        "task_ids": ["BOOT-001", "BOOT-002", "BOOT-003", "BOOT-004", "BOOT-005"],
+        "checkpoint_commit": "d00856550f7f66618e3d365725e6b2d9054380c1",
+        "tests": [
+          {"id": "input-integrity", "status": "passed", "result": "handoff 49/49 files verified; source 211 members verified"},
+          {"id": "source-baseline-pytest", "status": "passed", "result": "329 passed"},
+          {"id": "target-focused-purity", "status": "passed", "result": "15 passed; core_purity PASS"},
+          {"id": "target-full-pytest", "status": "passed", "result": "343 passed on tested commit 0b29525b93b8e203481fca2282b9f4393b2c4a7a"},
+          {"id": "target-boundary-checks", "status": "passed", "result": "core_purity, side_effect_free, repo_isolation, target_boundary PASS"},
+          {"id": "w00-provenance", "status": "passed", "result": "Git objects and digest-bound evidence PASS"},
+          {"id": "w00-execution-context", "status": "recorded", "result": "Exact W00 local-only runner, cwd, and basetemp mapping retained for receipt replay"}
+        ],
+        "latest_reviews": [
+          {"round": 2, "role": "architecture_contract", "status": "approved", "critical": 0, "high": 0},
+          {"round": 2, "role": "security_authority_boundary", "status": "approved", "critical": 0, "high": 0},
+          {"round": 2, "role": "test_compatibility_packaging", "status": "approved", "critical": 0, "high": 0}
+        ],
+        "unresolved_findings": []
+      }
+    },
+    "semantic_sha256": "30346172f45433a40a3d0413dbb26b688a9d94b776632441560180776739b601"
+  },
+  "recovery_checks": [
+    "checkpoint commit resolves to the recorded tree and subject",
+    "tested evidence and checkpoint are ancestors of current HEAD",
+    "review receipt and state schema digests match",
+    "ignored state matches the redacted semantic projection",
+    "source and handoff digests remain unchanged",
+    "target worktree and boundary gates are clean"
+  ]
+}

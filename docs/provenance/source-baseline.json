@@ -90,8 +90,9 @@
     "initial_commit": "b7aaaf2ac43ca99970c317a7d505316a07d320e9",
     "baseline_snapshot_commit": "b7aaaf2ac43ca99970c317a7d505316a07d320e9",
     "baseline_snapshot_tree": "0f9f3cf065261a0b0f24faea72fa116687bb59d2",
-    "w00_checkpoint_commit": null,
-    "w00_checkpoint_seal_strategy": "This tracked provenance record binds the immutable baseline implementation commit and tree. After the reviewed W00 checkpoint commit exists, its exact commit hash is recorded in the repository-local ignored .be-lazy/autopilot/state.json; later tracked wave receipts cite that completed checkpoint without requiring a commit to contain its own hash.",
+    "w00_checkpoint_commit": "d00856550f7f66618e3d365725e6b2d9054380c1",
+    "w00_checkpoint_tree": "86c42f4611f21878976ebf6522e60dad3cbe281f",
+    "w00_checkpoint_seal_strategy": "The reviewed checkpoint commit/tree already exists. Ignored local state and reports/autopilot/waves/W00/recovery-anchor.json bind that object without requiring a commit to contain its own hash.",
     "remote_count_at_bootstrap": 0,
     "remote_contact_count": 0,
     "source_git_metadata_imported": false

@@ -90,24 +90,26 @@ def _validate_dist_info(
     metadata = BytesParser(policy=policy.default).parsebytes(
         archive.read(metadata_name)
     )
-    if metadata.get("Metadata-Version") != "2.1":
+    if metadata.get_all("Metadata-Version", []) != ["2.1"]:
         raise ValueError("wheel METADATA version must be 2.1")
-    metadata_name_value = metadata.get("Name")
+    metadata_names = metadata.get_all("Name", [])
+    metadata_name_value = metadata_names[0] if len(metadata_names) == 1 else None
     if (
         not isinstance(metadata_name_value, str)
         or _normalized_distribution(metadata_name_value) != dist_name
         or metadata_name_value != "video-production-core"
     ):
         raise ValueError("wheel METADATA distribution name mismatch")
-    if metadata.get("Version") != dist_version:
+    if metadata.get_all("Version", []) != [dist_version]:
         raise ValueError("wheel METADATA version does not match dist-info")
-    if not metadata.get("Requires-Python"):
+    requires_python = metadata.get_all("Requires-Python", [])
+    if len(requires_python) != 1 or not requires_python[0]:
         raise ValueError("wheel METADATA Requires-Python is missing")
 
     wheel = BytesParser(policy=policy.default).parsebytes(archive.read(wheel_name))
-    if wheel.get("Wheel-Version") != "1.0":
+    if wheel.get_all("Wheel-Version", []) != ["1.0"]:
         raise ValueError("wheel contract version must be 1.0")
-    if wheel.get("Root-Is-Purelib") != "true":
+    if wheel.get_all("Root-Is-Purelib", []) != ["true"]:
         raise ValueError("wheel must declare Root-Is-Purelib: true")
     if wheel.get_all("Tag", []) != [EXPECTED_WHEEL_TAG]:
         raise ValueError("wheel compatibility tag mismatch")

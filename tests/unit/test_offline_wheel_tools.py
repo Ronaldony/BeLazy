@@ -106,6 +106,11 @@ def test_wheel_rejects_nonempty_record_self_row(tmp_path: Path) -> None:
             b"Metadata-Version: 2.1\nName: video-production-core\nVersion: 9.9.9\nRequires-Python: >=3.12\n",
             "version does not match",
         ),
+        (
+            ".dist-info/METADATA",
+            b"Metadata-Version: 2.1\nName: video-production-core\nVersion: 0.3.1\nVersion: 9.9.9\nRequires-Python: >=3.12\n",
+            "version does not match",
+        ),
     ],
 )
 def test_wheel_rejects_semantically_invalid_metadata_with_valid_record(

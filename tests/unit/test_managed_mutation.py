@@ -55,6 +55,7 @@ from video_factory.mutation import (
     mutation_artifact_from_bytes,
     mutation_artifact_from_mapping,
     mutation_artifact_to_mapping,
+    mutation_content_observation_sha256,
     mutation_plan_to_mapping,
     mutation_execution_authorization_sha256,
     mutation_execution_authorization_id,
@@ -976,6 +977,8 @@ def test_plan_aware_authorization_rejects_rebound_missing_evidence() -> None:
     authorization = _execution_authorization(plan)
     stripped = replace(
         authorization,
+        content_observation_sha256=mutation_content_observation_sha256(()),
+        content_observations=(),
         content_verifications=(),
         break_glass_authorization_id=None,
         break_glass_authorization_sha256=None,
@@ -991,7 +994,7 @@ def test_plan_aware_authorization_rejects_rebound_missing_evidence() -> None:
     with pytest.raises(MutationPlanError) as missing_content:
         validate_mutation_execution_authorization_for_plan(stripped, plan)
     assert missing_content.value.reason_code == (
-        "mutation.authorization.content_evidence_missing"
+        "mutation.authorization.content_binding"
     )
 
     break_glass_stripped = replace(
@@ -1031,7 +1034,7 @@ def test_plan_aware_authorization_rejects_rebound_missing_evidence() -> None:
             _after_observation(plan),
         )
     assert promotion.value.reason_code == (
-        "mutation.authorization.content_evidence_missing"
+        "mutation.authorization.content_binding"
     )
 
 
@@ -1621,6 +1624,7 @@ def test_guard_deduplicates_reused_content_before_idempotency_reservation() -> N
     assert len(plan.operations) == 2
     assert resolver.calls == 1
     assert ledger.calls == 1
+    assert len(authorization.content_observations) == 1
     assert len(authorization.content_verifications) == 1
 
     conflicting_operation = replace(
@@ -1660,6 +1664,68 @@ def test_guard_deduplicates_reused_content_before_idempotency_reservation() -> N
     assert rebound_identity.value.reason_code == (
         "mutation.content.object_identity_conflict"
     )
+
+
+def test_plan_aware_authorization_requires_one_observation_per_content_object() -> None:
+    first = _request(
+        kind=MutationKind.CREATE,
+        path="artifacts/one.txt",
+        expected=None,
+        key="two-content-objects",
+    )
+    second_operation = replace(
+        first.operations[0],
+        path=RelativeArtifactPath("artifacts/two.txt"),
+        new_content=ContentObject(OpaqueId("object-c"), SHA_C, 13),
+    )
+    plan = plan_mutation(
+        replace(
+            first,
+            operations=(first.operations[0], second_operation),
+        ),
+        _revision(),
+        _observation(),
+        policy_bundle_sha256=POLICY_SHA,
+    )
+    authorization = _execution_authorization(plan)
+    assert len(authorization.content_observations) == 2
+    assert len(authorization.content_verifications) == 2
+
+    remaining_observations = (authorization.content_observations[0],)
+    remaining_verifications = (
+        remaining_observations[0].resolver_evidence,
+    )
+    partial = replace(
+        authorization,
+        content_observations=remaining_observations,
+        content_verifications=remaining_verifications,
+        content_observation_sha256=mutation_content_observation_sha256(
+            remaining_observations
+        ),
+    )
+    partial = replace(
+        partial,
+        authorization_id=mutation_execution_authorization_id(partial),
+    )
+    assert validate_mutation_execution_authorization(partial) == partial
+    with pytest.raises(MutationPlanError) as incomplete:
+        validate_mutation_execution_authorization_for_plan(partial, plan)
+    assert incomplete.value.reason_code == "mutation.authorization.content_binding"
+
+    partial_receipt = _receipt(
+        plan,
+        authorization=partial,
+        after_observation=_after_observation(plan),
+    )
+    with pytest.raises(WorkspaceRevisionError) as promotion:
+        derive_workspace_revision(
+            _revision(),
+            plan,
+            partial_receipt,
+            partial,
+            _after_observation(plan),
+        )
+    assert promotion.value.reason_code == "mutation.authorization.content_binding"
 
 
 def test_r4_break_glass_requires_two_current_distinct_authenticated_humans() -> None:

@@ -47,7 +47,8 @@ human-approval issuer. Those implementations remain W06/W04 responsibilities.
 - create/replace content is re-resolved by a trusted port and exact object ID,
   digest, and byte length are bound into the execution authorization; identical
   objects reused across operations are resolved once and conflicting reuse of
-  one object ID is rejected before idempotency reservation;
+  one object ID is rejected before idempotency reservation; each unique object
+  retains its resolver-evidence pair and consumers require exact set coverage;
 - idempotency is an atomic trusted reservation over key, exact plan, and exact
   workspace observation; a caller-supplied optional lookup cannot authorize;
 - out-of-band change sets workspace trust to `UNTRUSTED` and blocks generation/publish;

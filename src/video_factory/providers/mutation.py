@@ -679,8 +679,7 @@ class MutationPreSideEffectGuard:
             for key in sorted(verification_by_identity)
         )
         content_observation_digest = mutation_content_observation_sha256(
-            plan,
-            content_verifications,
+            tuple(content_observations),
         )
 
         if authority_verifier is None:
@@ -787,6 +786,7 @@ class MutationPreSideEffectGuard:
             idempotency_key=plan.idempotency_key,
             idempotency_reservation=reservation.reservation_record,
             content_observation_sha256=content_observation_digest,
+            content_observations=tuple(content_observations),
             content_verifications=content_verifications,
             service_identity=service_identity,
             evaluated_at=evaluated_at.isoformat(),

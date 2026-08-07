@@ -22,6 +22,7 @@ from .contracts import (
     BreakGlassAuthorization,
     ChangeRequest,
     ContentObject,
+    ContentObjectObservation,
     DriftFinding,
     DriftKind,
     DriftReport,
@@ -1511,6 +1512,10 @@ def _execution_authorization_identity_mapping(
         "content_observation_sha256": str(
             authorization.content_observation_sha256
         ),
+        "content_observations": [
+            _content_object_observation_mapping(item)
+            for item in authorization.content_observations
+        ],
         "content_verifications": [
             _artifact_mapping(item) for item in authorization.content_verifications
         ],
@@ -1548,48 +1553,27 @@ def _execution_authorization_identity_mapping(
     }
 
 
-def mutation_content_observation_sha256(
-    plan: MutationPlan,
-    content_verifications: Sequence[ArtifactReference],
-) -> HashDigest:
-    """Bind planned immutable objects to the resolver evidence set."""
+def _content_object_observation_mapping(
+    observation: ContentObjectObservation,
+) -> dict[str, object]:
+    return {
+        "object_id": str(observation.object_id),
+        "exact_sha256": str(observation.exact_sha256),
+        "byte_length": observation.byte_length,
+        "resolver_evidence": _artifact_mapping(observation.resolver_evidence),
+    }
 
-    objects = {
-        (
-            str(operation.new_content.object_id),
-            str(operation.new_content.exact_sha256),
-            operation.new_content.byte_length,
-        )
-        for operation in plan.operations
-        if operation.new_content is not None
-    }
-    evidence = {
-        (
-            str(reference.path),
-            str(reference.sha256),
-            str(reference.artifact_version),
-        )
-        for reference in content_verifications
-    }
+
+def mutation_content_observation_sha256(
+    content_observations: Sequence[ContentObjectObservation],
+) -> HashDigest:
+    """Hash canonical object-to-resolver-evidence pairs."""
+
     return canonical_sha256(
-        {
-            "content_objects": [
-                {
-                    "object_id": object_id,
-                    "exact_sha256": exact_sha256,
-                    "byte_length": byte_length,
-                }
-                for object_id, exact_sha256, byte_length in sorted(objects)
-            ],
-            "resolver_evidence": [
-                {
-                    "path": path,
-                    "sha256": sha256,
-                    "artifact_version": artifact_version,
-                }
-                for path, sha256, artifact_version in sorted(evidence)
-            ],
-        }
+        [
+            _content_object_observation_mapping(item)
+            for item in content_observations
+        ]
     )
 
 
@@ -1633,6 +1617,98 @@ def validate_mutation_execution_authorization(
         str(authorization.content_observation_sha256),
         "content_observation_sha256",
     )
+    if not isinstance(authorization.content_observations, tuple):
+        raise MutationPlanError(
+            "mutation.authorization.content_observation_set",
+            "content observations must be an immutable tuple",
+        )
+    normalized_observations: list[ContentObjectObservation] = []
+    seen_object_ids: set[str] = set()
+    for index, observation in enumerate(authorization.content_observations):
+        if not isinstance(observation, ContentObjectObservation):
+            raise MutationPlanError(
+                "mutation.authorization.content_observation_type",
+                f"content_observations[{index}] has an invalid type",
+            )
+        object_id = str(_opaque(str(observation.object_id), "content object_id"))
+        if object_id in seen_object_ids:
+            raise MutationPlanError(
+                "mutation.authorization.duplicate_content_object",
+                "content observations contain a duplicate object ID",
+            )
+        seen_object_ids.add(object_id)
+        digest = _sha256(str(observation.exact_sha256), "content exact_sha256")
+        if (
+            not isinstance(observation.byte_length, int)
+            or isinstance(observation.byte_length, bool)
+            or observation.byte_length < 0
+        ):
+            raise MutationPlanError(
+                "mutation.authorization.content_length",
+                "content observation byte length is invalid",
+            )
+        evidence = _validate_artifact_reference(
+            observation.resolver_evidence,
+            "content resolver_evidence",
+        )
+        normalized_observations.append(
+            ContentObjectObservation(
+                OpaqueId(object_id),
+                digest,
+                observation.byte_length,
+                evidence,
+            )
+        )
+    expected_observation_order = tuple(
+        sorted(
+            normalized_observations,
+            key=lambda item: (
+                str(item.object_id),
+                str(item.exact_sha256),
+                item.byte_length,
+                str(item.resolver_evidence.path),
+                str(item.resolver_evidence.sha256),
+                str(item.resolver_evidence.artifact_version),
+            ),
+        )
+    )
+    if authorization.content_observations != expected_observation_order:
+        raise MutationPlanError(
+            "mutation.authorization.content_observation_order",
+            "content observations are not in canonical order",
+        )
+    expected_content_verifications = tuple(
+        {
+            (
+                str(item.resolver_evidence.path),
+                str(item.resolver_evidence.sha256),
+                str(item.resolver_evidence.artifact_version),
+            ): item.resolver_evidence
+            for item in expected_observation_order
+        }[key]
+        for key in sorted(
+            {
+                (
+                    str(item.resolver_evidence.path),
+                    str(item.resolver_evidence.sha256),
+                    str(item.resolver_evidence.artifact_version),
+                )
+                for item in expected_observation_order
+            }
+        )
+    )
+    if authorization.content_verifications != expected_content_verifications:
+        raise MutationPlanError(
+            "mutation.authorization.content_verification_binding",
+            "content verification set does not match object observations",
+        )
+    if authorization.content_observation_sha256 != mutation_content_observation_sha256(
+        expected_observation_order
+    ):
+        raise MutationPlanError(
+            "mutation.authorization.content_observation_identity",
+            "content observation digest does not match canonical object evidence",
+        )
     _opaque(str(authorization.service_identity), "service_identity")
     _timestamp(authorization.evaluated_at, "evaluated_at")
     _sha256(str(authorization.gate_context_sha256), "gate_context_sha256")
@@ -1761,30 +1837,18 @@ def validate_mutation_execution_authorization_for_plan(
         for operation in plan.operations
         if operation.new_content is not None
     }
-    content_evidence = authorization.content_verifications
-    if content_objects and not content_evidence:
-        raise MutationPlanError(
-            "mutation.authorization.content_evidence_missing",
-            "create/replace authorization lacks trusted content evidence",
+    observed_content_objects = {
+        (
+            str(item.object_id),
+            str(item.exact_sha256),
+            item.byte_length,
         )
-    if not content_objects and content_evidence:
-        raise MutationPlanError(
-            "mutation.authorization.content_evidence_unexpected",
-            "delete/move authorization carries unrelated content evidence",
-        )
-    if len(content_evidence) > len(content_objects):
-        raise MutationPlanError(
-            "mutation.authorization.content_evidence_count",
-            "content evidence exceeds the unique planned content objects",
-        )
-    expected_content_digest = mutation_content_observation_sha256(
-        plan,
-        content_evidence,
-    )
-    if authorization.content_observation_sha256 != expected_content_digest:
+        for item in authorization.content_observations
+    }
+    if content_objects != observed_content_objects:
         raise MutationPlanError(
             "mutation.authorization.content_binding",
-            "content observation digest does not match the plan and evidence",
+            "content observations do not cover every unique planned object",
         )
 
     break_glass_bound = authorization.break_glass_authorization_id is not None

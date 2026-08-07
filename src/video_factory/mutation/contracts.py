@@ -330,6 +330,7 @@ class MutationExecutionAuthorization:
     idempotency_key: IdempotencyKey
     idempotency_reservation: ArtifactReference
     content_observation_sha256: HashDigest
+    content_observations: tuple[ContentObjectObservation, ...]
     content_verifications: tuple[ArtifactReference, ...]
     service_identity: OpaqueId
     evaluated_at: str

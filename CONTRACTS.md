@@ -110,7 +110,9 @@ filesystem executor or approval issuer.
 - Create/replace authorization resolves the current immutable content object
   and rechecks object ID, byte length, and digest. Reused identical objects are
   resolved once, while one object ID mapped to conflicting bytes is rejected
-  before reservation. An atomic trusted
+  before reservation. Authorization preserves each unique object's exact
+  resolver-evidence pair, and plan-aware validation requires complete set
+  equality rather than merely counting evidence. An atomic trusted
   idempotency ledger reserves the exact key + plan + workspace observation;
   missing reservations, conflicts, and replays fail closed.
 - Out-of-band drift produces `drift-report/1.0`, sets trust to `UNTRUSTED`, and

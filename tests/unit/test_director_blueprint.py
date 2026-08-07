@@ -103,6 +103,18 @@ def _reference(
     )
 
 
+def _reference_at(
+    path: str,
+    digest_character: str,
+    version: str = "analytics-record/1.0",
+) -> ArtifactReference:
+    return ArtifactReference(
+        path=RelativeArtifactPath(path),
+        sha256=_hash(digest_character),
+        artifact_version=ArtifactVersion(version),
+    )
+
+
 def _blueprint_fixture(*, signals: tuple[str, ...] = ()):
     channel = build_channel_constitution(
         channel_id="channel-demo",
@@ -249,6 +261,8 @@ def _assessment(
     patches: tuple[PatchProposal, ...] = (),
     blockers: tuple[DirectorBlocker, ...] = (),
     confidence: int = 9_000,
+    evidence_refs: tuple[ArtifactReference, ...] | None = None,
+    execution_receipt: ArtifactReference | None = None,
 ):
     return build_director_assessment(
         task=task,
@@ -261,13 +275,15 @@ def _assessment(
         recommendations=(),
         confidence_basis_points=confidence,
         assumptions=(),
-        evidence_refs=(_reference(),),
+        evidence_refs=(evidence_refs if evidence_refs is not None else (_reference(),)),
         model_id="model-fake",
         prompt_charter_version="director-prompt.1",
         request_sha256=_hash("6"),
         response_sha256=_hash("7"),
-        execution_receipt=_reference(
-            "director-call", "external-call-reservation/1.0"
+        execution_receipt=(
+            execution_receipt
+            if execution_receipt is not None
+            else _reference("director-call", "external-call-reservation/1.0")
         ),
     )
 
@@ -1668,6 +1684,130 @@ def test_director_task_inputs_reject_cross_platform_path_alias_conflicts() -> No
             activation=activation,
             source_bundle=sources,
             input_refs=(base_ref, case_alias),
+        )
+
+
+def test_assessment_rejects_reference_conflicts_across_nested_surfaces() -> None:
+    _, _, _, sources, charters, activation, blueprint = _blueprint_fixture()
+    task = _tasks(blueprint, charters, activation, sources)[0]
+    charter = {str(item.director_id): item for item in charters}[
+        str(task.director_id)
+    ]
+    top_level = _reference_at("artifacts/evidence-bundle.json", "a")
+    alias = _reference_at(
+        "ARTIFACTS/EVIDENCE-BUNDLE.JSON",
+        "b",
+        "external-call-reservation/1.0",
+    )
+
+    with pytest.raises(DirectorMeshError, match="multiple identities"):
+        _assessment(
+            task,
+            charter,
+            blueprint,
+            activation,
+            evidence_refs=(top_level,),
+            execution_receipt=alias,
+        )
+
+    field_path = task.owned_fields[0]
+    current = field_index(blueprint)[field_path]
+    patch = PatchProposal(
+        field_path=field_path,
+        proposal_kind=ProposalKind.OWNER,
+        expected_value_sha256=field_value_sha256(current),
+        replacement_value_json=blueprint_field(
+            field_path, {"selection": "replacement"}
+        ).value_json,
+        reason_code="director.patch.reference_conflict",
+        hard_constraint=False,
+        evidence_refs=(alias,),
+    )
+    with pytest.raises(DirectorMeshError, match="multiple identities"):
+        _assessment(
+            task,
+            charter,
+            blueprint,
+            activation,
+            verdict=DirectorVerdict.PATCH,
+            patches=(patch,),
+            evidence_refs=(top_level,),
+        )
+
+    blocker = DirectorBlocker(
+        reason_code="director.blocker.reference_conflict",
+        field_path=field_path,
+        hard=False,
+        evidence_refs=(alias,),
+    )
+    with pytest.raises(DirectorMeshError, match="multiple identities"):
+        _assessment(
+            task,
+            charter,
+            blueprint,
+            activation,
+            verdict=DirectorVerdict.BLOCKED,
+            blockers=(blocker,),
+            evidence_refs=(top_level,),
+        )
+
+
+def test_synthesis_rejects_task_to_assessment_reference_conflict() -> None:
+    _, _, _, sources, charters, activation, blueprint = _blueprint_fixture()
+    tasks = _tasks(blueprint, charters, activation, sources)
+    charter_by_id = {str(item.director_id): item for item in charters}
+    conflicting_receipt = _reference_at(
+        "ARTIFACTS/PRODUCTION-BLUEPRINT.JSON",
+        "c",
+        "external-call-reservation/1.0",
+    )
+    assessments = tuple(
+        _assessment(
+            task,
+            charter_by_id[str(task.director_id)],
+            blueprint,
+            activation,
+            execution_receipt=(conflicting_receipt if index == 0 else None),
+        )
+        for index, task in enumerate(tasks)
+    )
+    with pytest.raises(DirectorMeshError, match="multiple identities"):
+        synthesize_director_assessments(
+            blueprint=blueprint,
+            charters=charters,
+            activation=activation,
+            source_bundle=sources,
+            tasks=tasks,
+            assessments=assessments,
+        )
+
+
+def test_synthesis_rejects_cross_director_reference_conflict() -> None:
+    _, _, _, sources, charters, activation, blueprint = _blueprint_fixture()
+    tasks = _tasks(blueprint, charters, activation, sources)
+    charter_by_id = {str(item.director_id): item for item in charters}
+    aliases = (
+        _reference_at("artifacts/shared-evidence.json", "d"),
+        _reference_at("ARTIFACTS/SHARED-EVIDENCE.JSON", "e"),
+    )
+    assessments = tuple(
+        _assessment(
+            task,
+            charter_by_id[str(task.director_id)],
+            blueprint,
+            activation,
+            evidence_refs=((aliases[index],) if index < len(aliases) else None),
+        )
+        for index, task in enumerate(tasks)
+    )
+    with pytest.raises(DirectorMeshError, match="multiple identities"):
+        synthesize_director_assessments(
+            blueprint=blueprint,
+            charters=charters,
+            activation=activation,
+            source_bundle=sources,
+            tasks=tasks,
+            assessments=assessments,
         )
 
 

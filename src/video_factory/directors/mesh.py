@@ -128,6 +128,26 @@ def _normalize_references(
     return values
 
 
+def _require_reference_identity_consistency(
+    references: Iterable[ArtifactReference],
+) -> None:
+    """Reject conflicting identities across one complete evidence bundle."""
+
+    identities_by_path: dict[str, tuple[str, str, str]] = {}
+    for item in references:
+        _reference_mapping(item)
+        path = str(item.path)
+        collision_key = reference_path_collision_key(path)
+        identity = (path, str(item.sha256), str(item.artifact_version))
+        existing = identities_by_path.get(collision_key)
+        if existing is not None and existing != identity:
+            raise DirectorMeshError(
+                "director.reference.path_conflict",
+                "one cross-platform artifact path cannot carry multiple identities",
+            )
+        identities_by_path[collision_key] = identity
+
+
 def _canonical_references(
     references: Iterable[ArtifactReference], *, required: bool = False
 ) -> tuple[ArtifactReference, ...]:
@@ -137,6 +157,25 @@ def _canonical_references(
     }
     values = tuple(keyed[key] for key in sorted(keyed))
     return _normalize_references(values, required=required)
+
+
+def _assessment_references(
+    assessment: DirectorAssessment,
+) -> tuple[ArtifactReference, ...]:
+    return (
+        assessment.execution_receipt,
+        *assessment.evidence_refs,
+        *(
+            reference
+            for patch in assessment.patches
+            for reference in patch.evidence_refs
+        ),
+        *(
+            reference
+            for blocker in assessment.blockers
+            for reference in blocker.evidence_refs
+        ),
+    )
 
 
 def _task_identity_mapping(task: DirectorTaskPlan) -> dict[str, object]:
@@ -402,6 +441,10 @@ def _assessment_identity_mapping(value: DirectorAssessment) -> dict[str, object]
             "director.assessment.confidence", "confidence must be 0..10000"
         )
     evidence = _normalize_references(value.evidence_refs, required=True)
+    patch_mappings = [_proposal_mapping(item) for item in patches]
+    blocker_mappings = [_blocker_mapping(item) for item in blockers]
+    receipt_mapping = _reference_mapping(value.execution_receipt)
+    _require_reference_identity_consistency(_assessment_references(value))
     return {
         "task_id": str(value.task_id),
         "task_plan_sha256": str(value.task_plan_sha256),
@@ -419,10 +462,10 @@ def _assessment_identity_mapping(value: DirectorAssessment) -> dict[str, object]
         "prompt_charter_version": value.prompt_charter_version,
         "request_sha256": str(value.request_sha256),
         "response_sha256": str(value.response_sha256),
-        "execution_receipt": _reference_mapping(value.execution_receipt),
+        "execution_receipt": receipt_mapping,
         "verdict": value.verdict.value,
-        "patches": [_proposal_mapping(item) for item in patches],
-        "blockers": [_blocker_mapping(item) for item in blockers],
+        "patches": patch_mappings,
+        "blockers": blocker_mappings,
         "recommendations": list(value.recommendations),
         "confidence_basis_points": value.confidence_basis_points,
         "assumptions": list(value.assumptions),
@@ -1040,6 +1083,16 @@ def synthesize_director_assessments(
             current_blueprint=blueprint,
             activation=activation,
         )
+    _require_reference_identity_consistency(
+        (
+            *common_input_refs,
+            *(
+                reference
+                for assessment in assessment_values
+                for reference in _assessment_references(assessment)
+            ),
+        )
+    )
 
     blockers = set(blueprint.unresolved_blockers)
     blockers.update(

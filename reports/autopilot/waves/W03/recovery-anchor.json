@@ -1,0 +1,86 @@
+{
+  "protocol_version": "be-lazy-wave-recovery-anchor/1.0",
+  "wave": "W03-DIRECTOR-BLUEPRINT",
+  "created_at": "2026-08-07T17:50:18.144Z",
+  "checkpoint": {
+    "commit": "254e20fdb63c77d6e84d746664a5f1a0a9524c03",
+    "tree": "ae12f3b97520450f286d7166943374427ea941b7",
+    "parent": "1315cfd6b8e0700e0a856dea6cb7bbcf441d506d",
+    "subject": "autopilot(W03): introduce director mesh and production blueprint shadow"
+  },
+  "implementation": {
+    "commit": "d0b2f5f4607bcfe76c28a0b8e33da2ae3407f02c",
+    "tree": "5a265eb538b9a681307bdce1bacf011d53eddd5f"
+  },
+  "evidence": {
+    "commit": "1315cfd6b8e0700e0a856dea6cb7bbcf441d506d",
+    "tree": "d8fd8b7ad5985bfdcba8f9fc61a151f9db1759e7",
+    "provenance_path": "docs/provenance/w03-director-blueprint.json",
+    "provenance_sha256": "d934d0fad284aef58bf86ecb347bc3554ecbb0ce910d37067534e8fd1e77c285",
+    "receipt_path": "reports/autopilot/waves/W03/test-receipt.json",
+    "receipt_sha256": "f1ece7adc02616faff51759fde473f6f5f62649018fb13cf904e30507156c54c",
+    "review_path": "reports/autopilot/waves/W03/review-round-7.md",
+    "review_sha256": "1e5972f415c9910402d3dfe397bebad1489fc91a64e3b7a7ca9d7f1a64640007",
+    "execplan_path": ".agent/execplans/be-lazy-autopilot.md",
+    "execplan_sha256": "3911ebc16fda6b372a3a85a4e91923670b1a65a4a0cc5cd79ee431941b0e7e7e"
+  },
+  "inputs": {
+    "source_archive_sha256": "954325b77028bcf7d36a88136d8e1ed0ec2348ad15014623710614cced94034a",
+    "handoff_manifest_sha256": "1bd3aa1687299c15f81539641afcd1563097b0ff8cebc9c24a793e132386244a"
+  },
+  "state": {
+    "location": ".be-lazy/autopilot/state.json",
+    "tracking": "REPOSITORY_LOCAL_IGNORED",
+    "schema_path": ".be-lazy/autopilot/schemas/autopilot-state.schema.json",
+    "schema_sha256": "bf102391da9c2797bbf37067efa8520fcae05ba2b115b33dfe9b15ba0f7155aa",
+    "semantic_canonicalization": "sha256-utf8-json-sort-keys-compact-ensure-ascii-false-v1",
+    "semantic_projection": {
+      "protocol_version": "be-lazy-prompt-autopilot-state/1.0",
+      "program_id": "be-lazy-successor-redesign",
+      "source": {
+        "expected_sha256": "954325b77028bcf7d36a88136d8e1ed0ec2348ad15014623710614cced94034a",
+        "observed_sha256": "954325b77028bcf7d36a88136d8e1ed0ec2348ad15014623710614cced94034a",
+        "unchanged": true
+      },
+      "handoff": {
+        "manifest_sha256": "1bd3aa1687299c15f81539641afcd1563097b0ff8cebc9c24a793e132386244a",
+        "verified": true
+      },
+      "target": {
+        "branch": "agent/autopilot-v4",
+        "initial_commit": "b7aaaf2ac43ca99970c317a7d505316a07d320e9"
+      },
+      "passed_wave": {
+        "id": "W03-DIRECTOR-BLUEPRINT",
+        "status": "passed",
+        "attempts": 7,
+        "task_ids": ["BP-001", "DIR-001", "DIR-002", "BP-002"],
+        "checkpoint_commit": "254e20fdb63c77d6e84d746664a5f1a0a9524c03",
+        "tests": [
+          {"id": "w03-target", "status": "passed", "result": "54 passed on implementation commit d0b2f5f4607bcfe76c28a0b8e33da2ae3407f02c"},
+          {"id": "w03-focused-architecture", "status": "passed", "result": "76 passed on exact implementation commit"},
+          {"id": "w03-focused-security", "status": "passed", "result": "156 passed on exact implementation commit"},
+          {"id": "w03-full", "status": "passed", "result": "584 passed on exact implementation commit/tree"},
+          {"id": "w03-boundaries", "status": "passed", "result": "core_purity 313, side_effect_free 103, repo_isolation 223, target_boundary 378 files/63 directories"},
+          {"id": "w03-schema-wheel", "status": "passed", "result": "two identical 173-member wheels ae1479bb61300087490876ef12f8fa810a31eb2504941d30f67cc41e5128ccc8; 61 schemas, 57 versions, 18 Director charters loaded in isolation"},
+          {"id": "w03-standard-backend", "status": "environment_blocked", "result": "build/setuptools/wheel absent; stdlib PEP 427 verification is not claimed as backend verification"},
+          {"id": "w03-input-postcheck", "status": "passed", "result": "handoff 49 files and source 211 members/CRC verified unchanged"}
+        ],
+        "latest_reviews": [
+          {"round": 7, "role": "architecture_contract", "status": "approved", "critical": 0, "high": 0},
+          {"round": 7, "role": "security_authority_boundary", "status": "approved", "critical": 0, "high": 0},
+          {"round": 7, "role": "test_compatibility_packaging", "status": "approved", "critical": 0, "high": 0}
+        ],
+        "unresolved_findings": []
+      }
+    },
+    "semantic_sha256": "c54f0201d7d1d1b7a187bc7c4e5663c13da1acad45f4725a5c73d6c54eba9169"
+  },
+  "recovery_checks": [
+    "checkpoint commit resolves to the recorded tree, parent, and subject",
+    "implementation and evidence commits are ancestors of the checkpoint",
+    "tracked evidence and final ExecPlan digests match",
+    "ignored state matches the canonical W03 semantic projection",
+    "source and handoff identities remain unchanged"
+  ]
+}

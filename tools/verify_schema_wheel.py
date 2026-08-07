@@ -12,6 +12,7 @@ import io
 import json
 import os
 from pathlib import Path, PurePosixPath
+import re
 import subprocess
 import sys
 from typing import Mapping, Sequence
@@ -20,6 +21,10 @@ import zipfile
 
 SCHEMA_PREFIX = "video_factory/resources/schemas/"
 EXPECTED_WHEEL_TAG = "py3-none-any"
+
+
+def _normalized_distribution(value: str) -> str:
+    return re.sub(r"[-_.]+", "_", value).lower()
 
 
 def _record_digest(payload: bytes) -> str:
@@ -37,6 +42,20 @@ def _validate_dist_info(
         raise ValueError(f"wheel must contain exactly one RECORD; found {len(records)}")
     record_name = records[0]
     dist_info = record_name.removesuffix("/RECORD")
+    dist_info_leaf = PurePosixPath(dist_info).name
+    if not dist_info_leaf.endswith(".dist-info"):
+        raise ValueError("wheel RECORD is not inside a dist-info directory")
+    try:
+        dist_name, dist_version = dist_info_leaf.removesuffix(".dist-info").rsplit(
+            "-", 1
+        )
+    except ValueError as error:
+        raise ValueError("wheel dist-info name lacks distribution or version") from error
+    expected_filename = f"{dist_name}-{dist_version}-{EXPECTED_WHEEL_TAG}.whl"
+    if wheel_path.name != expected_filename:
+        raise ValueError(
+            "wheel filename does not match dist-info distribution/version/tag"
+        )
     metadata_name = f"{dist_info}/METADATA"
     wheel_name = f"{dist_info}/WHEEL"
     for required in (metadata_name, wheel_name):
@@ -73,10 +92,17 @@ def _validate_dist_info(
     )
     if metadata.get("Metadata-Version") != "2.1":
         raise ValueError("wheel METADATA version must be 2.1")
-    if metadata.get("Name") != "video-production-core":
+    metadata_name_value = metadata.get("Name")
+    if (
+        not isinstance(metadata_name_value, str)
+        or _normalized_distribution(metadata_name_value) != dist_name
+        or metadata_name_value != "video-production-core"
+    ):
         raise ValueError("wheel METADATA distribution name mismatch")
-    if not metadata.get("Version") or not metadata.get("Requires-Python"):
-        raise ValueError("wheel METADATA version or Requires-Python is missing")
+    if metadata.get("Version") != dist_version:
+        raise ValueError("wheel METADATA version does not match dist-info")
+    if not metadata.get("Requires-Python"):
+        raise ValueError("wheel METADATA Requires-Python is missing")
 
     wheel = BytesParser(policy=policy.default).parsebytes(archive.read(wheel_name))
     if wheel.get("Wheel-Version") != "1.0":
@@ -85,8 +111,6 @@ def _validate_dist_info(
         raise ValueError("wheel must declare Root-Is-Purelib: true")
     if wheel.get_all("Tag", []) != [EXPECTED_WHEEL_TAG]:
         raise ValueError("wheel compatibility tag mismatch")
-    if not wheel_path.name.endswith(f"-{EXPECTED_WHEEL_TAG}.whl"):
-        raise ValueError("wheel filename compatibility tag mismatch")
 
 
 def _strict_object(payload: bytes, label: str) -> Mapping[str, object]:

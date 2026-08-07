@@ -63,7 +63,8 @@ def test_offline_wheel_record_metadata_and_tag_are_verified(tmp_path: Path) -> N
 
 def test_wheel_rejects_record_digest_corruption(tmp_path: Path) -> None:
     wheel = _built_wheel(tmp_path)
-    damaged = tmp_path / "damaged-py3-none-any.whl"
+    damaged = tmp_path / "damaged" / wheel.name
+    damaged.parent.mkdir()
     target = "video_factory/resources/schemas/artifact-common.schema.json"
     _rewrite(wheel, damaged, {target: b"{}\n"}, refresh_record=False)
     with pytest.raises(ValueError, match="RECORD digest mismatch"):
@@ -77,7 +78,8 @@ def test_wheel_rejects_nonempty_record_self_row(tmp_path: Path) -> None:
             name for name in archive.namelist() if name.endswith(".dist-info/RECORD")
         )
         record = archive.read(record_name).decode("utf-8")
-    damaged = tmp_path / "self-row-py3-none-any.whl"
+    damaged = tmp_path / "self-row" / wheel.name
+    damaged.parent.mkdir()
     bad_record = record.replace(
         f"{record_name},,\n", f"{record_name},sha256=bad,1\n"
     ).encode("utf-8")
@@ -99,6 +101,11 @@ def test_wheel_rejects_nonempty_record_self_row(tmp_path: Path) -> None:
             b"Metadata-Version: 2.1\nName: wrong-name\nVersion: 0.3.1\nRequires-Python: >=3.12\n",
             "distribution name",
         ),
+        (
+            ".dist-info/METADATA",
+            b"Metadata-Version: 2.1\nName: video-production-core\nVersion: 9.9.9\nRequires-Python: >=3.12\n",
+            "version does not match",
+        ),
     ],
 )
 def test_wheel_rejects_semantically_invalid_metadata_with_valid_record(
@@ -110,7 +117,16 @@ def test_wheel_rejects_semantically_invalid_metadata_with_valid_record(
     wheel = _built_wheel(tmp_path)
     with zipfile.ZipFile(wheel) as archive:
         member = next(name for name in archive.namelist() if name.endswith(member_suffix))
-    damaged = tmp_path / f"semantic-{member_suffix.rsplit('/', 1)[-1]}-py3-none-any.whl"
+    damaged = tmp_path / "semantic" / wheel.name
+    damaged.parent.mkdir()
     _rewrite(wheel, damaged, {member: replacement}, refresh_record=True)
     with pytest.raises(ValueError, match=message):
         inspect_wheel(damaged)
+
+
+def test_wheel_filename_version_must_match_dist_info(tmp_path: Path) -> None:
+    wheel = _built_wheel(tmp_path)
+    renamed = tmp_path / "video_production_core-9.9.9-py3-none-any.whl"
+    renamed.write_bytes(wheel.read_bytes())
+    with pytest.raises(ValueError, match="filename does not match"):
+        inspect_wheel(renamed)

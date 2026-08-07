@@ -14,6 +14,7 @@ from video_factory.approvals import (
     gate_context_to_mapping,
     validate_evidence_binding,
 )
+from video_factory.config.canonical import canonical_sha256
 from video_factory.domain import CapabilityId
 from video_factory.engine.contracts import ExecutionMode
 from video_factory.engine.mode import mode_is_within_limit
@@ -41,6 +42,7 @@ class OrchestrationAuthorization:
     request_id: str
     capability_id: CapabilityId
     execution_mode: ExecutionMode
+    request_envelope_sha256: str
     human_evidence_id: str | None
     gate_context_sha256: str | None = None
     evaluated_at: str | None = None
@@ -49,6 +51,41 @@ class OrchestrationAuthorization:
 
 def _reject(message: str) -> None:
     raise ModeEnforcementError(message)
+
+
+def request_envelope_sha256(request: RequestEnvelope) -> str:
+    """Canonical digest of every authority-relevant request field."""
+
+    return str(
+        canonical_sha256(
+            {
+                "request_id": str(request.request_id),
+                "capability_id": str(request.capability_id),
+                "effective_execution_mode": request.effective_execution_mode.value,
+                "effective_config_sha256": str(request.effective_config_sha256),
+                "input_artifacts": [
+                    {
+                        "path": str(item.path),
+                        "sha256": str(item.sha256),
+                        "artifact_version": str(item.artifact_version),
+                    }
+                    for item in request.input_artifacts
+                ],
+                "allowed_outputs": [
+                    {
+                        "path_prefix": str(item.path_prefix),
+                        "artifact_versions": sorted(
+                            str(version) for version in item.artifact_versions
+                        ),
+                    }
+                    for item in request.allowed_outputs
+                ],
+                "idempotency_key": str(request.idempotency_key),
+                "creator_role": str(request.creator_role),
+                "reviewer_role": str(request.reviewer_role),
+            }
+        )
+    )
 
 
 def _validate_human_evidence(
@@ -151,6 +188,7 @@ class OrchestrationGuard:
             request_id=str(request.request_id),
             capability_id=request.capability_id,
             execution_mode=request.effective_execution_mode,
+            request_envelope_sha256=request_envelope_sha256(request),
             human_evidence_id=evidence_id,
             gate_context_sha256=(
                 str(gate_context_sha256(normalized_context))
@@ -209,6 +247,8 @@ def enforce_adapter_dispatch(
         _reject("executor authorization is bound to another capability")
     if authorization.execution_mode is not request.effective_execution_mode:
         _reject("executor authorization is bound to another execution mode")
+    if authorization.request_envelope_sha256 != request_envelope_sha256(request):
+        _reject("executor authorization is bound to another exact request envelope")
     if authorization.gate_context_sha256 != str(
         gate_context_sha256(normalized_context)
     ):

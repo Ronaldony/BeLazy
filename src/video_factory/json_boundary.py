@@ -11,7 +11,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from enum import StrEnum
 import json
 import math
@@ -130,7 +130,12 @@ def _bounded_float(token: str, limits: JsonLimits) -> float:
 def _bounded_decimal(token: str, limits: JsonLimits) -> Decimal:
     if len(token) > limits.max_number_chars:
         raise _NumberOutOfRange("number token exceeds max_number_chars")
-    value = Decimal(token)
+    try:
+        value = Decimal(token)
+    except (InvalidOperation, ValueError) as error:
+        raise _NumberOutOfRange(
+            "number exponent exceeds the Decimal runtime range"
+        ) from error
     if not value.is_finite():
         raise _NonfiniteNumber("non-finite Decimal is forbidden")
     if decimal_fixed_point_length(value) > limits.max_number_chars:

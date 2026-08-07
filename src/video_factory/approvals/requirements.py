@@ -492,7 +492,6 @@ def validate_evidence_binding(
     requirement: ApprovalRequirement,
     evidence: ApprovalEvidence | None,
     *,
-    require_granted: bool = True,
     current_context: GateContext | Mapping[str, object] | None,
     evaluated_at: datetime | str | None,
 ) -> EvidenceBindingResult:
@@ -510,7 +509,7 @@ def validate_evidence_binding(
             message="required human evidence is missing",
             reason_code="approval.evidence_missing",
         )
-    if require_granted and evidence.state is not ApprovalState.GRANTED:
+    if evidence.state is not ApprovalState.GRANTED:
         return _binding_result(
             requirement,
             evidence,
@@ -682,7 +681,6 @@ def assert_evidence_binding(
     requirement: ApprovalRequirement,
     evidence: ApprovalEvidence | None,
     *,
-    require_granted: bool = True,
     current_context: GateContext | Mapping[str, object] | None,
     evaluated_at: datetime | str | None,
 ) -> str:
@@ -691,7 +689,6 @@ def assert_evidence_binding(
     result = validate_evidence_binding(
         requirement,
         evidence,
-        require_granted=require_granted,
         current_context=current_context,
         evaluated_at=evaluated_at,
     )

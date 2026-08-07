@@ -41,6 +41,7 @@ from .enforcement import (
     OrchestrationGuard,
     OrchestrationPolicy,
     enforce_adapter_dispatch,
+    request_envelope_sha256,
 )
 from .registry import AdapterBinding, InMemoryCapabilityRegistry, RegistryError
 
@@ -79,6 +80,7 @@ __all__ = [
     "UncertaintyModel",
     "ValidationReport",
     "enforce_adapter_dispatch",
+    "request_envelope_sha256",
     "known_cost",
     "settled_uncertainty",
     "unknown_cost",

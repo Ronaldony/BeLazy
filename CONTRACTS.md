@@ -70,7 +70,7 @@ This generalizes the existing `EncodeCommandPlan` pattern (`executed=False` alwa
 | `build_qc_plan` / `judge_measurements` | `QCPlan` / `QCJudgment` | primary/fallback method hints and pass/warn/fail/inconclusive/not-applicable judgment | empty plan; unknown comparison |
 | `build_approval_requirement` | `ApprovalRequirement` | path+sha256-bound requirement document | empty artifacts; invalid sha256 |
 | `observe_episode_state` / `plan_next_step` | `EpisodeStateObservation` / `NextStepPlan` | validated current snapshot graph and deterministic next action | raw docs, mixed provenance, ambiguous current artifacts, missing mode |
-| `build_generation_readiness` | `GenerationReadinessPlan` | exact current reviews, feasibility pass, and human evidence all bind | stale/missing/failed evidence; Rapid mode |
+| `build_generation_readiness` | `GenerationReadinessPlan` | `ready` preserves structural legacy planning; only `authorization_ready` means exact reviews, feasibility, current `GateContext`, explicit evaluation time, and the aggregate approval window all bind | stale/missing/expired evidence or context; Rapid mode |
 | `draft_*_config` | validated config mapping | schema-valid channel/concept/episode draft | invalid scope id / settings |
 | `build_core_lock` | TOML `str` | deterministic lock document text (caller writes file) | invalid artifact / path escape |
 | `plan_wheel_build` | `WheelBuildPlan` | `python -m build --wheel` argv + vendor placement notes | invalid version |
@@ -295,10 +295,14 @@ channel-owned rule *data*. Core only evaluates injected rules:
 
 ## Generation order-sheet contract
 
-`render_generation_sheet(packet_doc, readiness=...)` turns a packet into
-human copy-paste Markdown. Without a `GenerationReadinessPlan` bound to the
-exact canonical packet digest, the title always contains `DO NOT GENERATE`.
-The packet's compatibility boolean is displayed but never grants authority.
+`render_generation_sheet(packet_doc, readiness=..., current_context=...,
+evaluated_at=...)` turns a packet into human copy-paste Markdown. Without an
+`authorization_ready` plan bound to the exact canonical packet digest, current
+seven-digest `GateContext`, and a timezone-aware instant inside the aggregate
+approval window, the title always contains `DO NOT GENERATE`. A context-free
+legacy `ready` plan remains useful for non-authorizing sequencing but cannot
+remove that warning. The packet's compatibility boolean is displayed but never
+grants authority.
 
 Determinism rules (same input → byte-identical output):
 
@@ -307,8 +311,10 @@ Determinism rules (same input → byte-identical output):
 3. Free maps enumerated with Unicode-sorted keys; `provider_plans` labels sorted.
 4. Each shot `prompt` is emitted **verbatim** inside a fenced block (no summary or rewrite).
 5. Header and HTML comment stamp `packet_sha256` from `canonical-json-v1` bytes of the packet.
-6. An authorized sheet stamps feasibility and human-approval evidence
-   references. Stale readiness raises instead of silently downgrading.
+6. An authorized sheet stamps the gate-context digest, aggregate validity
+   window, feasibility evidence, and human-approval evidence references.
+   Missing, stale, future-issued, or expired readiness raises instead of
+   silently granting authority.
 
 ## Encode plan contract (OD-005 — no execution)
 
@@ -344,13 +350,19 @@ The provider and executor abstractions deliberately remain separate:
 | `ReadOnlyStaging`, `ExecutorDispatchContext` | exact read-only inputs, allowed output contract, and tool/capability allowlists before executor dispatch |
 | `ExecutorAdapter`, `NormalizedEvent` | creator/reviewer separation, stream normalization, timeout uncertainty, and reconcile-before-retry |
 | `ExecutionModeLimits`, `EffectiveExecutionMode` | intersect channel, selected-mode, and adapter maxima during effective-config merge |
-| `OrchestrationPolicy`, `OrchestrationGuard` | inspect effective mode and immutable human evidence before reservation or adapter selection |
+| `OrchestrationPolicy`, `OrchestrationGuard` | bind effective mode, request, seven-digest current context, explicit evaluation time, and immutable human evidence before reservation or adapter selection |
 | `AdapterBinding`, `InMemoryCapabilityRegistry` | resolve a profile-supplied opaque binding and enforce capability plus adapter kind |
-| `enforce_adapter_dispatch` | repeat the mode/kind/capability check immediately before any external process |
+| `enforce_adapter_dispatch` | immediately before any external process, repeat mode/kind/capability checks and require the matching guard authorization, current context, evaluation time, and unexpired evidence window |
 
 Provider descriptors cannot advertise `automated` in this contract. A provider can validate, estimate, preview,
 prepare a human handoff, and ingest a human-downloaded result; it has no external generation implementation.
-Executor dispatch is available only in effective `automated` mode, with read-only staging and explicit allowlists.
+Executor dispatch and external reconciliation are available only in effective `automated` mode, with read-only staging, explicit allowlists,
+and an `OrchestrationAuthorization` matching request ID, capability, mode, current context digest, and dispatch
+time. The authorization also carries a canonical digest over every `RequestEnvelope` field: input artifacts,
+allowed outputs, idempotency key, roles, capability, mode, config, and request ID. Calling `dispatch` or
+`reconcile` directly without that exact-request authorization fails before `_dispatch_stream` or
+`_reconcile_external` is entered. Unresolved state also retains the exact original request and external reference;
+a same-key request substitution or conflicting reference is rejected.
 An uncertain executor idempotency key remains locked until `reconcile()` reaches a settled outcome.
 
 Missing or unknown execution limits normalize to `human_only` as a fail-safe. This is not a production workflow
@@ -587,13 +599,13 @@ confused.
 | `build_approval_requirement(kind, artifacts, effective_config_sha256)` | binds path+sha256 artifacts; never invents evidence |
 | `requirement_to_mapping` / `requirement_from_mapping` | `approval-requirement/1.0`; never inserts approver or timestamp placeholders |
 | `approval_evidence_to_mapping` | serializes already supplied granted human evidence; never creates evidence |
-| `validate_evidence_binding` | checks capability, config hash, and bound artifacts (PHASE 6 alignment) |
+| `validate_evidence_binding` | authority check requiring exact capability/artifacts, flat+nested config consistency, all seven current-context digests, explicit timezone-aware evaluation time, and `approved_at <= evaluated_at < expires_at`; legacy documents remain loadable but cannot authorize |
 
 ## Orchestration planner
 
 | Type / function | Meaning |
 |---|---|
 | `observe_episode_state(snapshots)` | validates caller-observed path/hash/document envelopes and builds an explicit-current graph |
-| `build_generation_readiness` | checks current-bound reviews, packet/storyboard binding, all feasibility checks, and human approval |
-| `plan_next_step(observation, workflow_mode)` | blocks failed reviews/QC, enforces per-shot/final/publish gates, and never executes |
+| `build_generation_readiness` | preserves context-free structural planning compatibility while exposing a separate `authorization_ready` result only for current-bound, unexpired approvals |
+| `plan_next_step(observation, workflow_mode)` | context-free overload preserves non-authorizing sequence calculation; context/time overload rejects stale authority; both block failed reviews/QC and never execute |
 | `next_step_to_mapping` | deterministic `next-step/1.0`; requires rules provenance and keeps `auto_execution=false` |

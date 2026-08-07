@@ -67,6 +67,7 @@ from video_factory.providers import (
     UncertaintyModel,
     ValidationReport,
     enforce_adapter_dispatch,
+    request_envelope_sha256,
     settled_uncertainty,
     unknown_cost,
     validate_descriptor,
@@ -276,7 +277,7 @@ _DISPATCH_TIME = datetime(2026, 7, 21, 1, 0, tzinfo=timezone.utc)
 
 
 def _executor_authorization(request: RequestEnvelope):
-    return OrchestrationGuard().authorize(
+    authorization = OrchestrationGuard().authorize(
         request,
         OrchestrationPolicy(
             request.capability_id,
@@ -287,6 +288,8 @@ def _executor_authorization(request: RequestEnvelope):
         current_context=_gate_context(),
         evaluated_at=_DISPATCH_TIME,
     )
+    assert authorization.request_envelope_sha256 == request_envelope_sha256(request)
+    return authorization
 
 
 def _authorized_dispatch(
@@ -296,6 +299,18 @@ def _authorized_dispatch(
     return adapter.dispatch(
         request,
         _executor_context(request),
+        authorization=_executor_authorization(request),
+        current_context=_gate_context(),
+        evaluated_at=_DISPATCH_TIME,
+    )
+
+
+def _authorized_reconcile(
+    adapter: SyntheticExecutor,
+    request: RequestEnvelope,
+):
+    return adapter.reconcile(
+        request,
         authorization=_executor_authorization(request),
         current_context=_gate_context(),
         evaluated_at=_DISPATCH_TIME,
@@ -357,7 +372,29 @@ def test_executor_timeout_is_external_uncertain_and_blocks_retry_until_reconcile
     with pytest.raises(AdapterContractError, match="reconcile"):
         _authorized_dispatch(adapter, request)
     assert adapter.external_calls == 1
-    reconciled = adapter.reconcile(request)
+    with pytest.raises(ModeEnforcementError, match="authorization"):
+        adapter.reconcile(request)
+    assert adapter.observe(request).outcome is Outcome.EXTERNAL_UNCERTAIN
+
+    different_request = replace(
+        request, request_id=RequestId("request-different-reconcile")
+    )
+    with pytest.raises(AdapterContractError, match="another request"):
+        adapter.reconcile(
+            different_request,
+            authorization=_executor_authorization(different_request),
+            current_context=_gate_context(),
+            evaluated_at=_DISPATCH_TIME,
+        )
+    with pytest.raises(AdapterContractError, match="reference does not match"):
+        adapter.reconcile(
+            request,
+            ExternalReference("different-external-request", "different-session"),
+            authorization=_executor_authorization(request),
+            current_context=_gate_context(),
+            evaluated_at=_DISPATCH_TIME,
+        )
+    reconciled = _authorized_reconcile(adapter, request)
     assert reconciled.outcome is Outcome.SUCCEEDED
 
 
@@ -682,6 +719,47 @@ def test_executor_rechecks_authorization_time_before_external_call() -> None:
         )
     assert executor.external_calls == 0
 
+
+@pytest.mark.parametrize(
+    "mutate",
+    [
+        lambda request: replace(
+            request, input_artifacts=(_artifact("artifacts/unapproved.json"),)
+        ),
+        lambda request: replace(
+            request,
+            allowed_outputs=(
+                AllowedOutput(
+                    RelativeArtifactPath("artifacts/other-results"),
+                    frozenset({OUTPUT_VERSION}),
+                ),
+            ),
+        ),
+        lambda request: replace(
+            request, idempotency_key=IdempotencyKey("changed-idempotency")
+        ),
+        lambda request: replace(request, creator_role=RoleId("role-other-creator")),
+        lambda request: replace(request, reviewer_role=RoleId("role-other-reviewer")),
+    ],
+    ids=("inputs", "outputs", "idempotency", "creator", "reviewer"),
+)
+def test_executor_authorization_binds_the_full_request_envelope(mutate) -> None:
+    executor = SyntheticExecutor()
+    original = _request(
+        TASK_CAPABILITY, ExecutionMode.AUTOMATED, key="exact-request"
+    )
+    authorization = _executor_authorization(original)
+    changed = mutate(original)
+    assert changed.request_id == original.request_id
+    with pytest.raises(ModeEnforcementError, match="exact request envelope"):
+        executor.dispatch(
+            changed,
+            _executor_context(changed),
+            authorization=authorization,
+            current_context=_gate_context(),
+            evaluated_at=_DISPATCH_TIME,
+        )
+    assert executor.external_calls == 0
 
 def test_no_literal_opaque_adapter_id_comparison_exists_in_core_source() -> None:
     root = Path(__file__).resolve().parents[2] / "src"

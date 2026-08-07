@@ -321,6 +321,29 @@ def test_fully_legacy_evidence_is_loadable_but_cannot_authorize() -> None:
         )
 
 
+def test_rejected_evidence_cannot_be_downgraded_to_a_structural_success() -> None:
+    context = _context()
+    requirement = build_approval_requirement(
+        "packet", [_artifact()], _CONFIG, gate_context=context
+    )
+    rejected = replace(_evidence(requirement), state=ApprovalState.REJECTED)
+    result = validate_evidence_binding(
+        requirement,
+        rejected,
+        current_context=context,
+        evaluated_at="2026-07-21T01:00:00Z",
+    )
+    assert result.ok is False
+    assert result.reason_code == "approval.evidence_not_granted"
+    with pytest.raises(ApprovalRequirementError, match="not granted"):
+        assert_evidence_binding(
+            requirement,
+            rejected,
+            current_context=context,
+            evaluated_at="2026-07-21T01:00:00Z",
+        )
+
+
 @pytest.mark.parametrize(
     "field",
     [

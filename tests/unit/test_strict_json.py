@@ -125,6 +125,13 @@ def test_runtime_integer_conversion_limit_is_a_stable_domain_error() -> None:
     _assert_code(caught, JsonErrorCode.NUMBER_OUT_OF_RANGE)
 
 
+def test_decimal_runtime_exponent_limit_is_a_stable_domain_error() -> None:
+    payload = b'{"value":1e' + (b"9" * 1_000) + b"}"
+    with pytest.raises(JsonInputError) as caught:
+        parse_json_bytes(payload, decimal_numbers=True)
+    _assert_code(caught, JsonErrorCode.NUMBER_OUT_OF_RANGE)
+
+
 @pytest.mark.parametrize("token", [b"1e1000000", b"1e-1000000"])
 def test_config_source_rejects_decimal_expansion_before_canonicalization(
     token: bytes,

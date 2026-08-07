@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections.abc import Iterable, Mapping, Sequence
+from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
 from pathlib import PurePosixPath
@@ -55,6 +56,12 @@ class ExternalStateUncertain(RuntimeError):
     ) -> None:
         super().__init__(reason)
         self.external_reference = external_reference
+
+
+@dataclass(frozen=True, slots=True)
+class _UnresolvedDispatch:
+    request: RequestEnvelope
+    external_reference: ExternalReference | None
 
 
 def unknown_cost() -> CostMeasurement:
@@ -313,7 +320,7 @@ class ExecutorAdapter(ABC):
     """Read-only, allowlisted executor dispatch with uncertain-state locking."""
 
     def __init__(self) -> None:
-        self._unresolved: dict[IdempotencyKey, ExternalReference | None] = {}
+        self._unresolved: dict[IdempotencyKey, _UnresolvedDispatch] = {}
 
     @property
     @abstractmethod
@@ -387,7 +394,9 @@ class ExecutorAdapter(ABC):
                 self.normalize_event(event) for event in self._dispatch_stream(request, context)
             )
         except ExternalStateUncertain as error:
-            self._unresolved[request.idempotency_key] = error.external_reference
+            self._unresolved[request.idempotency_key] = _UnresolvedDispatch(
+                request, error.external_reference
+            )
             return _result(
                 request,
                 Outcome.EXTERNAL_UNCERTAIN,
@@ -395,7 +404,9 @@ class ExecutorAdapter(ABC):
                 uncertainty=UncertaintyEvidence(True, str(error), None),
             )
         except (TimeoutError, ConnectionError) as error:
-            self._unresolved[request.idempotency_key] = None
+            self._unresolved[request.idempotency_key] = _UnresolvedDispatch(
+                request, None
+            )
             return _result(
                 request,
                 Outcome.EXTERNAL_UNCERTAIN,
@@ -406,18 +417,20 @@ class ExecutorAdapter(ABC):
         if result.request_id != request.request_id:
             raise AdapterContractError("executor result is bound to another request")
         if result.outcome is Outcome.EXTERNAL_UNCERTAIN:
-            self._unresolved[request.idempotency_key] = result.external_reference
+            self._unresolved[request.idempotency_key] = _UnresolvedDispatch(
+                request, result.external_reference
+            )
         return result
 
     @final
     def observe(self, request: RequestEnvelope) -> ResultEnvelope:
-        external_reference = self._unresolved.get(request.idempotency_key)
-        if request.idempotency_key not in self._unresolved:
+        unresolved = self._unresolved.get(request.idempotency_key)
+        if unresolved is None or unresolved.request != request:
             return _result(request, Outcome.REJECTED)
         return _result(
             request,
             Outcome.EXTERNAL_UNCERTAIN,
-            external_reference=external_reference,
+            external_reference=unresolved.external_reference,
             uncertainty=UncertaintyEvidence(True, "reconcile required", None),
         )
 
@@ -426,14 +439,49 @@ class ExecutorAdapter(ABC):
         self,
         request: RequestEnvelope,
         external_reference: ExternalReference | None = None,
+        *,
+        authorization: OrchestrationAuthorization | None = None,
+        current_context: GateContext | None = None,
+        evaluated_at: datetime | None = None,
     ) -> ResultEnvelope:
-        if request.idempotency_key not in self._unresolved:
+        unresolved = self._unresolved.get(request.idempotency_key)
+        if unresolved is None:
             raise AdapterContractError("request has no unresolved external state")
-        stored_reference = self._unresolved[request.idempotency_key]
-        reference = external_reference if external_reference is not None else stored_reference
+        if unresolved.request != request:
+            raise AdapterContractError(
+                "unresolved external state is bound to another request"
+            )
+        if (
+            unresolved.external_reference is not None
+            and external_reference is not None
+            and external_reference != unresolved.external_reference
+        ):
+            raise AdapterContractError(
+                "reconcile reference does not match unresolved external state"
+            )
+        reference = (
+            external_reference
+            if external_reference is not None
+            else unresolved.external_reference
+        )
+        validate_request_envelope(request, self.descriptor, AdapterKind.EXECUTOR)
+        enforce_adapter_dispatch(
+            request,
+            self.descriptor,
+            AdapterKind.EXECUTOR,
+            authorization=authorization,
+            current_context=current_context,
+            evaluated_at=evaluated_at,
+        )
         result = self._reconcile_external(request, reference)
+        if result.request_id != request.request_id:
+            raise AdapterContractError("reconcile result is bound to another request")
         if result.outcome is not Outcome.EXTERNAL_UNCERTAIN:
             del self._unresolved[request.idempotency_key]
+        else:
+            self._unresolved[request.idempotency_key] = _UnresolvedDispatch(
+                request, result.external_reference or reference
+            )
         return result
 
 

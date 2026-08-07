@@ -98,17 +98,17 @@
   },
   "test_evidence": {
     "tested_target": {
-      "commit": "5e335507cf33b1f8d637a8a975f629c4243fb3af",
-      "tree": "d91e7affe3fc025c987d227f8e7f76973f89d509",
-      "relationship": "This is the clean substantive W00 repair snapshot tested before the evidence-only seal."
+      "commit": "0b29525b93b8e203481fca2282b9f4393b2c4a7a",
+      "tree": "ee2c38d36c1eddb6be2b1857b453bad9a0e79a6a",
+      "relationship": "This is the clean W00 evidence-v1 snapshot tested before the final evidence-only seal."
     },
     "baseline_report": {
       "path": "docs/provenance/baseline-test-report.md",
-      "sha256": "cdde5ab59e0b052bfb2c59ae5c6d4265dd98eef1a0e207d8934e320df9c00f13"
+      "sha256": "ee8e2479d73fb282b1610261860a6b5ebca37dd324901923b9c3f62bb1c15e6b"
     },
     "w00_test_receipt": {
       "path": "reports/autopilot/waves/W00/test-receipt.json",
-      "sha256": "992216802c0d5e9d46ec82b42b8d325cf98dd78891ddc20734276f3a739f6d2d"
+      "sha256": "e2481d018c517075e14666ecc0b6c30aca1de8d7708f484089285ed7c458376f"
     },
     "source_baseline": {
       "pytest": "329 passed in 15.41s",
@@ -117,7 +117,7 @@
       "repo_isolation": "PASS; scanned_files=125; violations=0"
     },
     "target_baseline": {
-      "pytest": "343 passed in 16.90s",
+      "pytest": "343 passed in 19.42s",
       "core_purity": "PASS; scanned_files=191; violations=0",
       "side_effect_free": "PASS; scanned_files=78; violations=0",
       "repo_isolation": "PASS; scanned_files=128; violations=0",

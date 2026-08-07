@@ -1,7 +1,7 @@
 {
   "receipt_version": "be-lazy-wave-test-receipt/1.1",
   "wave": "W00-BOOTSTRAP-BASELINE",
-  "recorded_at": "2026-08-07T07:01:13.813Z",
+  "recorded_at": "2026-08-07T07:07:04.418Z",
   "subject": {
     "source": {
       "archive_sha256": "954325b77028bcf7d36a88136d8e1ed0ec2348ad15014623710614cced94034a",
@@ -14,8 +14,8 @@
     "target": {
       "repository": "be-lazy",
       "branch": "agent/autopilot-v4",
-      "tested_commit": "5e335507cf33b1f8d637a8a975f629c4243fb3af",
-      "tested_tree": "d91e7affe3fc025c987d227f8e7f76973f89d509",
+      "tested_commit": "0b29525b93b8e203481fca2282b9f4393b2c4a7a",
+      "tested_tree": "ee2c38d36c1eddb6be2b1857b453bad9a0e79a6a",
       "import_map_sha256": "7090ee355f7fa55bcb72423f1489c9230094e44e3574b7f6d047803445510809",
       "import_plan_digest_sha256": "0bb4c713ca8e7c14e9d9a376c7e778e2983994fa006f08637cb628f63b9b48e1"
     }
@@ -83,7 +83,7 @@
       "invocation": "& $env:BE_LAZY_TEST_RUNNER -m pytest -q -p no:cacheprovider --basetemp $env:BE_LAZY_TEST_TMP",
       "argv": ["-m", "pytest", "-q", "-p", "no:cacheprovider", "--basetemp", "BE_LAZY_TEST_TMP"],
       "exit_code": 0,
-      "result": "343 passed in 16.90s"
+      "result": "343 passed in 19.42s"
     },
     {
       "id": "target-core-purity",

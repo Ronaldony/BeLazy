@@ -5,7 +5,7 @@
 The immutable archive was tested only through a verified temporary extraction.
 The source archive and handoff package remained byte-identical. Source behavior
 passed all 329 available tests. After the explicit target-only purity scope and
-W00 review repairs, target commit `5e335507cf33b1f8d637a8a975f629c4243fb3af`
+W00 review repairs, target commit `0b29525b93b8e203481fca2282b9f4393b2c4a7a`
 passed the 329 imported tests plus 14 target-specific regression tests.
 
 ## Environments
@@ -51,7 +51,7 @@ boundary gate with synthetic negative cases.
 
 | Check | Actual result |
 |---|---|
-| Full target pytest | 343 passed in 16.90s |
+| Full target pytest | 343 passed in 19.42s |
 | Core purity | PASS, 191 scanned files, 0 violations |
 | Side-effect free | PASS, 78 scanned files, 0 violations |
 | Repository isolation | PASS, 128 scanned files, 0 violations |
@@ -62,8 +62,8 @@ scope tests, two provenance/locality tests, and ten target-boundary tests.
 
 ## Evidence binding
 
-- Tested target commit: `5e335507cf33b1f8d637a8a975f629c4243fb3af`
-- Tested target tree: `d91e7affe3fc025c987d227f8e7f76973f89d509`
+- Tested target commit: `0b29525b93b8e203481fca2282b9f4393b2c4a7a`
+- Tested target tree: `ee2c38d36c1eddb6be2b1857b453bad9a0e79a6a`
 - Exact environment-variable mapping, cwd roles, argv, results, source inventory,
   handoff, import-map, and import-plan digests:
   `reports/autopilot/waves/W00/test-receipt.json`

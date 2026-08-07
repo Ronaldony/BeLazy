@@ -22,7 +22,9 @@ def require_canonical_reference_path(value: object) -> str:
         raise ReferencePathError("reference path must already be NFC-normalized")
     if value.startswith(("/", "\\")) or _WINDOWS_DRIVE.match(value):
         raise ReferencePathError("reference path must be relative")
-    if "\\" in value or any(ord(character) < 32 for character in value):
+    if "\\" in value or any(
+        unicodedata.category(character) == "Cc" for character in value
+    ):
         raise ReferencePathError("reference path contains forbidden characters")
     segments = value.split("/")
     if any(segment in {"", ".", ".."} for segment in segments):

@@ -568,6 +568,8 @@ def test_coherent_promotion_rejects_cross_field_reference_conflict_and_order() -
         "artifacts/./alias.json",
         "artifacts//alias.json",
         "artifacts/alias.json/",
+        "artifacts/\x7falias.json",
+        "artifacts/\x85alias.json",
     ),
 )
 def test_coherent_promotion_rejects_noncanonical_reference_path_aliases(
@@ -1622,6 +1624,8 @@ def test_target_owned_director_resources_match_code_projection(tmp_path: Path) -
         "artifacts/./source.json",
         "artifacts//source.json",
         "artifacts/source.json/",
+        "artifacts/\x7fsource.json",
+        "artifacts/\x85source.json",
     ),
 )
 def test_unsafe_reference_paths_fail_before_task_or_projection_identity(

@@ -25,7 +25,7 @@ evidence and no external side effects.
 |---|---|---|---|
 | W00 Bootstrap/Baseline | passed | BOOT-001..005 | `d00856550f7f66618e3d365725e6b2d9054380c1` |
 | W01 Trust Boundary | passed | P0-PKG-001, P0-JSON-001, P0-AUTH-001 | `47d968d3cf8014573b349ad858d6a04bdf724f94` |
-| W02 Managed Mutation | pending | MUT-001..004 | pending |
+| W02 Managed Mutation | reviewing | MUT-001..004 | pending evidence checkpoint |
 | W03 Director/Blueprint | pending | BP-001, DIR-001, DIR-002, BP-002 | pending |
 | W04 Workflow/Authority | pending | WF-001, AUTH-001, AUTH-002, WF-002 | pending |
 | W05 Automation/Quality/Release | pending | SEL-001, QA-001, REL-001 | pending |
@@ -134,3 +134,45 @@ checkpoint commit exists, ignored local state records its exact hash and a
 tracked recovery anchor records the checkpoint commit/tree plus a canonical
 semantic state digest. Recovery validates Git ancestry, input digests, state
 schema/semantics, and target containment before continuing.
+
+## W02 decisions and evidence
+
+1. Managed mutation is an additive package with six closed artifact contracts,
+   strict bytes-only deserialization, a deterministic pure planner, revision and
+   drift logic, and narrow runtime protocols. Existing storage/executor public
+   protocols remain unchanged.
+2. The exact compare-and-swap surface binds workspace ID, canonical parent
+   revision digest, before manifest, per-operation expected bytes/path state,
+   current complete observation, and atomic idempotency reservation.
+3. Requester risk cannot lower policy risk. W02 conservatively assigns every
+   mutation R4 until W04 supplies a trusted request-and-policy-bound classifier.
+4. R4 requires two distinct authenticated human records bound to the exact
+   canonical break-glass request plus current snapshot, incident, audit,
+   evaluation, expiry, session, executor, and reconciliation scope.
+5. Each unique create/replace content object is resolved once and retained with
+   its exact resolver evidence. Plan-aware consumers require complete object-set
+   equality before a receipt can promote a trusted workspace revision.
+6. Cross-platform path validation rejects non-canonical, aliased, reserved,
+   linked, reparsed, escaping, or non-directory-ancestor targets. Drift compares
+   complete workspace identity, entries, lengths, bytes, and manifest.
+7. A concrete filesystem executor, durable journal/crash recovery, trusted
+   authority ledger, and lower-tier classifier remain explicitly assigned to
+   W04/W06. W02 does not simulate them or claim their completion.
+
+## W02 actual checks
+
+- Final implementation: `0fa62c81bcd2fa9537aa93db47403a73b388073a`
+  (tree `cc7e398710addb03a5febdd86d435a0d9a037aad`).
+- Managed-mutation focused suite: 73 passed on the exact implementation commit.
+- Full suite: 527 passed on the exact implementation commit/tree.
+- Core purity 273, side-effect-free 90, repository isolation 197, and target
+  boundary 330 files/59 directories: PASS.
+- Deterministic stdlib wheel: two identical 148-member, 262234-byte builds,
+  SHA-256 `afb79cc2b46cec41325d592cda22bb5395c87337b60a07423b5fc9dabb6e7cd3`.
+- Isolated wheel verification: 52 packaged Schemas and 48 registered versions;
+  RECORD, metadata, resource manifest, and imports PASS.
+- Standard backend command remains environment-blocked with
+  `No module named build`; no package was installed or downloaded.
+- Final fresh architecture, authority-boundary, and test/packaging reviews:
+  Critical 0, High 0, Medium 0 on the exact final implementation commit/tree.
+- Source archive and handoff manifest post-checks remain byte-identical.

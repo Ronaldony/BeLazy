@@ -1,0 +1,122 @@
+{
+  "schema_version": "be-lazy-w02-managed-mutation/1.0",
+  "wave": "W02-MANAGED-MUTATION",
+  "created_at": "2026-08-07T14:23:06.275Z",
+  "implementation": {
+    "commit": "0fa62c81bcd2fa9537aa93db47403a73b388073a",
+    "tree": "cc7e398710addb03a5febdd86d435a0d9a037aad",
+    "parent": "56170d0865cb8153fd53e94598cb99e4ea7db3d4",
+    "baseline_ancestor": "b93c44ff58a892f608c534f1ce68d876cdfd6fed",
+    "branch": "agent/autopilot-v4",
+    "candidate_chain": [
+      "de2fa08e565cb0fc6d194461d10263ef46adc422",
+      "ebbc3fbf031080a31abf4375e7423a545c0b31db",
+      "56170d0865cb8153fd53e94598cb99e4ea7db3d4",
+      "0fa62c81bcd2fa9537aa93db47403a73b388073a"
+    ]
+  },
+  "inputs": {
+    "source_archive_sha256": "954325b77028bcf7d36a88136d8e1ed0ec2348ad15014623710614cced94034a",
+    "source_member_count": 211,
+    "handoff_manifest_sha256": "1bd3aa1687299c15f81539641afcd1563097b0ff8cebc9c24a793e132386244a"
+  },
+  "schema_resources": {
+    "manifest_path": "src/video_factory/resources/schemas/schema-manifest.json",
+    "manifest_sha256": "ae3610e92f32386634be256751aa6f5186bfe5da4373032effc4eedd37a6df9f",
+    "schema_count": 52,
+    "registered_version_count": 48,
+    "w02_artifact_versions": [
+      "break-glass-authorization/1.0",
+      "change-request/1.0",
+      "drift-report/1.0",
+      "mutation-plan/1.0",
+      "mutation-receipt/1.0",
+      "workspace-revision/1.0"
+    ]
+  },
+  "managed_mutation_boundary": {
+    "pure_planner": true,
+    "stable_ids_and_reason_codes": true,
+    "workspace_revision_and_manifest_cas": true,
+    "exact_operation_before_state": true,
+    "immutable_revision_and_tombstone_lineage": true,
+    "strict_cross_platform_managed_paths": true,
+    "complete_current_workspace_verification": true,
+    "drift_quarantines_generation_and_publish": true,
+    "atomic_idempotency_reservation_contract": true,
+    "all_w02_mutations_risk_floor": "R4",
+    "distinct_human_approval_count": 2,
+    "human_approvals_bind_exact_break_glass_request": true,
+    "unique_content_objects_bind_exact_observation_pairs": true,
+    "plan_aware_authorization_consumers": [
+      "pre_side_effect_guard",
+      "mutation_receipt_validation",
+      "workspace_revision_promotion"
+    ]
+  },
+  "deferred_boundaries": {
+    "w04": [
+      "trusted lower-tier risk classifier",
+      "durable authority and revocation ledger",
+      "approval signature and identity verification implementation"
+    ],
+    "w06": [
+      "concrete managed filesystem executor",
+      "durable journal and crash recovery",
+      "real atomic compare-and-swap mutation application"
+    ]
+  },
+  "manual_wheel": {
+    "role": "STDLIB_PEP427_ACCEPTANCE_FALLBACK_ONLY",
+    "filename": "video_production_core-0.3.1-py3-none-any.whl",
+    "sha256": "afb79cc2b46cec41325d592cda22bb5395c87337b60a07423b5fc9dabb6e7cd3",
+    "size_bytes": 262234,
+    "member_count": 148,
+    "two_builds_identical": true,
+    "record_verified": true,
+    "isolated_registry_load": "52 schemas; 48 registered versions"
+  },
+  "test_evidence": {
+    "receipt": {
+      "path": "reports/autopilot/waves/W02/test-receipt.json",
+      "sha256": "023c6aede0dba022c7a709ca528a7a0f3422d124505ebdff3ca9a26cf7fd47ee"
+    },
+    "focused": "73 passed on exact implementation commit",
+    "full": "527 passed on exact implementation commit/tree",
+    "boundaries": "core_purity, side_effect_free, repo_isolation, target_boundary PASS",
+    "standard_build_backend": {
+      "status": "ENVIRONMENT_BLOCKED",
+      "observed": "No module named build",
+      "fallback_misrepresented_as_backend": false
+    }
+  },
+  "review_evidence": {
+    "discovery": {
+      "path": "reports/autopilot/waves/W02/discovery.md",
+      "sha256": "97cbb0230293a39e0a1277907584470272aaacea9859fe9c538dd3207be5a46c"
+    },
+    "rounds": [
+      {"round": 1, "path": "reports/autopilot/waves/W02/review-round-1.md", "sha256": "864c2616b5e56865d1334135c6c1cd46bde18dd8881a2198cac0952f4104454e", "result": "CHANGES_REQUESTED"},
+      {"round": 2, "path": "reports/autopilot/waves/W02/review-round-2.md", "sha256": "45928a6638eace324eb6df1efd228a12e3f1d545fa0348634ba39730c93e7b47", "result": "CHANGES_REQUESTED"},
+      {"round": 3, "path": "reports/autopilot/waves/W02/review-round-3.md", "sha256": "0aa2cadeeca2c8838c370b53503abb9ca1f38141170aac6e1c6b746b03cb2175", "result": "CHANGES_REQUESTED"},
+      {"round": 4, "path": "reports/autopilot/waves/W02/review-round-4.md", "sha256": "cb71e348edce4a8754f7c0171460e695948925a27f9184108946ad3f219fd985", "result": "GO"}
+    ],
+    "final_reviewers": [
+      {"role": "architecture_contract", "critical": 0, "high": 0, "medium": 0, "result": "GO"},
+      {"role": "security_authority_boundary", "critical": 0, "high": 0, "medium": 0, "result": "GO"},
+      {"role": "test_compatibility_packaging", "critical": 0, "high": 0, "medium": 0, "result": "GO"}
+    ]
+  },
+  "execplan": {
+    "path": ".agent/execplans/be-lazy-autopilot.md",
+    "sha256": "8bd8a552d86dd58a9ef3e851c34df8caa46fb9a789176c968b83226b0384adad"
+  },
+  "claims_not_made": [
+    "setuptools_backend_verification",
+    "durable_authority_classifier_or_ledger",
+    "approval_signature_or_human_identity_authenticity",
+    "concrete_filesystem_executor_or_durable_journal",
+    "provider_publication_or_deployment",
+    "public_identifier_migration"
+  ]
+}

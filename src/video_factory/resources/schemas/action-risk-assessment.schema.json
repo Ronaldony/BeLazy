@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.video-factory.invalid/authority/action-risk-assessment.schema.json",
+  "title": "Target-policy action risk classification",
+  "type": "object",
+  "required": [
+    "artifact_version", "assessment_id", "assessment_sha256", "classifier_version",
+    "policy_bundle_sha256", "action_request_sha256", "effective_risk", "reason_codes", "supported"
+  ],
+  "properties": {
+    "artifact_version": { "const": "action-risk-assessment/1.0" },
+    "assessment_id": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" },
+    "assessment_sha256": { "$ref": "artifact-common.schema.json#/$defs/sha256" },
+    "classifier_version": { "const": "authority-risk-classifier/1.0" },
+    "policy_bundle_sha256": { "$ref": "artifact-common.schema.json#/$defs/sha256" },
+    "action_request_sha256": { "$ref": "artifact-common.schema.json#/$defs/sha256" },
+    "effective_risk": { "$ref": "workflow-authority-common.schema.json#/$defs/risk" },
+    "reason_codes": { "$ref": "workflow-authority-common.schema.json#/$defs/reasonCodes" },
+    "supported": { "type": "boolean" }
+  },
+  "additionalProperties": false
+}

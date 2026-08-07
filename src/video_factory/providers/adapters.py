@@ -12,6 +12,12 @@ import re
 from typing import final
 
 from video_factory.approvals import GateContext
+from video_factory.authority import (
+    ActionAuthorityRequest,
+    AuthorityDecision,
+    TrustedAuthorizationLedger,
+    VerificationPurpose,
+)
 from video_factory.mutation import WorkspaceObservation, WorkspaceRevision
 from video_factory.domain import ArtifactReference, IdempotencyKey
 from video_factory.engine.contracts import ExecutionMode
@@ -381,6 +387,10 @@ class ExecutorAdapter(ABC):
         expected_workspace_revision_id: str | None = None,
         expected_workspace_revision: WorkspaceRevision | None = None,
         expected_workspace_revision_sha256: str | None = None,
+        authority_request: ActionAuthorityRequest | None = None,
+        authority_decision: AuthorityDecision | None = None,
+        authority_ledger: TrustedAuthorizationLedger | None = None,
+        service_identity: str | None = None,
     ) -> ResultEnvelope:
         if request.idempotency_key in self._unresolved:
             raise AdapterContractError("reconcile is required before executor redispatch")
@@ -398,6 +408,11 @@ class ExecutorAdapter(ABC):
             expected_workspace_revision_id=expected_workspace_revision_id,
             expected_workspace_revision=expected_workspace_revision,
             expected_workspace_revision_sha256=expected_workspace_revision_sha256,
+            authority_request=authority_request,
+            authority_decision=authority_decision,
+            authority_ledger=authority_ledger,
+            service_identity=service_identity,
+            verification_purpose=VerificationPurpose.DISPATCH,
         )
 
         try:
@@ -459,6 +474,10 @@ class ExecutorAdapter(ABC):
         expected_workspace_revision_id: str | None = None,
         expected_workspace_revision: WorkspaceRevision | None = None,
         expected_workspace_revision_sha256: str | None = None,
+        authority_request: ActionAuthorityRequest | None = None,
+        authority_decision: AuthorityDecision | None = None,
+        authority_ledger: TrustedAuthorizationLedger | None = None,
+        service_identity: str | None = None,
     ) -> ResultEnvelope:
         unresolved = self._unresolved.get(request.idempotency_key)
         if unresolved is None:
@@ -493,6 +512,11 @@ class ExecutorAdapter(ABC):
             expected_workspace_revision_id=expected_workspace_revision_id,
             expected_workspace_revision=expected_workspace_revision,
             expected_workspace_revision_sha256=expected_workspace_revision_sha256,
+            authority_request=authority_request,
+            authority_decision=authority_decision,
+            authority_ledger=authority_ledger,
+            service_identity=service_identity,
+            verification_purpose=VerificationPurpose.RECONCILE,
         )
         result = self._reconcile_external(request, reference)
         if result.request_id != request.request_id:

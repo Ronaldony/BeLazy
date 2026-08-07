@@ -1,0 +1,1056 @@
+{
+  "artifact_version": "workflow-definition/1.0",
+  "workflow_version": "episode-production-workflow/1.0",
+  "claims": [
+    {
+      "claim_id": "artifact_graph_valid",
+      "dependency_claim_ids": [],
+      "gate_id": "gate.artifact_graph_valid"
+    },
+    {
+      "claim_id": "brief_present",
+      "dependency_claim_ids": [
+        "artifact_graph_valid"
+      ],
+      "gate_id": "gate.brief_present"
+    },
+    {
+      "claim_id": "storyboard_present",
+      "dependency_claim_ids": [
+        "brief_present"
+      ],
+      "gate_id": "gate.storyboard_present"
+    },
+    {
+      "claim_id": "storyboard_review_pass",
+      "dependency_claim_ids": [
+        "storyboard_present"
+      ],
+      "gate_id": "gate.storyboard_review_pass"
+    },
+    {
+      "claim_id": "storyboard_approval_current",
+      "dependency_claim_ids": [
+        "storyboard_review_pass"
+      ],
+      "gate_id": "gate.storyboard_approval_current"
+    },
+    {
+      "claim_id": "packet_present",
+      "dependency_claim_ids": [
+        "storyboard_approval_current"
+      ],
+      "gate_id": "gate.packet_present"
+    },
+    {
+      "claim_id": "packet_contract_valid",
+      "dependency_claim_ids": [
+        "packet_present"
+      ],
+      "gate_id": "gate.packet_contract_valid"
+    },
+    {
+      "claim_id": "packet_review_pass",
+      "dependency_claim_ids": [
+        "packet_contract_valid"
+      ],
+      "gate_id": "gate.packet_review_pass"
+    },
+    {
+      "claim_id": "feasibility_pass",
+      "dependency_claim_ids": [
+        "packet_contract_valid"
+      ],
+      "gate_id": "gate.feasibility_pass"
+    },
+    {
+      "claim_id": "generation_approval_current",
+      "dependency_claim_ids": [
+        "packet_review_pass",
+        "feasibility_pass"
+      ],
+      "gate_id": "gate.generation_approval_current"
+    },
+    {
+      "claim_id": "generation_mode_permits_execution",
+      "dependency_claim_ids": [
+        "generation_approval_current"
+      ],
+      "gate_id": "gate.generation_mode_permits_execution"
+    },
+    {
+      "claim_id": "workspace_trusted",
+      "dependency_claim_ids": [
+        "generation_mode_permits_execution"
+      ],
+      "gate_id": "gate.workspace_trusted"
+    },
+    {
+      "claim_id": "shot_qc_pass",
+      "dependency_claim_ids": [
+        "workspace_trusted"
+      ],
+      "gate_id": "gate.shot_qc_pass"
+    },
+    {
+      "claim_id": "continuity_qc_pass",
+      "dependency_claim_ids": [
+        "shot_qc_pass"
+      ],
+      "gate_id": "gate.continuity_qc_pass"
+    },
+    {
+      "claim_id": "candidate_ranking_current",
+      "dependency_claim_ids": [
+        "continuity_qc_pass"
+      ],
+      "gate_id": "gate.candidate_ranking_current"
+    },
+    {
+      "claim_id": "edit_manifest_current",
+      "dependency_claim_ids": [
+        "candidate_ranking_current"
+      ],
+      "gate_id": "gate.edit_manifest_current"
+    },
+    {
+      "claim_id": "rough_cut_pass",
+      "dependency_claim_ids": [
+        "edit_manifest_current"
+      ],
+      "gate_id": "gate.rough_cut_pass"
+    },
+    {
+      "claim_id": "final_delivery_present",
+      "dependency_claim_ids": [
+        "rough_cut_pass"
+      ],
+      "gate_id": "gate.final_delivery_present"
+    },
+    {
+      "claim_id": "final_delivery_valid",
+      "dependency_claim_ids": [
+        "final_delivery_present"
+      ],
+      "gate_id": "gate.final_delivery_valid"
+    },
+    {
+      "claim_id": "final_review_pass",
+      "dependency_claim_ids": [
+        "final_delivery_valid"
+      ],
+      "gate_id": "gate.final_review_pass"
+    },
+    {
+      "claim_id": "publish_metadata_present",
+      "dependency_claim_ids": [
+        "final_delivery_valid"
+      ],
+      "gate_id": "gate.publish_metadata_present"
+    },
+    {
+      "claim_id": "publish_metadata_bound",
+      "dependency_claim_ids": [
+        "publish_metadata_present"
+      ],
+      "gate_id": "gate.publish_metadata_bound"
+    },
+    {
+      "claim_id": "publish_approval_current",
+      "dependency_claim_ids": [
+        "final_review_pass",
+        "publish_metadata_bound"
+      ],
+      "gate_id": "gate.publish_approval_current"
+    },
+    {
+      "claim_id": "external_publish_complete",
+      "dependency_claim_ids": [
+        "publish_approval_current"
+      ],
+      "gate_id": "gate.external_publish_complete"
+    }
+  ],
+  "gates": [
+    {
+      "gate_id": "gate.artifact_graph_valid",
+      "owner": "artifact-owner",
+      "stable_reason_prefix": "workflow.artifact_graph_valid",
+      "consumed_context_fields": [
+        "workflow_definition_sha256",
+        "policy_bundle_sha256",
+        "rules_bundle_sha256",
+        "effective_config_sha256",
+        "current_manifest_sha256",
+        "evidence_graph_sha256"
+      ]
+    },
+    {
+      "gate_id": "gate.brief_present",
+      "owner": "creator",
+      "stable_reason_prefix": "workflow.brief_present",
+      "consumed_context_fields": [
+        "workflow_definition_sha256",
+        "policy_bundle_sha256",
+        "rules_bundle_sha256",
+        "effective_config_sha256",
+        "current_manifest_sha256",
+        "evidence_graph_sha256"
+      ]
+    },
+    {
+      "gate_id": "gate.storyboard_present",
+      "owner": "creator",
+      "stable_reason_prefix": "workflow.storyboard_present",
+      "consumed_context_fields": [
+        "workflow_definition_sha256",
+        "policy_bundle_sha256",
+        "rules_bundle_sha256",
+        "effective_config_sha256",
+        "current_manifest_sha256",
+        "evidence_graph_sha256"
+      ]
+    },
+    {
+      "gate_id": "gate.storyboard_review_pass",
+      "owner": "reviewer",
+      "stable_reason_prefix": "workflow.storyboard_review_pass",
+      "consumed_context_fields": [
+        "workflow_definition_sha256",
+        "policy_bundle_sha256",
+        "rules_bundle_sha256",
+        "effective_config_sha256",
+        "current_manifest_sha256",
+        "evidence_graph_sha256"
+      ]
+    },
+    {
+      "gate_id": "gate.storyboard_approval_current",
+      "owner": "human-approver",
+      "stable_reason_prefix": "workflow.storyboard_approval_current",
+      "consumed_context_fields": [
+        "workflow_definition_sha256",
+        "policy_bundle_sha256",
+        "rules_bundle_sha256",
+        "effective_config_sha256",
+        "current_manifest_sha256",
+        "evidence_graph_sha256"
+      ]
+    },
+    {
+      "gate_id": "gate.packet_present",
+      "owner": "creator",
+      "stable_reason_prefix": "workflow.packet_present",
+      "consumed_context_fields": [
+        "workflow_definition_sha256",
+        "policy_bundle_sha256",
+        "rules_bundle_sha256",
+        "effective_config_sha256",
+        "current_manifest_sha256",
+        "evidence_graph_sha256"
+      ]
+    },
+    {
+      "gate_id": "gate.packet_contract_valid",
+      "owner": "creator",
+      "stable_reason_prefix": "workflow.packet_contract_valid",
+      "consumed_context_fields": [
+        "workflow_definition_sha256",
+        "policy_bundle_sha256",
+        "rules_bundle_sha256",
+        "effective_config_sha256",
+        "current_manifest_sha256",
+        "evidence_graph_sha256"
+      ]
+    },
+    {
+      "gate_id": "gate.packet_review_pass",
+      "owner": "reviewer",
+      "stable_reason_prefix": "workflow.packet_review_pass",
+      "consumed_context_fields": [
+        "workflow_definition_sha256",
+        "policy_bundle_sha256",
+        "rules_bundle_sha256",
+        "effective_config_sha256",
+        "current_manifest_sha256",
+        "evidence_graph_sha256"
+      ]
+    },
+    {
+      "gate_id": "gate.feasibility_pass",
+      "owner": "independent-reviewer",
+      "stable_reason_prefix": "workflow.feasibility_pass",
+      "consumed_context_fields": [
+        "workflow_definition_sha256",
+        "policy_bundle_sha256",
+        "rules_bundle_sha256",
+        "effective_config_sha256",
+        "current_manifest_sha256",
+        "evidence_graph_sha256"
+      ]
+    },
+    {
+      "gate_id": "gate.generation_approval_current",
+      "owner": "human-approver",
+      "stable_reason_prefix": "workflow.generation_approval_current",
+      "consumed_context_fields": [
+        "workflow_definition_sha256",
+        "policy_bundle_sha256",
+        "rules_bundle_sha256",
+        "effective_config_sha256",
+        "current_manifest_sha256",
+        "evidence_graph_sha256"
+      ]
+    },
+    {
+      "gate_id": "gate.generation_mode_permits_execution",
+      "owner": "human-operator",
+      "stable_reason_prefix": "workflow.generation_mode_permits_execution",
+      "consumed_context_fields": [
+        "workflow_definition_sha256",
+        "policy_bundle_sha256",
+        "rules_bundle_sha256",
+        "effective_config_sha256",
+        "current_manifest_sha256",
+        "evidence_graph_sha256"
+      ]
+    },
+    {
+      "gate_id": "gate.workspace_trusted",
+      "owner": "workspace-authority",
+      "stable_reason_prefix": "workflow.workspace_trusted",
+      "consumed_context_fields": [
+        "workflow_definition_sha256",
+        "policy_bundle_sha256",
+        "rules_bundle_sha256",
+        "effective_config_sha256",
+        "current_manifest_sha256",
+        "evidence_graph_sha256"
+      ]
+    },
+    {
+      "gate_id": "gate.shot_qc_pass",
+      "owner": "human-or-channel-tool",
+      "stable_reason_prefix": "workflow.shot_qc_pass",
+      "consumed_context_fields": [
+        "workflow_definition_sha256",
+        "policy_bundle_sha256",
+        "rules_bundle_sha256",
+        "effective_config_sha256",
+        "current_manifest_sha256",
+        "evidence_graph_sha256"
+      ]
+    },
+    {
+      "gate_id": "gate.continuity_qc_pass",
+      "owner": "qc-tool-or-reviewer",
+      "stable_reason_prefix": "workflow.continuity_qc_pass",
+      "consumed_context_fields": [
+        "workflow_definition_sha256",
+        "policy_bundle_sha256",
+        "rules_bundle_sha256",
+        "effective_config_sha256",
+        "current_manifest_sha256",
+        "evidence_graph_sha256"
+      ]
+    },
+    {
+      "gate_id": "gate.candidate_ranking_current",
+      "owner": "qc-tool",
+      "stable_reason_prefix": "workflow.candidate_ranking_current",
+      "consumed_context_fields": [
+        "workflow_definition_sha256",
+        "policy_bundle_sha256",
+        "rules_bundle_sha256",
+        "effective_config_sha256",
+        "current_manifest_sha256",
+        "evidence_graph_sha256"
+      ]
+    },
+    {
+      "gate_id": "gate.edit_manifest_current",
+      "owner": "human-editor",
+      "stable_reason_prefix": "workflow.edit_manifest_current",
+      "consumed_context_fields": [
+        "workflow_definition_sha256",
+        "policy_bundle_sha256",
+        "rules_bundle_sha256",
+        "effective_config_sha256",
+        "current_manifest_sha256",
+        "evidence_graph_sha256"
+      ]
+    },
+    {
+      "gate_id": "gate.rough_cut_pass",
+      "owner": "editor",
+      "stable_reason_prefix": "workflow.rough_cut_pass",
+      "consumed_context_fields": [
+        "workflow_definition_sha256",
+        "policy_bundle_sha256",
+        "rules_bundle_sha256",
+        "effective_config_sha256",
+        "current_manifest_sha256",
+        "evidence_graph_sha256"
+      ]
+    },
+    {
+      "gate_id": "gate.final_delivery_present",
+      "owner": "editor",
+      "stable_reason_prefix": "workflow.final_delivery_present",
+      "consumed_context_fields": [
+        "workflow_definition_sha256",
+        "policy_bundle_sha256",
+        "rules_bundle_sha256",
+        "effective_config_sha256",
+        "current_manifest_sha256",
+        "evidence_graph_sha256"
+      ]
+    },
+    {
+      "gate_id": "gate.final_delivery_valid",
+      "owner": "editor",
+      "stable_reason_prefix": "workflow.final_delivery_valid",
+      "consumed_context_fields": [
+        "workflow_definition_sha256",
+        "policy_bundle_sha256",
+        "rules_bundle_sha256",
+        "effective_config_sha256",
+        "current_manifest_sha256",
+        "evidence_graph_sha256"
+      ]
+    },
+    {
+      "gate_id": "gate.final_review_pass",
+      "owner": "reviewer",
+      "stable_reason_prefix": "workflow.final_review_pass",
+      "consumed_context_fields": [
+        "workflow_definition_sha256",
+        "policy_bundle_sha256",
+        "rules_bundle_sha256",
+        "effective_config_sha256",
+        "current_manifest_sha256",
+        "evidence_graph_sha256"
+      ]
+    },
+    {
+      "gate_id": "gate.publish_metadata_present",
+      "owner": "creator",
+      "stable_reason_prefix": "workflow.publish_metadata_present",
+      "consumed_context_fields": [
+        "workflow_definition_sha256",
+        "policy_bundle_sha256",
+        "rules_bundle_sha256",
+        "effective_config_sha256",
+        "current_manifest_sha256",
+        "evidence_graph_sha256"
+      ]
+    },
+    {
+      "gate_id": "gate.publish_metadata_bound",
+      "owner": "creator",
+      "stable_reason_prefix": "workflow.publish_metadata_bound",
+      "consumed_context_fields": [
+        "workflow_definition_sha256",
+        "policy_bundle_sha256",
+        "rules_bundle_sha256",
+        "effective_config_sha256",
+        "current_manifest_sha256",
+        "evidence_graph_sha256"
+      ]
+    },
+    {
+      "gate_id": "gate.publish_approval_current",
+      "owner": "human-approver",
+      "stable_reason_prefix": "workflow.publish_approval_current",
+      "consumed_context_fields": [
+        "workflow_definition_sha256",
+        "policy_bundle_sha256",
+        "rules_bundle_sha256",
+        "effective_config_sha256",
+        "current_manifest_sha256",
+        "evidence_graph_sha256"
+      ]
+    },
+    {
+      "gate_id": "gate.external_publish_complete",
+      "owner": "human-publisher",
+      "stable_reason_prefix": "workflow.external_publish_complete",
+      "consumed_context_fields": [
+        "workflow_definition_sha256",
+        "policy_bundle_sha256",
+        "rules_bundle_sha256",
+        "effective_config_sha256",
+        "current_manifest_sha256",
+        "evidence_graph_sha256"
+      ]
+    }
+  ],
+  "actions": [
+    {
+      "action_id": "resolve_artifact_graph",
+      "satisfies_claim_id": "artifact_graph_valid",
+      "required_claim_ids": [],
+      "actor_role": "artifact-owner",
+      "capability_id": "repair_artifact_graph",
+      "risk": "R0",
+      "authority_requirement": "policy",
+      "priority": 0,
+      "side_effect": false,
+      "trigger_reason_codes": [],
+      "prohibited_actions": [
+        "auto_transition_workflow_state",
+        "auto_approve",
+        "paid_external_generation",
+        "publish",
+        "overwrite_generated_assets"
+      ]
+    },
+    {
+      "action_id": "create_brief",
+      "satisfies_claim_id": "brief_present",
+      "required_claim_ids": [
+        "artifact_graph_valid"
+      ],
+      "actor_role": "creator",
+      "capability_id": "write_brief",
+      "risk": "R1",
+      "authority_requirement": "policy",
+      "priority": 1,
+      "side_effect": false,
+      "trigger_reason_codes": [],
+      "prohibited_actions": [
+        "auto_transition_workflow_state",
+        "auto_approve",
+        "paid_external_generation",
+        "publish",
+        "overwrite_generated_assets"
+      ]
+    },
+    {
+      "action_id": "create_storyboard",
+      "satisfies_claim_id": "storyboard_present",
+      "required_claim_ids": [
+        "brief_present"
+      ],
+      "actor_role": "creator",
+      "capability_id": "write_storyboard",
+      "risk": "R1",
+      "authority_requirement": "policy",
+      "priority": 2,
+      "side_effect": false,
+      "trigger_reason_codes": [],
+      "prohibited_actions": [
+        "auto_transition_workflow_state",
+        "auto_approve",
+        "paid_external_generation",
+        "publish",
+        "overwrite_generated_assets"
+      ]
+    },
+    {
+      "action_id": "review_or_revise_storyboard",
+      "satisfies_claim_id": "storyboard_review_pass",
+      "required_claim_ids": [
+        "storyboard_present"
+      ],
+      "actor_role": "reviewer",
+      "capability_id": "review_storyboard",
+      "risk": "R0",
+      "authority_requirement": "policy",
+      "priority": 3,
+      "side_effect": false,
+      "trigger_reason_codes": [],
+      "prohibited_actions": [
+        "auto_transition_workflow_state",
+        "auto_approve",
+        "paid_external_generation",
+        "publish",
+        "overwrite_generated_assets"
+      ]
+    },
+    {
+      "action_id": "approve_storyboard",
+      "satisfies_claim_id": "storyboard_approval_current",
+      "required_claim_ids": [
+        "storyboard_review_pass"
+      ],
+      "actor_role": "human-approver",
+      "capability_id": "storyboard_approval",
+      "risk": "R0",
+      "authority_requirement": "human_or_campaign",
+      "priority": 4,
+      "side_effect": false,
+      "trigger_reason_codes": [],
+      "prohibited_actions": [
+        "auto_transition_workflow_state",
+        "auto_approve",
+        "paid_external_generation",
+        "publish",
+        "overwrite_generated_assets"
+      ]
+    },
+    {
+      "action_id": "create_generation_packet",
+      "satisfies_claim_id": "packet_present",
+      "required_claim_ids": [
+        "storyboard_approval_current"
+      ],
+      "actor_role": "creator",
+      "capability_id": "write_generation_packet",
+      "risk": "R1",
+      "authority_requirement": "policy",
+      "priority": 5,
+      "side_effect": false,
+      "trigger_reason_codes": [],
+      "prohibited_actions": [
+        "auto_transition_workflow_state",
+        "auto_approve",
+        "paid_external_generation",
+        "publish",
+        "overwrite_generated_assets"
+      ]
+    },
+    {
+      "action_id": "rebuild_generation_packet",
+      "satisfies_claim_id": "packet_contract_valid",
+      "required_claim_ids": [
+        "packet_present"
+      ],
+      "actor_role": "creator",
+      "capability_id": "write_generation_packet",
+      "risk": "R1",
+      "authority_requirement": "policy",
+      "priority": 6,
+      "side_effect": false,
+      "trigger_reason_codes": [],
+      "prohibited_actions": [
+        "auto_transition_workflow_state",
+        "auto_approve",
+        "paid_external_generation",
+        "publish",
+        "overwrite_generated_assets"
+      ]
+    },
+    {
+      "action_id": "review_or_revise_generation_packet",
+      "satisfies_claim_id": "packet_review_pass",
+      "required_claim_ids": [
+        "packet_contract_valid"
+      ],
+      "actor_role": "reviewer",
+      "capability_id": "review_generation_packet",
+      "risk": "R0",
+      "authority_requirement": "policy",
+      "priority": 7,
+      "side_effect": false,
+      "trigger_reason_codes": [],
+      "prohibited_actions": [
+        "auto_transition_workflow_state",
+        "auto_approve",
+        "paid_external_generation",
+        "publish",
+        "overwrite_generated_assets"
+      ]
+    },
+    {
+      "action_id": "review_generation_feasibility",
+      "satisfies_claim_id": "feasibility_pass",
+      "required_claim_ids": [
+        "packet_contract_valid"
+      ],
+      "actor_role": "independent-reviewer",
+      "capability_id": "review_generation_feasibility",
+      "risk": "R0",
+      "authority_requirement": "policy",
+      "priority": 8,
+      "side_effect": false,
+      "trigger_reason_codes": [],
+      "prohibited_actions": [
+        "auto_transition_workflow_state",
+        "auto_approve",
+        "paid_external_generation",
+        "publish",
+        "overwrite_generated_assets"
+      ]
+    },
+    {
+      "action_id": "approve_generation",
+      "satisfies_claim_id": "generation_approval_current",
+      "required_claim_ids": [
+        "packet_review_pass",
+        "feasibility_pass"
+      ],
+      "actor_role": "human-approver",
+      "capability_id": "generation_approval",
+      "risk": "R0",
+      "authority_requirement": "human_or_campaign",
+      "priority": 9,
+      "side_effect": false,
+      "trigger_reason_codes": [],
+      "prohibited_actions": [
+        "auto_transition_workflow_state",
+        "auto_approve",
+        "paid_external_generation",
+        "publish",
+        "overwrite_generated_assets"
+      ]
+    },
+    {
+      "action_id": "preview_complete",
+      "satisfies_claim_id": "generation_mode_permits_execution",
+      "required_claim_ids": [
+        "generation_approval_current"
+      ],
+      "actor_role": "human-operator",
+      "capability_id": "select_production_profile",
+      "risk": "R0",
+      "authority_requirement": "policy",
+      "priority": 10,
+      "side_effect": false,
+      "trigger_reason_codes": [
+        "workflow.mode.preview_only"
+      ],
+      "prohibited_actions": [
+        "auto_transition_workflow_state",
+        "auto_approve",
+        "paid_external_generation",
+        "publish",
+        "overwrite_generated_assets"
+      ]
+    },
+    {
+      "action_id": "reconcile_workspace",
+      "satisfies_claim_id": "workspace_trusted",
+      "required_claim_ids": [
+        "generation_mode_permits_execution"
+      ],
+      "actor_role": "workspace-authority",
+      "capability_id": "reconcile_workspace",
+      "risk": "R4",
+      "authority_requirement": "two_independent_humans",
+      "priority": 11,
+      "side_effect": true,
+      "trigger_reason_codes": [],
+      "prohibited_actions": [
+        "auto_transition_workflow_state",
+        "auto_approve",
+        "paid_external_generation",
+        "publish",
+        "overwrite_generated_assets"
+      ]
+    },
+    {
+      "action_id": "run_external_generation",
+      "satisfies_claim_id": "shot_qc_pass",
+      "required_claim_ids": [
+        "workspace_trusted"
+      ],
+      "actor_role": "human-or-channel-tool",
+      "capability_id": "paid_external_generation",
+      "risk": "R2",
+      "authority_requirement": "standing_or_one_human",
+      "priority": 12,
+      "side_effect": true,
+      "trigger_reason_codes": [
+        "workflow.shot_qc.missing"
+      ],
+      "prohibited_actions": [
+        "auto_transition_workflow_state",
+        "auto_approve",
+        "paid_external_generation",
+        "publish",
+        "overwrite_generated_assets"
+      ]
+    },
+    {
+      "action_id": "remediate_or_repeat_shot_qc",
+      "satisfies_claim_id": "shot_qc_pass",
+      "required_claim_ids": [
+        "workspace_trusted"
+      ],
+      "actor_role": "human-or-channel-tool",
+      "capability_id": "paid_external_generation",
+      "risk": "R2",
+      "authority_requirement": "standing_or_one_human",
+      "priority": 13,
+      "side_effect": true,
+      "trigger_reason_codes": [
+        "workflow.shot_qc.failed",
+        "workflow.shot_qc.stale",
+        "workflow.shot_qc.ambiguous"
+      ],
+      "prohibited_actions": [
+        "auto_transition_workflow_state",
+        "auto_approve",
+        "paid_external_generation",
+        "publish",
+        "overwrite_generated_assets"
+      ]
+    },
+    {
+      "action_id": "run_continuity_qc",
+      "satisfies_claim_id": "continuity_qc_pass",
+      "required_claim_ids": [
+        "shot_qc_pass"
+      ],
+      "actor_role": "qc-tool-or-reviewer",
+      "capability_id": "review_cross_shot_continuity",
+      "risk": "R0",
+      "authority_requirement": "policy",
+      "priority": 14,
+      "side_effect": false,
+      "trigger_reason_codes": [
+        "workflow.continuity_qc.missing"
+      ],
+      "prohibited_actions": [
+        "auto_transition_workflow_state",
+        "auto_approve",
+        "paid_external_generation",
+        "publish",
+        "overwrite_generated_assets"
+      ]
+    },
+    {
+      "action_id": "remediate_continuity_qc",
+      "satisfies_claim_id": "continuity_qc_pass",
+      "required_claim_ids": [
+        "shot_qc_pass"
+      ],
+      "actor_role": "qc-tool-or-reviewer",
+      "capability_id": "review_cross_shot_continuity",
+      "risk": "R0",
+      "authority_requirement": "policy",
+      "priority": 15,
+      "side_effect": false,
+      "trigger_reason_codes": [
+        "workflow.continuity_qc.failed",
+        "workflow.continuity_qc.stale",
+        "workflow.continuity_qc.ambiguous"
+      ],
+      "prohibited_actions": [
+        "auto_transition_workflow_state",
+        "auto_approve",
+        "paid_external_generation",
+        "publish",
+        "overwrite_generated_assets"
+      ]
+    },
+    {
+      "action_id": "rank_generation_candidates",
+      "satisfies_claim_id": "candidate_ranking_current",
+      "required_claim_ids": [
+        "continuity_qc_pass"
+      ],
+      "actor_role": "qc-tool",
+      "capability_id": "rank_candidates",
+      "risk": "R0",
+      "authority_requirement": "policy",
+      "priority": 16,
+      "side_effect": false,
+      "trigger_reason_codes": [],
+      "prohibited_actions": [
+        "auto_transition_workflow_state",
+        "auto_approve",
+        "paid_external_generation",
+        "publish",
+        "overwrite_generated_assets"
+      ]
+    },
+    {
+      "action_id": "select_edit_inputs",
+      "satisfies_claim_id": "edit_manifest_current",
+      "required_claim_ids": [
+        "candidate_ranking_current"
+      ],
+      "actor_role": "human-editor",
+      "capability_id": "prepare_edit_manifest",
+      "risk": "R0",
+      "authority_requirement": "human_or_campaign",
+      "priority": 17,
+      "side_effect": false,
+      "trigger_reason_codes": [],
+      "prohibited_actions": [
+        "auto_transition_workflow_state",
+        "auto_approve",
+        "paid_external_generation",
+        "publish",
+        "overwrite_generated_assets"
+      ]
+    },
+    {
+      "action_id": "assemble_or_repair_rough_cut",
+      "satisfies_claim_id": "rough_cut_pass",
+      "required_claim_ids": [
+        "edit_manifest_current"
+      ],
+      "actor_role": "editor",
+      "capability_id": "assemble_rough_cut",
+      "risk": "R1",
+      "authority_requirement": "policy",
+      "priority": 18,
+      "side_effect": false,
+      "trigger_reason_codes": [],
+      "prohibited_actions": [
+        "auto_transition_workflow_state",
+        "auto_approve",
+        "paid_external_generation",
+        "publish",
+        "overwrite_generated_assets"
+      ]
+    },
+    {
+      "action_id": "prepare_final_delivery",
+      "satisfies_claim_id": "final_delivery_present",
+      "required_claim_ids": [
+        "rough_cut_pass"
+      ],
+      "actor_role": "editor",
+      "capability_id": "prepare_final_delivery",
+      "risk": "R1",
+      "authority_requirement": "policy",
+      "priority": 19,
+      "side_effect": false,
+      "trigger_reason_codes": [
+        "workflow.final_delivery.missing"
+      ],
+      "prohibited_actions": [
+        "auto_transition_workflow_state",
+        "auto_approve",
+        "paid_external_generation",
+        "publish",
+        "overwrite_generated_assets"
+      ]
+    },
+    {
+      "action_id": "repair_final_delivery",
+      "satisfies_claim_id": "final_delivery_valid",
+      "required_claim_ids": [
+        "final_delivery_present"
+      ],
+      "actor_role": "editor",
+      "capability_id": "prepare_final_delivery",
+      "risk": "R1",
+      "authority_requirement": "policy",
+      "priority": 20,
+      "side_effect": false,
+      "trigger_reason_codes": [],
+      "prohibited_actions": [
+        "auto_transition_workflow_state",
+        "auto_approve",
+        "paid_external_generation",
+        "publish",
+        "overwrite_generated_assets"
+      ]
+    },
+    {
+      "action_id": "review_or_revise_final_delivery",
+      "satisfies_claim_id": "final_review_pass",
+      "required_claim_ids": [
+        "final_delivery_valid"
+      ],
+      "actor_role": "reviewer",
+      "capability_id": "review_final_delivery",
+      "risk": "R0",
+      "authority_requirement": "policy",
+      "priority": 21,
+      "side_effect": false,
+      "trigger_reason_codes": [],
+      "prohibited_actions": [
+        "auto_transition_workflow_state",
+        "auto_approve",
+        "paid_external_generation",
+        "publish",
+        "overwrite_generated_assets"
+      ]
+    },
+    {
+      "action_id": "prepare_publish_metadata",
+      "satisfies_claim_id": "publish_metadata_present",
+      "required_claim_ids": [
+        "final_delivery_valid"
+      ],
+      "actor_role": "creator",
+      "capability_id": "draft_publish_metadata",
+      "risk": "R1",
+      "authority_requirement": "policy",
+      "priority": 22,
+      "side_effect": false,
+      "trigger_reason_codes": [
+        "workflow.publish_metadata.missing"
+      ],
+      "prohibited_actions": [
+        "auto_transition_workflow_state",
+        "auto_approve",
+        "paid_external_generation",
+        "publish",
+        "overwrite_generated_assets"
+      ]
+    },
+    {
+      "action_id": "repair_publish_metadata",
+      "satisfies_claim_id": "publish_metadata_bound",
+      "required_claim_ids": [
+        "publish_metadata_present"
+      ],
+      "actor_role": "creator",
+      "capability_id": "draft_publish_metadata",
+      "risk": "R1",
+      "authority_requirement": "policy",
+      "priority": 23,
+      "side_effect": false,
+      "trigger_reason_codes": [],
+      "prohibited_actions": [
+        "auto_transition_workflow_state",
+        "auto_approve",
+        "paid_external_generation",
+        "publish",
+        "overwrite_generated_assets"
+      ]
+    },
+    {
+      "action_id": "approve_publish",
+      "satisfies_claim_id": "publish_approval_current",
+      "required_claim_ids": [
+        "final_review_pass",
+        "publish_metadata_bound"
+      ],
+      "actor_role": "human-approver",
+      "capability_id": "publish_approval",
+      "risk": "R0",
+      "authority_requirement": "human_or_campaign",
+      "priority": 24,
+      "side_effect": false,
+      "trigger_reason_codes": [],
+      "prohibited_actions": [
+        "auto_transition_workflow_state",
+        "auto_approve",
+        "paid_external_generation",
+        "publish",
+        "overwrite_generated_assets"
+      ]
+    },
+    {
+      "action_id": "ready_for_human_publish",
+      "satisfies_claim_id": "external_publish_complete",
+      "required_claim_ids": [
+        "publish_approval_current"
+      ],
+      "actor_role": "human-publisher",
+      "capability_id": "publish",
+      "risk": "R3",
+      "authority_requirement": "human_or_campaign",
+      "priority": 25,
+      "side_effect": true,
+      "trigger_reason_codes": [],
+      "prohibited_actions": [
+        "auto_transition_workflow_state",
+        "auto_approve",
+        "paid_external_generation",
+        "publish",
+        "overwrite_generated_assets"
+      ]
+    }
+  ],
+  "workflow_id": "workflow-1a32f0921ee2918fa6d5",
+  "definition_sha256": "1a32f0921ee2918fa6d51b2dfab38b665bb4274402360624624738c758cb732d"
+}

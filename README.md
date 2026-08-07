@@ -18,6 +18,28 @@ Channel-neutral, deterministic contracts for AI video-production workflows.
 The core validates and plans; it does not execute paid generation, write
 production artifacts, approve gates, or publish content.
 
+## Declarative workflow and authority boundary
+
+W04 adds a target-owned versioned claims/gates/actions DAG and a separate
+authority control plane. Workflow evaluations expose every blocker, parallel
+action frontier, and recommended next action, but evaluations, executable
+plans, parity reports, legacy approvals/readiness, Director results, and
+Blueprints all have `authority_effect=none`.
+
+Execution authority is an exact `ActionAuthorityRequest` plus a current
+ledger-verified `AuthorityDecision`. Dispatch, reconcile, and managed mutation
+obtain a fresh purpose-bound verification/reservation receipt immediately
+before a side effect. Assurance level, autonomy level, and action risk are
+independent; mode names or AI consensus never replace authority. Raw standing
+grants are unverified inputs, approval requests cannot create authority, and R4
+forbids standing grants. Managed mutation remains fixed R4 and requires both
+the W04 dual-human decision and its existing exact break-glass evidence.
+
+The repository packages the workflow, authority policy, parity normalization,
+73 schemas (68 registered artifact versions), and their exact manifests in the
+offline wheel. Concrete persistent ledger, executor, and crash-recovery
+implementations remain deferred to the runtime wave.
+
 ## 0.3 continuity
 
 - `generation-packet/2.1` lets a shot declare what its first frame inherits

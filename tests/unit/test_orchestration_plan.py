@@ -37,6 +37,16 @@ from video_factory.mutation import (
     WorkspaceTrustState,
     workspace_revision_to_mapping,
 )
+from video_factory.authority import target_policy_bundle
+from video_factory.workflow import (
+    GateStatus,
+    MaterialContextSeed,
+    build_gate_result,
+    compare_legacy_parity,
+    default_workflow_definition,
+    evaluate_workflow,
+    legacy_projection_from_plan,
+)
 
 
 RULES = "rules-test"
@@ -616,6 +626,677 @@ def _continuity_qc(
     )
 
 
+def _review_count(mode: str) -> int:
+    return {"rapid": 0, "standard": 1, "controlled": 2}[mode]
+
+
+def _generation_characterization_catalog(
+    mode: str,
+) -> dict[str, ArtifactSnapshot | tuple[ArtifactSnapshot, ...] | None]:
+    brief = _brief()
+    storyboard = _storyboard()
+    storyboard_reviews = tuple(
+        _review(
+            f"02_storyboard/storyboard_review_{index + 1}.json",
+            "storyboard-review",
+            storyboard,
+            reviewer=f"role:storyboard-reviewer-{index + 1}",
+        )
+        for index in range(_review_count(mode))
+    )
+    storyboard_approval = (
+        None
+        if mode == "rapid"
+        else _approval(
+            "02_storyboard/storyboard_approval.json",
+            "storyboard-approval",
+            "storyboard_approval",
+            (storyboard, *storyboard_reviews),
+        )
+    )
+    packet = _packet(storyboard)
+    packet_reviews = tuple(
+        _review(
+            f"04_prompts/packet_review_{index + 1}.json",
+            "packet-review",
+            packet,
+            reviewer=f"role:packet-reviewer-{index + 1}",
+        )
+        for index in range(_review_count(mode))
+    )
+    feasibility = _feasibility(packet, storyboard)
+    packet_approval = (
+        None
+        if mode == "rapid"
+        else _approval(
+            "04_prompts/packet_approval.json",
+            "packet-approval",
+            "generation_approval",
+            (packet, *packet_reviews, feasibility),
+        )
+    )
+    return {
+        "brief": brief,
+        "storyboard": storyboard,
+        "storyboard_reviews": storyboard_reviews,
+        "storyboard_approval": storyboard_approval,
+        "packet": packet,
+        "packet_reviews": packet_reviews,
+        "feasibility": feasibility,
+        "packet_approval": packet_approval,
+    }
+
+
+def _present(*values: object) -> list[ArtifactSnapshot]:
+    output: list[ArtifactSnapshot] = []
+    for value in values:
+        if value is None:
+            continue
+        if isinstance(value, tuple):
+            output.extend(value)
+        else:
+            assert isinstance(value, ArtifactSnapshot)
+            output.append(value)
+    return output
+
+
+def _single_shot_downstream_catalog(
+    mode: str,
+) -> dict[str, ArtifactSnapshot | tuple[ArtifactSnapshot, ...] | None]:
+    catalog = _generation_characterization_catalog(mode)
+    packet = catalog["packet"]
+    brief = catalog["brief"]
+    assert isinstance(packet, ArtifactSnapshot)
+    assert isinstance(brief, ArtifactSnapshot)
+    shot_qc = _snapshot(
+        "08_qc/shot-01.json",
+        {
+            "artifact_version": "shot-qc/2.0",
+            "rules_version": RULES,
+            "episode_id": EPISODE,
+            "shot_id": "shot-01",
+            "checked_at": "2026-07-21T03:00:00Z",
+            "subject": {
+                "path": "06_generated/shot-01-v1.mp4",
+                "sha256": HASH_A,
+                "artifact_version": "media-output/1.0",
+            },
+            "measurements": [],
+            "constraints": [],
+            "findings": [],
+            "verdict": "pass",
+        },
+    )
+    ranking = _snapshot(
+        "08_qc/candidate_ranking.json",
+        {
+            "artifact_version": "candidate-ranking/1.0",
+            "rules_version": RULES,
+            "episode_id": EPISODE,
+            "generated_at": "2026-07-21T03:10:00Z",
+            "packet_ref": artifact_reference_to_mapping(packet.reference),
+            "ranking_policy": ["warning_count asc"],
+            "shots": [
+                {
+                    "shot_id": "shot-01",
+                    "candidates": [
+                        {
+                            "rank": 1,
+                            "file": "06_generated/shot-01-v1.mp4",
+                            "adapter_id": "adapter-media",
+                            "qc_ref": {
+                                "path": str(shot_qc.path),
+                                "sha256": str(shot_qc.sha256),
+                            },
+                            "media_sha256": HASH_A,
+                            "metrics": {"warning_count": 0},
+                        }
+                    ],
+                }
+            ],
+        },
+    )
+    edit_manifest = _snapshot(
+        "07_edit/edit_manifest.json",
+        {
+            "artifact_version": "edit-manifest/1.0",
+            "rules_version": RULES,
+            "episode_id": EPISODE,
+            "selected_by_human": True,
+            "selected_by": "human:editor",
+            "selected_at": "2026-07-21T03:20:00Z",
+            "input_clips": [
+                {
+                    "shot_id": "shot-01",
+                    "path": "06_generated/shot-01-v1.mp4",
+                    "sha256": HASH_A,
+                }
+            ],
+            "audio_required": True,
+        },
+    )
+    rough_cut = _snapshot(
+        "07_edit/rough_cut_report.json",
+        {
+            "artifact_version": "rough-cut-report/1.0",
+            "rules_version": RULES,
+            "episode_id": EPISODE,
+            "checked_at": "2026-07-21T03:30:00Z",
+            "status": "PASS",
+            "ranking_ref": artifact_reference_to_mapping(ranking.reference),
+            "inputs": [
+                {
+                    "shot_id": "shot-01",
+                    "path": "06_generated/shot-01-v1.mp4",
+                    "sha256": HASH_A,
+                    "duration_sec": 5,
+                }
+            ],
+            "output_path": "07_edit/rough_cut.mp4",
+        },
+    )
+    final_qc = _snapshot(
+        "08_qc/final.json",
+        {
+            "artifact_version": "shot-qc/2.0",
+            "rules_version": RULES,
+            "episode_id": EPISODE,
+            "shot_id": "final-output",
+            "checked_at": "2026-07-21T04:00:00Z",
+            "subject": {
+                "path": "07_edit/final.mp4",
+                "sha256": HASH_B,
+                "artifact_version": "media-output/1.0",
+            },
+            "measurements": [],
+            "constraints": [],
+            "findings": [],
+            "verdict": "warn",
+        },
+    )
+    delivery = _snapshot(
+        "07_edit/final_delivery.json",
+        {
+            "artifact_version": "final-delivery/1.0",
+            "rules_version": RULES,
+            "episode_id": EPISODE,
+            "created_by": "role:editor",
+            "created_at": "2026-07-21T04:10:00Z",
+            "selected_output": dict(final_qc.document["subject"]),
+            "lineage_refs": [
+                artifact_reference_to_mapping(edit_manifest.reference),
+                artifact_reference_to_mapping(rough_cut.reference),
+            ],
+            "technical_qc_ref": artifact_reference_to_mapping(final_qc.reference),
+            "technical_verdict": "warn",
+        },
+    )
+    final_reviews = tuple(
+        _review(
+            f"08_qc/final_review_{index + 1}.json",
+            "final-review",
+            delivery,
+            reviewer=f"role:final-reviewer-{index + 1}",
+        )
+        for index in range(_review_count(mode))
+    )
+    metadata = _snapshot(
+        "09_publish/metadata.json",
+        {
+            "artifact_version": "publish-metadata-draft/1.0",
+            "rules_version": RULES,
+            "episode_id": EPISODE,
+            "drafted_at": "2026-07-21T04:20:00Z",
+            "source_brief_ref": artifact_reference_to_mapping(brief.reference),
+            "title": "Synthetic title",
+            "description": "Synthetic description.",
+            "tags": ["synthetic"],
+            "human_review_required": True,
+            "target_platforms": ["platform"],
+        },
+    )
+    publish_approval = (
+        None
+        if mode == "rapid"
+        else _snapshot(
+            "09_publish/publish_approval.json",
+            {
+                "artifact_version": "publish-approval/1.0",
+                "rules_version": RULES,
+                "episode_id": EPISODE,
+                "requirement_id": "req-publish",
+                "capability_id": "publish_approval",
+                "evidence_id": "evidence-publish",
+                "state": "granted",
+                "approved_by_human": True,
+                "approver_role": "human:publisher",
+                "approved_at": "2026-07-21T04:30:00Z",
+                "record_sha256": HASH_A,
+                "bound_artifacts": [
+                    artifact_reference_to_mapping(item.reference)
+                    for item in (delivery, *final_reviews, metadata)
+                ],
+                "effective_config_sha256": HASH_B,
+                "gate_context": gate_context_to_mapping(GATE_CONTEXT),
+                "expires_at": "2026-07-21T05:00:00Z",
+            },
+        )
+    )
+    catalog.update(
+        {
+            "shot_qc": shot_qc,
+            "ranking": ranking,
+            "edit_manifest": edit_manifest,
+            "rough_cut": rough_cut,
+            "final_qc": final_qc,
+            "delivery": delivery,
+            "final_reviews": final_reviews,
+            "metadata": metadata,
+            "publish_approval": publish_approval,
+        }
+    )
+    return catalog
+
+
+def _two_shot_generation_characterization_snapshots(
+    mode: str,
+) -> list[ArtifactSnapshot]:
+    snapshots = _two_shot_generation_gate_snapshots()
+    if mode == "rapid":
+        return [
+            item
+            for item in snapshots
+            if item.family not in {
+                "storyboard-review",
+                "storyboard-approval",
+                "packet-review",
+                "packet-approval",
+            }
+        ]
+    if mode == "standard":
+        return snapshots
+
+    storyboard = next(item for item in snapshots if item.family == "storyboard")
+    packet = next(item for item in snapshots if item.family == "generation-packet")
+    feasibility = next(
+        item for item in snapshots if item.family == "generation-feasibility-review"
+    )
+    storyboard_reviews = [
+        item for item in snapshots if item.family == "storyboard-review"
+    ]
+    storyboard_reviews.append(
+        _review(
+            "02_storyboard/storyboard_review_2.json",
+            "storyboard-review",
+            storyboard,
+            reviewer="role:storyboard-reviewer-2",
+        )
+    )
+    packet_reviews = [item for item in snapshots if item.family == "packet-review"]
+    packet_reviews.append(
+        _review(
+            "04_prompts/packet_review_2.json",
+            "packet-review",
+            packet,
+            reviewer="role:packet-reviewer-2",
+        )
+    )
+    retained = [
+        item
+        for item in snapshots
+        if item.family not in {
+            "storyboard-review",
+            "storyboard-approval",
+            "packet-review",
+            "packet-approval",
+        }
+    ]
+    return [
+        *retained,
+        *storyboard_reviews,
+        _approval(
+            "02_storyboard/storyboard_approval.json",
+            "storyboard-approval",
+            "storyboard_approval",
+            (storyboard, *storyboard_reviews),
+        ),
+        *packet_reviews,
+        _approval(
+            "04_prompts/packet_approval.json",
+            "packet-approval",
+            "generation_approval",
+            (packet, *packet_reviews, feasibility),
+        ),
+    ]
+
+
+CHARACTERIZATION_SEEDS = tuple(
+    str(item.action_id) for item in default_workflow_definition().actions
+)
+EXPECTED_CHARACTERIZATION_ACTIONS = {
+    "resolve_artifact_graph": ("resolve_artifact_graph",) * 3,
+    "create_brief": ("create_brief",) * 3,
+    "create_storyboard": ("create_storyboard",) * 3,
+    "review_or_revise_storyboard": (
+        "create_generation_packet",
+        "review_or_revise_storyboard",
+        "review_or_revise_storyboard",
+    ),
+    "approve_storyboard": (
+        "create_generation_packet",
+        "approve_storyboard",
+        "approve_storyboard",
+    ),
+    "create_generation_packet": ("create_generation_packet",) * 3,
+    "rebuild_generation_packet": ("rebuild_generation_packet",) * 3,
+    "review_or_revise_generation_packet": (
+        "review_generation_feasibility",
+        "review_or_revise_generation_packet",
+        "review_or_revise_generation_packet",
+    ),
+    "review_generation_feasibility": ("review_generation_feasibility",) * 3,
+    "approve_generation": (
+        "preview_complete",
+        "approve_generation",
+        "approve_generation",
+    ),
+    "preview_complete": (
+        "preview_complete",
+        "run_external_generation",
+        "run_external_generation",
+    ),
+    "reconcile_workspace": (
+        "preview_complete",
+        "reconcile_workspace",
+        "reconcile_workspace",
+    ),
+    "run_external_generation": (
+        "preview_complete",
+        "run_external_generation",
+        "run_external_generation",
+    ),
+    "remediate_or_repeat_shot_qc": (
+        "preview_complete",
+        "remediate_or_repeat_shot_qc",
+        "remediate_or_repeat_shot_qc",
+    ),
+    "run_continuity_qc": (
+        "preview_complete", "run_continuity_qc", "run_continuity_qc"
+    ),
+    "remediate_continuity_qc": (
+        "preview_complete", "remediate_continuity_qc", "remediate_continuity_qc"
+    ),
+    "rank_generation_candidates": (
+        "preview_complete", "rank_generation_candidates", "rank_generation_candidates"
+    ),
+    "select_edit_inputs": (
+        "preview_complete", "select_edit_inputs", "select_edit_inputs"
+    ),
+    "assemble_or_repair_rough_cut": (
+        "preview_complete", "assemble_or_repair_rough_cut", "assemble_or_repair_rough_cut"
+    ),
+    "prepare_final_delivery": (
+        "preview_complete", "prepare_final_delivery", "prepare_final_delivery"
+    ),
+    "repair_final_delivery": (
+        "preview_complete", "repair_final_delivery", "repair_final_delivery"
+    ),
+    "review_or_revise_final_delivery": (
+        "preview_complete",
+        "review_or_revise_final_delivery",
+        "review_or_revise_final_delivery",
+    ),
+    "prepare_publish_metadata": (
+        "preview_complete", "prepare_publish_metadata", "prepare_publish_metadata"
+    ),
+    "repair_publish_metadata": (
+        "preview_complete", "repair_publish_metadata", "repair_publish_metadata"
+    ),
+    "approve_publish": (
+        "preview_complete", "approve_publish", "approve_publish"
+    ),
+    "ready_for_human_publish": (
+        "preview_complete", "ready_for_human_publish", "ready_for_human_publish"
+    ),
+}
+
+
+def _legacy_characterization_snapshots(
+    seed: str,
+    mode: str,
+) -> list[ArtifactSnapshot]:
+    catalog = _single_shot_downstream_catalog(mode)
+    brief = catalog["brief"]
+    storyboard = catalog["storyboard"]
+    packet = catalog["packet"]
+    assert isinstance(brief, ArtifactSnapshot)
+    assert isinstance(storyboard, ArtifactSnapshot)
+    assert isinstance(packet, ArtifactSnapshot)
+    story_ready = _present(
+        brief,
+        storyboard,
+        catalog["storyboard_reviews"],
+        catalog["storyboard_approval"],
+    )
+    packet_ready = _present(
+        *story_ready,
+        packet,
+        catalog["packet_reviews"],
+        catalog["feasibility"],
+        catalog["packet_approval"],
+    )
+    downstream = packet_ready
+
+    if seed == "resolve_artifact_graph":
+        return [
+            _snapshot(
+                "01_brief/invalid.json",
+                {"artifact_version": "brief/1.0", "episode_id": EPISODE},
+            )
+        ]
+    if seed == "create_brief":
+        return []
+    if seed == "create_storyboard":
+        return [brief]
+    if seed == "review_or_revise_storyboard":
+        return [brief, storyboard]
+    if seed == "approve_storyboard":
+        return _present(brief, storyboard, catalog["storyboard_reviews"])
+    if seed == "create_generation_packet":
+        return story_ready
+    if seed == "rebuild_generation_packet":
+        document = deepcopy(dict(packet.document))
+        document["storyboard_ref"]["sha256"] = "f" * 64
+        return [*story_ready, _snapshot(str(packet.path), document)]
+    if seed == "review_or_revise_generation_packet":
+        return [*story_ready, packet]
+    if seed == "review_generation_feasibility":
+        return _present(
+            *story_ready,
+            packet,
+            catalog["packet_reviews"],
+        )
+    if seed == "approve_generation":
+        return _present(
+            *story_ready,
+            packet,
+            catalog["packet_reviews"],
+            catalog["feasibility"],
+        )
+    if seed in {"preview_complete", "reconcile_workspace", "run_external_generation"}:
+        return downstream
+    if seed == "remediate_or_repeat_shot_qc":
+        document = deepcopy(dict(catalog["shot_qc"].document))  # type: ignore[union-attr]
+        document["verdict"] = "fail"
+        return [*downstream, _snapshot("08_qc/shot-01.json", document)]
+    if seed in {"run_continuity_qc", "remediate_continuity_qc"}:
+        two_shot = _two_shot_generation_characterization_snapshots(mode)
+        qcs = _two_shot_qcs()
+        if seed == "run_continuity_qc":
+            return [*two_shot, *qcs]
+        return [*two_shot, *qcs, _continuity_qc(qcs, verdict="fail")]
+    if seed == "rank_generation_candidates":
+        return _present(*downstream, catalog["shot_qc"])
+    if seed == "select_edit_inputs":
+        return _present(*downstream, catalog["shot_qc"], catalog["ranking"])
+    if seed == "assemble_or_repair_rough_cut":
+        return _present(
+            *downstream,
+            catalog["shot_qc"],
+            catalog["ranking"],
+            catalog["edit_manifest"],
+        )
+    if seed == "prepare_final_delivery":
+        return _present(
+            *downstream,
+            catalog["shot_qc"],
+            catalog["ranking"],
+            catalog["edit_manifest"],
+            catalog["rough_cut"],
+        )
+    delivery_prefix = _present(
+        *downstream,
+        catalog["shot_qc"],
+        catalog["ranking"],
+        catalog["edit_manifest"],
+        catalog["rough_cut"],
+        catalog["final_qc"],
+    )
+    if seed == "repair_final_delivery":
+        delivery = catalog["delivery"]
+        assert isinstance(delivery, ArtifactSnapshot)
+        document = deepcopy(dict(delivery.document))
+        document["lineage_refs"][1]["sha256"] = "f" * 64
+        return [*delivery_prefix, _snapshot(str(delivery.path), document)]
+    delivery_prefix = _present(*delivery_prefix, catalog["delivery"])
+    if seed == "review_or_revise_final_delivery":
+        return delivery_prefix
+    reviewed_prefix = _present(*delivery_prefix, catalog["final_reviews"])
+    if seed == "prepare_publish_metadata":
+        return reviewed_prefix
+    if seed == "repair_publish_metadata":
+        metadata = catalog["metadata"]
+        assert isinstance(metadata, ArtifactSnapshot)
+        document = deepcopy(dict(metadata.document))
+        document["source_brief_ref"]["sha256"] = "f" * 64
+        return [*reviewed_prefix, _snapshot(str(metadata.path), document)]
+    metadata_prefix = _present(*reviewed_prefix, catalog["metadata"])
+    if seed == "approve_publish":
+        return metadata_prefix
+    if seed == "ready_for_human_publish":
+        return _present(*metadata_prefix, catalog["publish_approval"])
+    raise AssertionError(f"unknown characterization seed: {seed}")
+
+
+def _legacy_characterization_plan(seed: str, mode: str):
+    observation = observe_episode_state(_legacy_characterization_snapshots(seed, mode))
+    if seed != "reconcile_workspace":
+        return _strict_plan_next_step(observation, mode)
+    return _plan_next_step(
+        observation,
+        mode,
+        current_context=GATE_CONTEXT,
+        evaluated_at=EVALUATED_AT,
+        workspace_observation=None,
+        expected_workspace_id="workspace-a",
+        expected_workspace_revision_id="revision-a",
+        expected_workspace_revision=_workspace_revision(),
+        expected_workspace_revision_sha256=_workspace_revision_sha256(),
+    )
+
+
+def _declarative_characterization(action_id: str, mode: str):
+    definition = default_workflow_definition()
+    action = next(item for item in definition.actions if str(item.action_id) == action_id)
+    earlier_claims = {
+        str(item.satisfies_claim_id)
+        for item in definition.actions
+        if item.priority < action.priority
+        and item.satisfies_claim_id != action.satisfies_claim_id
+    }
+    results = {}
+    for claim in definition.claims:
+        claim_id = str(claim.claim_id)
+        if claim_id in earlier_claims:
+            results[str(claim.gate_id)] = build_gate_result(
+                str(claim.gate_id),
+                GateStatus.PASS,
+                evidence_sha256s=("a" * 64,),
+            )
+        else:
+            results[str(claim.gate_id)] = build_gate_result(
+                str(claim.gate_id),
+                GateStatus.UNKNOWN,
+                reason_codes=("workflow.gate.missing",),
+                messages=("not observed",),
+            )
+    target_gate = next(
+        claim.gate_id
+        for claim in definition.claims
+        if claim.claim_id == action.satisfies_claim_id
+    )
+    reason = (
+        action.trigger_reason_codes[0]
+        if action.trigger_reason_codes
+        else f"workflow.{action.satisfies_claim_id}.blocked"
+    )
+    results[str(target_gate)] = build_gate_result(
+        str(target_gate),
+        GateStatus.BLOCKED,
+        reason_codes=(reason,),
+        messages=("characterized legacy blocker",),
+        evidence_sha256s=("b" * 64,),
+    )
+    marker = {"rapid": "1", "standard": "2", "controlled": "3"}[mode]
+    context = MaterialContextSeed(
+        workflow_definition_sha256=definition.definition_sha256,
+        policy_bundle_sha256=target_policy_bundle().bundle_sha256,
+        rules_bundle_sha256=HashDigest("3" * 64),
+        effective_config_sha256=HashDigest(marker * 64),
+        current_manifest_sha256=HashDigest("4" * 64),
+        evidence_graph_sha256=HashDigest("5" * 64),
+    )
+    return evaluate_workflow(
+        definition,
+        tuple(results[str(gate.gate_id)] for gate in definition.gates),
+        context,
+    )
+
+
+@pytest.mark.parametrize("mode", ("rapid", "standard", "controlled"))
+@pytest.mark.parametrize("seed", CHARACTERIZATION_SEEDS)
+def test_legacy_and_declarative_evaluators_dual_run_over_78_rows(
+    seed: str,
+    mode: str,
+) -> None:
+    legacy_plan = _legacy_characterization_plan(seed, mode)
+    mode_index = ("rapid", "standard", "controlled").index(mode)
+    expected_action = EXPECTED_CHARACTERIZATION_ACTIONS[seed][mode_index]
+    assert legacy_plan.action_type == expected_action
+    declarative = _declarative_characterization(expected_action, mode)
+    report = compare_legacy_parity(
+        legacy_projection_from_plan(legacy_plan),
+        declarative,
+        explained_dimensions={
+            "blockers": "EXPLAINED_AUTHORITY_HARDENING",
+            "consumed_evidence": "EXPLAINED_BLUEPRINT_CONSOLIDATION",
+        },
+    )
+    assert report.parity_pass, (seed, mode, report.unexplained_dimensions)
+    assert report.cutover_applied is False
+    assert report.authority_effect == "none"
+
+
+def test_characterization_matrix_covers_every_target_action_identity() -> None:
+    assert tuple(EXPECTED_CHARACTERIZATION_ACTIONS) == CHARACTERIZATION_SEEDS
+    observed = {
+        action
+        for actions in EXPECTED_CHARACTERIZATION_ACTIONS.values()
+        for action in actions
+    }
+    assert observed == set(CHARACTERIZATION_SEEDS)
+
+
 def test_brief_only_requires_storyboard() -> None:
     observation = observe_episode_state([_brief()])
     plan = plan_next_step(observation, "standard")
@@ -675,7 +1356,9 @@ def test_generation_readiness_requires_all_bound_pass_evidence() -> None:
 
     authorized = _strict_build_generation_readiness(observation, "standard")
     assert authorized.ready is True
-    assert authorized.authorization_ready is True
+    assert authorized.authorization_ready is False
+    assert authorized.authority_effect == "none"
+    assert authorized.requires_authority_decision is True
     assert authorized.gate_context_sha256 is not None
     assert authorized.workspace_revision_id == "revision-a"
     assert authorized.workspace_observation_sha256 is not None

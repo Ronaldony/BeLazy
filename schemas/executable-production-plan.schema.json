@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.video-factory.invalid/workflow/executable-production-plan.schema.json",
+  "title": "Action-specific non-authorizing production plan",
+  "type": "object",
+  "required": [
+    "artifact_version", "plan_id", "plan_sha256", "workflow_evaluation_sha256",
+    "workflow_definition_sha256", "action_id", "capability_id", "actor_role", "risk",
+    "authority_requirement", "side_effect", "gate_context", "consumed_claim_ids",
+    "consumed_evidence_sha256s", "prohibited_actions", "authority_effect"
+  ],
+  "properties": {
+    "artifact_version": { "const": "executable-production-plan/1.0" },
+    "plan_id": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" },
+    "plan_sha256": { "$ref": "artifact-common.schema.json#/$defs/sha256" },
+    "workflow_evaluation_sha256": { "$ref": "artifact-common.schema.json#/$defs/sha256" },
+    "workflow_definition_sha256": { "$ref": "artifact-common.schema.json#/$defs/sha256" },
+    "action_id": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" },
+    "capability_id": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" },
+    "actor_role": { "$ref": "artifact-common.schema.json#/$defs/roleId" },
+    "risk": { "$ref": "workflow-authority-common.schema.json#/$defs/risk" },
+    "authority_requirement": { "$ref": "workflow-authority-common.schema.json#/$defs/authorityRequirement" },
+    "side_effect": { "type": "boolean" },
+    "gate_context": { "$ref": "artifact-common.schema.json#/$defs/gateContext" },
+    "consumed_claim_ids": { "type": "array", "uniqueItems": true, "items": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" } },
+    "consumed_evidence_sha256s": { "type": "array", "uniqueItems": true, "items": { "$ref": "artifact-common.schema.json#/$defs/sha256" } },
+    "prohibited_actions": { "type": "array", "uniqueItems": true, "items": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" } },
+    "authority_effect": { "const": "none" }
+  },
+  "additionalProperties": false
+}

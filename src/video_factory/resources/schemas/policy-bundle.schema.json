@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.video-factory.invalid/authority/policy-bundle.schema.json",
+  "title": "Target-owned authority policy and enforcement matrix",
+  "type": "object",
+  "required": [
+    "artifact_version", "bundle_id", "bundle_sha256", "policy_version",
+    "classifier_version", "default_decision", "unknown_state_fail_closed",
+    "action_risk_by_action", "enforcement_matrix"
+  ],
+  "properties": {
+    "artifact_version": { "const": "policy-bundle/1.0" },
+    "bundle_id": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" },
+    "bundle_sha256": { "$ref": "artifact-common.schema.json#/$defs/sha256" },
+    "policy_version": { "const": "authority-policy/2.1" },
+    "classifier_version": { "const": "authority-risk-classifier/1.0" },
+    "default_decision": { "const": "denied" },
+    "unknown_state_fail_closed": { "const": true },
+    "action_risk_by_action": {
+      "type": "array", "minItems": 1,
+      "items": {
+        "type": "object", "required": ["action_id", "risk"],
+        "properties": {
+          "action_id": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" },
+          "risk": { "$ref": "workflow-authority-common.schema.json#/$defs/risk" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "enforcement_matrix": {
+      "type": "array", "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["policy_path", "owner", "enforcement_phase", "reason_code", "positive_test_id", "negative_test_id"],
+        "properties": {
+          "policy_path": { "type": "string", "minLength": 1 },
+          "owner": { "type": "string", "minLength": 1 },
+          "enforcement_phase": { "type": "string", "minLength": 1 },
+          "reason_code": { "$ref": "artifact-common.schema.json#/$defs/canonicalReasonCode" },
+          "positive_test_id": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" },
+          "negative_test_id": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

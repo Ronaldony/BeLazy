@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.video-factory.invalid/workflow/workflow-parity-report.schema.json",
+  "title": "Non-authorizing legacy/declarative parity report",
+  "type": "object",
+  "required": [
+    "artifact_version", "report_id", "report_sha256", "normalization_version",
+    "normalization_sha256", "legacy_projection_sha256", "workflow_evaluation_sha256",
+    "differences", "unexplained_dimensions", "parity_pass", "cutover_applied", "authority_effect"
+  ],
+  "properties": {
+    "artifact_version": { "const": "workflow-parity-report/1.0" },
+    "report_id": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" },
+    "report_sha256": { "$ref": "artifact-common.schema.json#/$defs/sha256" },
+    "normalization_version": { "const": "legacy-next-step-normalization/1.0" },
+    "normalization_sha256": { "$ref": "artifact-common.schema.json#/$defs/sha256" },
+    "legacy_projection_sha256": { "$ref": "artifact-common.schema.json#/$defs/sha256" },
+    "workflow_evaluation_sha256": { "$ref": "artifact-common.schema.json#/$defs/sha256" },
+    "differences": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["dimension", "legacy_value_sha256", "declarative_value_sha256", "explanation_code"],
+        "properties": {
+          "dimension": { "enum": ["action", "blockers", "actor", "required_authority", "consumed_evidence", "prohibited_actions"] },
+          "legacy_value_sha256": { "$ref": "artifact-common.schema.json#/$defs/sha256" },
+          "declarative_value_sha256": { "$ref": "artifact-common.schema.json#/$defs/sha256" },
+          "explanation_code": { "oneOf": [{ "type": "null" }, { "enum": ["EXPLAINED_FRONTIER_EXPANSION", "EXPLAINED_BLUEPRINT_CONSOLIDATION", "EXPLAINED_AUTHORITY_HARDENING"] }] }
+        },
+        "additionalProperties": false
+      }
+    },
+    "unexplained_dimensions": { "type": "array", "uniqueItems": true, "items": { "enum": ["action", "blockers", "actor", "required_authority", "consumed_evidence", "prohibited_actions"] } },
+    "parity_pass": { "type": "boolean" },
+    "cutover_applied": { "const": false },
+    "authority_effect": { "const": "none" }
+  },
+  "additionalProperties": false
+}

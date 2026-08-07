@@ -13,6 +13,14 @@ from video_factory.approvals import (
     gate_context_sha256,
     gate_context_to_mapping,
 )
+from video_factory.authority import (
+    ActionAuthorityRequest,
+    AuthorityContractError,
+    AuthorityDecision,
+    TrustedAuthorizationLedger,
+    VerificationPurpose,
+    revalidate_authority_for_side_effect,
+)
 from video_factory.config.canonical import canonical_sha256
 from video_factory.domain import ArtifactReference, HashDigest, OpaqueId
 from video_factory.json_boundary import parse_rfc3339_datetime
@@ -481,6 +489,9 @@ class MutationPreSideEffectGuard:
         evaluated_at: datetime,
         kill_switch_engaged: bool = False,
         authority_verifier: MutationAuthorityVerifier | None = None,
+        w04_authority_request: ActionAuthorityRequest | None = None,
+        w04_authority_decision: AuthorityDecision | None = None,
+        w04_authority_ledger: TrustedAuthorizationLedger | None = None,
         break_glass: BreakGlassAuthorization | None = None,
         break_glass_policy: BreakGlassPolicy | None = None,
         human_authenticator: HumanApprovalAuthenticator | None = None,
@@ -699,6 +710,37 @@ class MutationPreSideEffectGuard:
                 "mutation authority was not granted",
             )
         _validate_reference(authority_decision, "authority_decision")
+        if w04_authority_request is None or w04_authority_decision is None:
+            _reject(
+                "mutation.authority.w04_missing",
+                "managed mutation requires an exact W04 authority decision",
+            )
+        if w04_authority_ledger is None:
+            _reject(
+                "mutation.authority.w04_ledger_missing",
+                "managed mutation requires the trusted W04 authority ledger",
+            )
+        if (
+            w04_authority_request.action_id != "managed_mutation"
+            or w04_authority_request.capability_id != "managed_mutation"
+            or w04_authority_request.executable_plan_sha256 != plan.plan_sha256
+            or w04_authority_request.gate_context != normalized_context
+            or w04_authority_request.scope.workspace_id != plan.workspace_id
+        ):
+            _reject(
+                "mutation.authority.w04_request_mismatch",
+                "W04 authority request is bound to another mutation plan",
+            )
+        if (
+            str(authority_decision.sha256)
+            != str(w04_authority_decision.decision_sha256)
+            or str(authority_decision.artifact_version)
+            != "authority-decision/1.0"
+        ):
+            _reject(
+                "mutation.authority.w04_reference_mismatch",
+                "mutation authority reference is not the exact W04 decision",
+            )
 
         break_glass_id: OpaqueId | None = None
         break_glass_authorization_sha256: HashDigest | None = None
@@ -735,6 +777,23 @@ class MutationPreSideEffectGuard:
             break_glass_id = break_glass.authorization_id
 
         current_observation_digest = workspace_observation_sha256(observation)
+        try:
+            revalidate_authority_for_side_effect(
+                w04_authority_decision,
+                w04_authority_request,
+                ledger=w04_authority_ledger,
+                current_context=normalized_context,
+                workspace_observation_sha256=str(current_observation_digest),
+                adapter_id="managed-mutation-runtime",
+                service_identity=str(service_identity),
+                evaluated_at=evaluated_at,
+                purpose=VerificationPurpose.MUTATION,
+            )
+        except AuthorityContractError as error:
+            _reject(
+                "mutation.authority.w04_revalidation",
+                f"W04 authority revalidation failed: {error.reason_code}",
+            )
         if idempotency_ledger is None:
             _reject(
                 "mutation.idempotency.ledger_missing",

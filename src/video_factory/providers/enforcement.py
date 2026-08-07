@@ -14,6 +14,14 @@ from video_factory.approvals import (
     gate_context_to_mapping,
     validate_evidence_binding,
 )
+from video_factory.authority import (
+    ActionAuthorityRequest,
+    AuthorityContractError,
+    AuthorityDecision,
+    TrustedAuthorizationLedger,
+    VerificationPurpose,
+    revalidate_authority_for_side_effect,
+)
 from video_factory.config.canonical import canonical_sha256
 from video_factory.domain import CapabilityId, OpaqueId
 from video_factory.engine.contracts import ExecutionMode
@@ -57,6 +65,16 @@ class OrchestrationAuthorization:
     workspace_id: str | None = None
     workspace_revision_sha256: str | None = None
     workspace_observation_sha256: str | None = None
+
+    @property
+    def authority_effect(self) -> str:
+        """Legacy eligibility is never W04 execution authority."""
+
+        return "none"
+
+    @property
+    def requires_authority_decision(self) -> bool:
+        return True
 
 
 def _reject(message: str) -> None:
@@ -269,6 +287,11 @@ def enforce_adapter_dispatch(
     expected_workspace_revision_id: str | None = None,
     expected_workspace_revision: WorkspaceRevision | None = None,
     expected_workspace_revision_sha256: str | None = None,
+    authority_request: ActionAuthorityRequest | None = None,
+    authority_decision: AuthorityDecision | None = None,
+    authority_ledger: TrustedAuthorizationLedger | None = None,
+    service_identity: str | None = None,
+    verification_purpose: VerificationPurpose = VerificationPurpose.DISPATCH,
 ) -> None:
     """ADR-004 point 4: recheck immediately before an external process."""
 
@@ -284,6 +307,12 @@ def enforce_adapter_dispatch(
         _reject("external executor dispatch requires automated mode")
     if authorization is None:
         _reject("executor dispatch requires orchestration authorization")
+    if authority_request is None or authority_decision is None:
+        _reject("executor dispatch requires an exact W04 authority decision")
+    if authority_ledger is None:
+        _reject("executor dispatch requires a trusted authority ledger")
+    if not service_identity:
+        _reject("executor dispatch requires a runtime service identity")
     if current_context is None:
         _reject("executor dispatch requires current gate context")
     if (
@@ -357,3 +386,38 @@ def enforce_adapter_dispatch(
             _reject("executor authorization evidence expiry is invalid")
         if evaluated_at >= valid_until:
             _reject("executor authorization evidence has expired")
+    if authority_request.request_envelope_sha256 != request_envelope_sha256(request):
+        _reject("W04 authority request is bound to another request envelope")
+    if authority_request.capability_id != request.capability_id:
+        _reject("W04 authority request is bound to another capability")
+    if authority_request.scope.input_artifacts != request.input_artifacts:
+        _reject("W04 authority request is bound to other input artifacts")
+    expected_outputs = tuple(
+        (str(item.path_prefix), tuple(sorted(str(value) for value in item.artifact_versions)))
+        for item in request.allowed_outputs
+    )
+    authority_outputs = tuple(
+        (item.path_prefix, item.artifact_versions)
+        for item in authority_request.scope.allowed_outputs
+    )
+    if authority_outputs != expected_outputs:
+        _reject("W04 authority request is bound to another output scope")
+    if authority_request.scope.workspace_id != expected_workspace_id:
+        _reject("W04 authority request is bound to another workspace")
+    assert workspace_observation is not None
+    try:
+        revalidate_authority_for_side_effect(
+            authority_decision,
+            authority_request,
+            ledger=authority_ledger,
+            current_context=normalized_context,
+            workspace_observation_sha256=str(
+                workspace_observation_sha256(workspace_observation)
+            ),
+            adapter_id=str(descriptor.adapter_id),
+            service_identity=service_identity,
+            evaluated_at=evaluated_at,
+            purpose=verification_purpose,
+        )
+    except AuthorityContractError as error:
+        _reject(f"W04 authority revalidation failed: {error.reason_code}")

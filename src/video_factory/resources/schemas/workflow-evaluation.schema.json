@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.video-factory.invalid/workflow/workflow-evaluation.schema.json",
+  "title": "Full declarative workflow evaluation",
+  "type": "object",
+  "required": [
+    "artifact_version", "evaluation_id", "evaluation_sha256", "workflow_id",
+    "workflow_definition_sha256", "material_context", "material_context_sha256",
+    "gate_results", "gate_input_sha256s", "satisfied_claim_ids", "blockers",
+    "action_frontier", "recommended_action_id", "invalidated_claim_ids",
+    "reused_claim_ids", "authority_effect"
+  ],
+  "properties": {
+    "artifact_version": { "const": "workflow-evaluation/1.0" },
+    "evaluation_id": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" },
+    "evaluation_sha256": { "$ref": "artifact-common.schema.json#/$defs/sha256" },
+    "workflow_id": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" },
+    "workflow_definition_sha256": { "$ref": "artifact-common.schema.json#/$defs/sha256" },
+    "material_context": { "$ref": "workflow-authority-common.schema.json#/$defs/materialContext" },
+    "material_context_sha256": { "$ref": "artifact-common.schema.json#/$defs/sha256" },
+    "gate_results": { "type": "array", "minItems": 1, "items": { "$ref": "workflow-authority-common.schema.json#/$defs/gateResult" } },
+    "gate_input_sha256s": {
+      "type": "array", "minItems": 1,
+      "items": {
+        "type": "object", "required": ["gate_id", "sha256"],
+        "properties": {
+          "gate_id": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" },
+          "sha256": { "$ref": "artifact-common.schema.json#/$defs/sha256" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "satisfied_claim_ids": { "type": "array", "uniqueItems": true, "items": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" } },
+    "blockers": { "type": "array", "items": { "$ref": "workflow-authority-common.schema.json#/$defs/blocker" } },
+    "action_frontier": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "action_id", "plan_sha256", "actor_role", "capability_id", "risk",
+          "authority_requirement", "consumed_claim_ids", "consumed_evidence_sha256s",
+          "blockers", "prohibited_actions", "authority_effect"
+        ],
+        "properties": {
+          "action_id": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" },
+          "plan_sha256": { "$ref": "artifact-common.schema.json#/$defs/sha256" },
+          "actor_role": { "$ref": "artifact-common.schema.json#/$defs/roleId" },
+          "capability_id": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" },
+          "risk": { "$ref": "workflow-authority-common.schema.json#/$defs/risk" },
+          "authority_requirement": { "$ref": "workflow-authority-common.schema.json#/$defs/authorityRequirement" },
+          "consumed_claim_ids": { "type": "array", "uniqueItems": true, "items": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" } },
+          "consumed_evidence_sha256s": { "type": "array", "uniqueItems": true, "items": { "$ref": "artifact-common.schema.json#/$defs/sha256" } },
+          "blockers": { "type": "array", "items": { "$ref": "workflow-authority-common.schema.json#/$defs/blocker" } },
+          "prohibited_actions": { "type": "array", "uniqueItems": true, "items": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" } },
+          "authority_effect": { "const": "none" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "recommended_action_id": { "oneOf": [{ "type": "null" }, { "$ref": "artifact-common.schema.json#/$defs/opaqueId" }] },
+    "invalidated_claim_ids": { "type": "array", "uniqueItems": true, "items": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" } },
+    "reused_claim_ids": { "type": "array", "uniqueItems": true, "items": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" } },
+    "authority_effect": { "const": "none" }
+  },
+  "additionalProperties": false
+}

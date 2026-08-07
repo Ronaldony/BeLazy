@@ -8,6 +8,7 @@ from video_factory import (
     analytics,
     approvals,
     artifacts,
+    authority,
     blueprint,
     brand,
     cli,
@@ -29,12 +30,14 @@ from video_factory import (
     security,
     sheets,
     storage,
+    workflow,
 )
 
 DOCUMENTED_PUBLIC_PACKAGES = {
     "video_factory.analytics",
     "video_factory.approvals",
     "video_factory.artifacts",
+    "video_factory.authority",
     "video_factory.blueprint",
     "video_factory.brand",
     "video_factory.cli",
@@ -56,6 +59,7 @@ DOCUMENTED_PUBLIC_PACKAGES = {
     "video_factory.security",
     "video_factory.sheets",
     "video_factory.storage",
+    "video_factory.workflow",
 }
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -70,6 +74,7 @@ def test_current_contract_identity_and_public_packages() -> None:
             analytics,
             approvals,
             artifacts,
+            authority,
             blueprint,
             brand,
             cli,
@@ -91,6 +96,7 @@ def test_current_contract_identity_and_public_packages() -> None:
             security,
             sheets,
             storage,
+            workflow,
         )
     }
     assert imported_public_packages == DOCUMENTED_PUBLIC_PACKAGES

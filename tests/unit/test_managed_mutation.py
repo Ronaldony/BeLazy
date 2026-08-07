@@ -3,13 +3,31 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import unicodedata
 
 import pytest
 
-from video_factory.approvals import GateContext
+from video_factory.approvals import GateContext, gate_context_sha256
 from video_factory.artifacts import validate_artifact_mapping
+from video_factory.authority import (
+    ActionRisk,
+    AssuranceProfile,
+    AuthorityDecisionStatus,
+    AuthorityRequirement,
+    AuthorityScope,
+    AuthoritySource,
+    AuthorityVerificationReceipt,
+    AutonomyProfile,
+    LedgerRecordState,
+    OutputScope,
+    ProfileSelection,
+    VerificationPurpose,
+    authority_verification_receipt_sha256,
+    build_bound_action_authority_request,
+    evaluate_authority,
+    target_policy_bundle,
+)
 from video_factory.config import canonical_json_bytes, canonical_sha256
 from video_factory.domain import (
     ArtifactReference,
@@ -78,6 +96,7 @@ from video_factory.providers import (
     MutationPreSideEffectGuard,
     MutationRuntimeError,
 )
+from video_factory.workflow import default_workflow_definition
 
 
 SHA_A = HashDigest("a" * 64)
@@ -85,7 +104,7 @@ SHA_B = HashDigest("b" * 64)
 SHA_C = HashDigest("c" * 64)
 MANIFEST_A = HashDigest("1" * 64)
 MANIFEST_B = HashDigest("2" * 64)
-POLICY_SHA = HashDigest("3" * 64)
+POLICY_SHA = target_policy_bundle().bundle_sha256
 WORKSPACE_ID = OpaqueId("workspace-a")
 REVISION_ID = OpaqueId("revision-a")
 EVALUATED_AT = datetime(2026, 8, 7, 1, 0, tzinfo=timezone.utc)
@@ -241,7 +260,9 @@ def _plan(
 
 def _gate_context(plan) -> GateContext:
     return GateContext(
-        workflow_definition_sha256=HashDigest("4" * 64),
+        workflow_definition_sha256=(
+            default_workflow_definition().definition_sha256
+        ),
         policy_bundle_sha256=plan.policy_bundle_sha256,
         rules_bundle_sha256=HashDigest("5" * 64),
         effective_config_sha256=HashDigest("6" * 64),
@@ -717,6 +738,7 @@ def test_risk_policy_cannot_be_downgraded_by_requester(
             current_context=_gate_context(plan),
             evaluated_at=EVALUATED_AT,
             authority_verifier=_TrustedAuthority(),
+            **_w04_authority_dependencies(plan),
             **_runtime_dependencies(),
         )
     assert no_break_glass.value.reason_code == "mutation.break_glass.missing"
@@ -780,6 +802,7 @@ def test_w02_risk_policy_defaults_every_create_to_r4(
             current_context=_gate_context(plan),
             evaluated_at=EVALUATED_AT,
             authority_verifier=_TrustedAuthority(),
+            **_w04_authority_dependencies(plan),
             **_runtime_dependencies(),
         )
     assert missing_break_glass.value.reason_code == "mutation.break_glass.missing"
@@ -1221,10 +1244,197 @@ def test_all_six_contracts_validate_and_round_trip_through_strict_bytes() -> Non
     assert drift_identity.value.reason_code == "mutation.drift.identity"
 
 
+class _TrustedW04Ledger:
+    def _receipt(
+        self,
+        request,
+        risk_sha256,
+        *,
+        purpose,
+        evaluated_at,
+        decision_sha256=None,
+        adapter_id=None,
+        service_identity=None,
+        workspace_observation_sha256=None,
+    ) -> AuthorityVerificationReceipt:
+        provisional = AuthorityVerificationReceipt(
+            artifact_version="authority-verification-receipt/1.0",
+            receipt_id=OpaqueId("pending"),
+            receipt_sha256=HashDigest("0" * 64),
+            purpose=purpose,
+            action_request_sha256=request.request_sha256,
+            authority_decision_sha256=decision_sha256,
+            gate_context_sha256=gate_context_sha256(request.gate_context),
+            risk_assessment_sha256=risk_sha256,
+            authority_source=AuthoritySource.DUAL_HUMAN,
+            ledger_state=LedgerRecordState.ACTIVE,
+            ledger_head_sha256=HashDigest("8" * 64),
+            ledger_entry=_reference(
+                "authority/ledger-entry.json",
+                HashDigest("9" * 64),
+                "authority-ledger-entry/1.0",
+            ),
+            grant_sha256=None,
+            principal_ids=(OpaqueId("human-1"), OpaqueId("human-2")),
+            signature_verification_refs=(
+                _reference(
+                    "authority/signature.json",
+                    HashDigest("d" * 64),
+                    "signature-verification/1.0",
+                ),
+            ),
+            revocation_checked_at=evaluated_at.isoformat(),
+            kill_switch_clear=True,
+            reserved_cost_minor_units=request.scope.cost_minor_units,
+            currency=request.scope.currency,
+            reserved_candidates=request.scope.candidate_count,
+            retry_index=request.scope.retry_index,
+            idempotency_key=request.idempotency_key,
+            workspace_id=request.scope.workspace_id,
+            workspace_observation_sha256=(
+                HashDigest(str(workspace_observation_sha256))
+                if workspace_observation_sha256 is not None
+                else None
+            ),
+            adapter_id=OpaqueId(str(adapter_id)) if adapter_id is not None else None,
+            service_identity=(
+                OpaqueId(str(service_identity))
+                if service_identity is not None
+                else None
+            ),
+            evaluated_at=evaluated_at.isoformat(),
+            valid_until=(evaluated_at + timedelta(minutes=5)).isoformat(),
+        )
+        digest = authority_verification_receipt_sha256(provisional)
+        return replace(
+            provisional,
+            receipt_id=OpaqueId(f"authority-receipt-{str(digest)[:20]}"),
+            receipt_sha256=digest,
+        )
+
+    def verify_current(
+        self,
+        request,
+        risk,
+        presented_grant,
+        authority_references,
+        *,
+        current_context,
+        evaluated_at,
+    ):
+        return self._receipt(
+            request,
+            risk.assessment_sha256,
+            purpose=VerificationPurpose.INITIAL_DECISION,
+            evaluated_at=evaluated_at,
+        )
+
+    def revalidate_and_reserve_current(
+        self,
+        decision,
+        request,
+        *,
+        current_context,
+        workspace_observation_sha256,
+        adapter_id,
+        service_identity,
+        evaluated_at,
+        purpose,
+    ):
+        return self._receipt(
+            request,
+            decision.risk_assessment_sha256,
+            purpose=purpose,
+            evaluated_at=evaluated_at,
+            decision_sha256=decision.decision_sha256,
+            adapter_id=adapter_id,
+            service_identity=service_identity,
+            workspace_observation_sha256=workspace_observation_sha256,
+        )
+
+
+def _w04_authority_bundle(plan):
+    context = _gate_context(plan)
+    request = build_bound_action_authority_request(
+        request_id=f"authority-{plan.plan_id}",
+        request_envelope_sha256=str(
+            canonical_sha256(
+                {
+                    "plan_sha256": str(plan.plan_sha256),
+                    "workspace_id": str(plan.workspace_id),
+                    "idempotency_key": str(plan.idempotency_key),
+                }
+            )
+        ),
+        idempotency_key=str(plan.idempotency_key),
+        action_id="managed_mutation",
+        capability_id="managed_mutation",
+        executable_plan_sha256=str(plan.plan_sha256),
+        action_risk=ActionRisk.R4,
+        authority_requirement=AuthorityRequirement.TWO_INDEPENDENT_HUMANS,
+        side_effect=True,
+        gate_context=context,
+        profiles=ProfileSelection(
+            AssuranceProfile.HIGH_ASSURANCE,
+            AutonomyProfile.ASSISTED,
+        ),
+        scope=AuthorityScope(
+            workspace_id=plan.workspace_id,
+            channel_id=OpaqueId("channel-a"),
+            concept_id=OpaqueId("concept-a"),
+            episode_id=OpaqueId("episode-a"),
+            provider_id=None,
+            model_id=None,
+            destination="managed-workspace",
+            cost_minor_units=0,
+            currency="USD",
+            candidate_count=0,
+            retry_index=0,
+            input_artifacts=(),
+            allowed_outputs=(
+                OutputScope("workspace", ("managed-workspace/1.0",)),
+            ),
+        ),
+    )
+    ledger = _TrustedW04Ledger()
+    _, decision = evaluate_authority(
+        request,
+        target_policy_bundle(),
+        ledger=ledger,
+        authority_references=(
+            _reference(
+                "authority/human-1.json",
+                HashDigest("1" * 64),
+                "human-approval/1.0",
+            ),
+            _reference(
+                "authority/human-2.json",
+                HashDigest("2" * 64),
+                "human-approval/1.0",
+            ),
+        ),
+        evaluated_at=EVALUATED_AT,
+    )
+    assert decision.status is AuthorityDecisionStatus.AUTHORIZED
+    return request, decision, ledger
+
+
+def _w04_authority_dependencies(plan) -> dict[str, object]:
+    request, decision, ledger = _w04_authority_bundle(plan)
+    return {
+        "w04_authority_request": request,
+        "w04_authority_decision": decision,
+        "w04_authority_ledger": ledger,
+    }
+
+
 class _TrustedAuthority:
     def verify(self, plan, observation, *, current_context, evaluated_at):
+        _, decision, _ = _w04_authority_bundle(plan)
         return _reference(
-            "authority/decision.json", SHA_C, "authority-decision/1.0"
+            "authority/decision.json",
+            decision.decision_sha256,
+            "authority-decision/1.0",
         )
 
 
@@ -1419,6 +1629,7 @@ def _authorization_dependencies(
 ) -> dict[str, object]:
     options: dict[str, object] = {
         "authority_verifier": _TrustedAuthority(),
+        **_w04_authority_dependencies(plan),
         **_runtime_dependencies(ledger=ledger, resolver=resolver),
     }
     if plan.risk_tier is MutationRiskTier.R4:
@@ -1462,6 +1673,7 @@ def test_pre_side_effect_guard_rechecks_workspace_authority_and_idempotency() ->
         current_context=_gate_context(plan),
         evaluated_at=EVALUATED_AT,
         authority_verifier=_TrustedAuthority(),
+        **_w04_authority_dependencies(plan),
         break_glass=break_glass,
         break_glass_policy=BreakGlassPolicy(maximum_validity_seconds=3600),
         human_authenticator=_TrustedHumans({"human-1", "human-2"}),
@@ -1561,6 +1773,17 @@ def test_pre_side_effect_guard_rechecks_workspace_authority_and_idempotency() ->
             **_runtime_dependencies(),
     )
     assert missing.value.reason_code == "mutation.authority.verifier_missing"
+    with pytest.raises(MutationRuntimeError) as missing_w04:
+        guard.authorize(
+            elevated,
+            _observation(),
+            service_identity=OpaqueId("mutation-service"),
+            current_context=_gate_context(elevated),
+            evaluated_at=EVALUATED_AT,
+            authority_verifier=_TrustedAuthority(),
+            **_runtime_dependencies(),
+        )
+    assert missing_w04.value.reason_code == "mutation.authority.w04_missing"
     with pytest.raises(MutationRuntimeError) as no_lower_tier_bypass:
         guard.authorize(
             elevated,
@@ -1569,6 +1792,7 @@ def test_pre_side_effect_guard_rechecks_workspace_authority_and_idempotency() ->
             current_context=_gate_context(elevated),
             evaluated_at=EVALUATED_AT,
             authority_verifier=_TrustedAuthority(),
+            **_w04_authority_dependencies(elevated),
             **_runtime_dependencies(),
         )
     assert no_lower_tier_bypass.value.reason_code == "mutation.break_glass.missing"
@@ -1740,6 +1964,7 @@ def test_r4_break_glass_requires_two_current_distinct_authenticated_humans() -> 
         current_context=_gate_context(plan),
         evaluated_at=EVALUATED_AT,
         authority_verifier=_TrustedAuthority(),
+        **_w04_authority_dependencies(plan),
         break_glass=evidence,
         break_glass_policy=BreakGlassPolicy(maximum_validity_seconds=3600),
         human_authenticator=authenticator,
@@ -1769,6 +1994,7 @@ def test_r4_break_glass_requires_two_current_distinct_authenticated_humans() -> 
             current_context=_gate_context(plan),
             evaluated_at=EVALUATED_AT,
             authority_verifier=_TrustedAuthority(),
+            **_w04_authority_dependencies(plan),
             break_glass=unrelated,
             break_glass_policy=BreakGlassPolicy(maximum_validity_seconds=3600),
             human_authenticator=authenticator,
@@ -1794,6 +2020,7 @@ def test_r4_break_glass_requires_two_current_distinct_authenticated_humans() -> 
             current_context=_gate_context(plan),
             evaluated_at=EVALUATED_AT,
             authority_verifier=_TrustedAuthority(),
+            **_w04_authority_dependencies(plan),
             break_glass=same_person,
             break_glass_policy=BreakGlassPolicy(maximum_validity_seconds=3600),
             human_authenticator=authenticator,
@@ -1810,6 +2037,7 @@ def test_r4_break_glass_requires_two_current_distinct_authenticated_humans() -> 
             current_context=_gate_context(plan),
             evaluated_at=datetime(2026, 8, 7, 1, 30, tzinfo=timezone.utc),
             authority_verifier=_TrustedAuthority(),
+            **_w04_authority_dependencies(plan),
             break_glass=evidence,
             break_glass_policy=BreakGlassPolicy(maximum_validity_seconds=3600),
             human_authenticator=authenticator,
@@ -1827,6 +2055,7 @@ def test_r4_break_glass_requires_two_current_distinct_authenticated_humans() -> 
             current_context=_gate_context(plan),
             evaluated_at=EVALUATED_AT,
             authority_verifier=_TrustedAuthority(),
+            **_w04_authority_dependencies(plan),
             break_glass=evidence,
             break_glass_policy=BreakGlassPolicy(maximum_validity_seconds=3600),
             human_authenticator=untrusted,

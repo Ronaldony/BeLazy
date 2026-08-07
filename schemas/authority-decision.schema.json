@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.video-factory.invalid/authority/authority-decision.schema.json",
+  "title": "Exact action authority decision",
+  "type": "object",
+  "required": [
+    "artifact_version", "decision_id", "decision_sha256", "action_request_sha256",
+    "gate_context_sha256", "risk_assessment_sha256", "effective_risk",
+    "required_authority", "status", "source", "reason_codes", "matched_limit_sha256",
+    "verification_receipt_id", "verification_receipt_sha256", "evaluated_at",
+    "valid_until", "predispatch_required", "authority_effect"
+  ],
+  "properties": {
+    "artifact_version": { "const": "authority-decision/1.0" },
+    "decision_id": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" },
+    "decision_sha256": { "$ref": "artifact-common.schema.json#/$defs/sha256" },
+    "action_request_sha256": { "$ref": "artifact-common.schema.json#/$defs/sha256" },
+    "gate_context_sha256": { "$ref": "artifact-common.schema.json#/$defs/sha256" },
+    "risk_assessment_sha256": { "$ref": "artifact-common.schema.json#/$defs/sha256" },
+    "effective_risk": { "$ref": "workflow-authority-common.schema.json#/$defs/risk" },
+    "required_authority": { "$ref": "workflow-authority-common.schema.json#/$defs/authorityRequirement" },
+    "status": { "$ref": "workflow-authority-common.schema.json#/$defs/decisionStatus" },
+    "source": { "$ref": "workflow-authority-common.schema.json#/$defs/authoritySource" },
+    "reason_codes": { "$ref": "workflow-authority-common.schema.json#/$defs/reasonCodes" },
+    "matched_limit_sha256": { "oneOf": [{ "type": "null" }, { "$ref": "artifact-common.schema.json#/$defs/sha256" }] },
+    "verification_receipt_id": { "oneOf": [{ "type": "null" }, { "$ref": "artifact-common.schema.json#/$defs/opaqueId" }] },
+    "verification_receipt_sha256": { "oneOf": [{ "type": "null" }, { "$ref": "artifact-common.schema.json#/$defs/sha256" }] },
+    "evaluated_at": { "type": "string", "format": "date-time" },
+    "valid_until": { "oneOf": [{ "type": "null" }, { "type": "string", "format": "date-time" }] },
+    "predispatch_required": { "type": "boolean" },
+    "authority_effect": { "enum": ["none", "execution_authority"] }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "status": { "const": "authorized" } } },
+      "then": {
+        "properties": {
+          "source": { "not": { "const": "none" } },
+          "authority_effect": { "const": "execution_authority" }
+        }
+      },
+      "else": {
+        "properties": {
+          "source": { "const": "none" },
+          "authority_effect": { "const": "none" }
+        }
+      }
+    }
+  ],
+  "additionalProperties": false
+}

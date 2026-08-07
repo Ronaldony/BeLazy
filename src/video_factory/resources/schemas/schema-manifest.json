@@ -1,13 +1,25 @@
 {
   "manifest_version": "video-factory-schema-manifest/1.0",
-  "schema_count": 61,
-  "registered_version_count": 57,
+  "schema_count": 73,
+  "registered_version_count": 68,
   "schemas": [
+    {
+      "filename": "action-risk-assessment.schema.json",
+      "sha256": "ecbc18215971d993e97a287a4112527ab092e43b5956b606620b5b0c1bdd7920",
+      "schema_id": "https://schemas.video-factory.invalid/authority/action-risk-assessment.schema.json",
+      "artifact_version": "action-risk-assessment/1.0"
+    },
     {
       "filename": "analytics-record.schema.json",
       "sha256": "088c31a288089513d4fbe553af71d0c659e94e112902a19fd885dc44d1b9cb98",
       "schema_id": "https://schemas.video-factory.invalid/artifact/analytics-record.schema.json",
       "artifact_version": "analytics-record/1.0"
+    },
+    {
+      "filename": "approval-request.schema.json",
+      "sha256": "a4b9792dc3995b4b67f5a6c817ff59bcbeaf1ba6f5839301f3ae07d9e1f721d2",
+      "schema_id": "https://schemas.video-factory.invalid/authority/approval-request.schema.json",
+      "artifact_version": "approval-request/1.0"
     },
     {
       "filename": "approval-requirement.schema.json",
@@ -20,6 +32,18 @@
       "sha256": "14f0b540e96d52165c9841d6950dfaa009931e6543374fb887778f25f3d1b81e",
       "schema_id": "https://schemas.video-factory.invalid/artifact/artifact-common.schema.json",
       "artifact_version": null
+    },
+    {
+      "filename": "authority-decision.schema.json",
+      "sha256": "cddbc64b1c98e4d41cfb16c308933c7349bcd44fa42c0a878716146fe9eab691",
+      "schema_id": "https://schemas.video-factory.invalid/authority/authority-decision.schema.json",
+      "artifact_version": "authority-decision/1.0"
+    },
+    {
+      "filename": "authority-verification-receipt.schema.json",
+      "sha256": "0b4afd9e997283dadd77dd2e9fb31a050b096d32b53a4de3c6c10a899c0ec8a8",
+      "schema_id": "https://schemas.video-factory.invalid/authority/authority-verification-receipt.schema.json",
+      "artifact_version": "authority-verification-receipt/1.0"
     },
     {
       "filename": "blueprint-conflict.schema.json",
@@ -160,6 +184,12 @@
       "artifact_version": "episode-intent/1.0"
     },
     {
+      "filename": "executable-production-plan.schema.json",
+      "sha256": "e188d4884bf30c27daa03ece5a63737a048800b860f4a9c356b580670a60a207",
+      "schema_id": "https://schemas.video-factory.invalid/workflow/executable-production-plan.schema.json",
+      "artifact_version": "executable-production-plan/1.0"
+    },
+    {
       "filename": "external-call-reservation.schema.json",
       "sha256": "3e07d18d0931f2ea0c3a440cde726227ecae0feaf089bcf0b00d4863a14dcf39",
       "schema_id": "https://schemas.video-factory.invalid/artifact/external-call-reservation.schema.json",
@@ -176,6 +206,12 @@
       "sha256": "5d366e2b77478c2ae3108ff8f2ab2b83c54021396a69fe2325cf3bca692c28ef",
       "schema_id": "https://schemas.video-factory.invalid/artifact/final-review.schema.json",
       "artifact_version": "final-review/1.0"
+    },
+    {
+      "filename": "gate-result.schema.json",
+      "sha256": "d54df15c514f38cb9c8d12c4a4abb46b98cbf0acbf7bd376c40b0923f1a76272",
+      "schema_id": "https://schemas.video-factory.invalid/workflow/gate-result.schema.json",
+      "artifact_version": "gate-result/1.0"
     },
     {
       "filename": "generation-day-brief.schema.json",
@@ -280,6 +316,12 @@
       "artifact_version": "packet-review/1.0"
     },
     {
+      "filename": "policy-bundle.schema.json",
+      "sha256": "782fcf65afe7af226100a46ad95d7df370c4cc5f2d3d79d2527057c9c936e177",
+      "schema_id": "https://schemas.video-factory.invalid/authority/policy-bundle.schema.json",
+      "artifact_version": "policy-bundle/1.0"
+    },
+    {
       "filename": "production-blueprint.schema.json",
       "sha256": "7f2a5a1583068c3087be8c1c9e3c4ce6152ad892c6df5761f5919829045daead",
       "schema_id": "https://schemas.video-factory.invalid/blueprint/production-blueprint.schema.json",
@@ -334,6 +376,12 @@
       "artifact_version": "shot-qc/1.0"
     },
     {
+      "filename": "standing-authorization.schema.json",
+      "sha256": "b62f1456aca5eaafe1b9b1ee15ec08c10dd043d02645712eb176703d948c4ba3",
+      "schema_id": "https://schemas.video-factory.invalid/authority/standing-authorization.schema.json",
+      "artifact_version": "standing-authorization/1.0"
+    },
+    {
       "filename": "storyboard-approval-v2.schema.json",
       "sha256": "ae1bb5007175f673b1419dac4cbee206444b4a5a6b401882ac196b621022d100",
       "schema_id": "https://schemas.video-factory.invalid/artifact/storyboard-approval-v2.schema.json",
@@ -356,6 +404,30 @@
       "sha256": "560eaa93ee7fa75c01ceb1ab7de70e512dc64f8c88819b42db35574e3c59086d",
       "schema_id": "https://schemas.video-factory.invalid/artifact/storyboard.schema.json",
       "artifact_version": "storyboard/1.0"
+    },
+    {
+      "filename": "workflow-authority-common.schema.json",
+      "sha256": "7ab6d329ed10eff6b22f9dab6fd23602e921027a8749c976415aae446bf90973",
+      "schema_id": "https://schemas.video-factory.invalid/workflow/workflow-authority-common.schema.json",
+      "artifact_version": null
+    },
+    {
+      "filename": "workflow-definition.schema.json",
+      "sha256": "1372b21d12cb6275f617151c54137eead3be582c65e7844729031508ed570fc9",
+      "schema_id": "https://schemas.video-factory.invalid/workflow/workflow-definition.schema.json",
+      "artifact_version": "workflow-definition/1.0"
+    },
+    {
+      "filename": "workflow-evaluation.schema.json",
+      "sha256": "54b4447845f8cfa87cfd136394a454a2124705055489660f5cba8abdc0a43d05",
+      "schema_id": "https://schemas.video-factory.invalid/workflow/workflow-evaluation.schema.json",
+      "artifact_version": "workflow-evaluation/1.0"
+    },
+    {
+      "filename": "workflow-parity-report.schema.json",
+      "sha256": "dcf7c6658165c08847e84ab0c2ec6e64d9e8dab232e7c34080d14704667ea23b",
+      "schema_id": "https://schemas.video-factory.invalid/workflow/workflow-parity-report.schema.json",
+      "artifact_version": "workflow-parity-report/1.0"
     },
     {
       "filename": "workspace-config.schema.json",

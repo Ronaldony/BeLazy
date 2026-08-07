@@ -69,15 +69,15 @@ def _rewrite(
 def _built_wheel(tmp_path: Path) -> Path:
     root = Path(__file__).resolve().parents[2]
     wheel, members = build_wheel(root, tmp_path / "wheel")
-    assert members == 173
+    assert members == 202
     return wheel
 
 
 def test_offline_wheel_record_metadata_and_tag_are_verified(tmp_path: Path) -> None:
     wheel = _built_wheel(tmp_path)
     members, schemas, digest = inspect_wheel(wheel)
-    assert members == 173
-    assert schemas == 61
+    assert members == 202
+    assert schemas == 73
     assert digest == hashlib.sha256(wheel.read_bytes()).hexdigest()
 
 
@@ -148,6 +148,46 @@ def test_wheel_rejects_coherently_rehashed_director_resource_tamper(
         wheel,
         damaged,
         {registry_name: registry_bytes, manifest_name: manifest_bytes},
+        refresh_record=True,
+    )
+    with pytest.raises(ValueError, match="code projection"):
+        inspect_wheel(damaged)
+
+
+def test_wheel_rejects_coherently_rehashed_authority_policy_tamper(
+    tmp_path: Path,
+) -> None:
+    wheel = _built_wheel(tmp_path)
+    policy_name = (
+        "video_factory/resources/workflow_authority/authority-policy-v2.1.json"
+    )
+    manifest_name = (
+        "video_factory/resources/workflow_authority/"
+        "workflow-authority-resource-manifest.json"
+    )
+    with zipfile.ZipFile(wheel) as archive:
+        policy = json.loads(archive.read(policy_name))
+        manifest = json.loads(archive.read(manifest_name))
+    policy["action_risk_by_action"][0]["risk"] = "R4"
+    policy_identity = {
+        key: value
+        for key, value in policy.items()
+        if key not in {"bundle_id", "bundle_sha256"}
+    }
+    policy_sha = _canonical_sha256(policy_identity)
+    policy["bundle_id"] = f"policy-bundle-{policy_sha[:20]}"
+    policy["bundle_sha256"] = policy_sha
+    policy_bytes = _render(policy)
+    for entry in manifest["resources"]:
+        if entry["filename"] == "authority-policy-v2.1.json":
+            entry["sha256"] = hashlib.sha256(policy_bytes).hexdigest()
+    manifest_bytes = _render(manifest)
+    damaged = tmp_path / "authority-policy-coherent-tamper" / wheel.name
+    damaged.parent.mkdir()
+    _rewrite(
+        wheel,
+        damaged,
+        {policy_name: policy_bytes, manifest_name: manifest_bytes},
         refresh_record=True,
     )
     with pytest.raises(ValueError, match="code projection"):

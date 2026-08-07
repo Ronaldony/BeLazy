@@ -144,42 +144,29 @@ class GenerationReadinessPlan:
     def __post_init__(self) -> None:
         if self.ready and self.blockers:
             raise OrchestrationPlanError("ready plan cannot contain blockers")
-        if not self.authorization_ready:
-            return
-        if not self.ready:
-            raise OrchestrationPlanError(
-                "authorization-ready plan must also be structurally ready"
-            )
-        if (
-            self.packet is None
-            or self.packet_content_sha256 is None
-            or self.feasibility_review is None
-            or self.approval_evidence is None
-            or self.gate_context_sha256 is None
-            or self.valid_from is None
-            or self.valid_until is None
-            or self.workspace_revision_id is None
-            or self.workspace_id is None
-            or self.workspace_revision_sha256 is None
-            or self.workspace_observation_sha256 is None
-        ):
+        # W04: legacy approval documents are structural observations, not
+        # signature/ledger/revocation proof.  This compatibility field can no
+        # longer become execution authority.  The runtime consumes a separate
+        # VerifiedAuthorityDecision at the side-effect boundary.
+        if self.authorization_ready:
             object.__setattr__(self, "authorization_ready", False)
-            return
-        try:
-            valid_from = parse_rfc3339_datetime(self.valid_from)
-            valid_until = parse_rfc3339_datetime(self.valid_until)
-        except ValueError as error:
-            raise OrchestrationPlanError(
-                "authorization-ready plan has an invalid validity window"
-            ) from error
-        if valid_from >= valid_until:
-            raise OrchestrationPlanError(
-                "authorization-ready plan validity window is empty"
-            )
+        return
 
     @property
     def packet_sha256(self) -> str | None:
         return self.packet_content_sha256
+
+    @property
+    def authority_effect(self) -> str:
+        return "none"
+
+    @property
+    def diagnostic_only(self) -> bool:
+        return True
+
+    @property
+    def requires_authority_decision(self) -> bool:
+        return True
 
 
 @dataclass(frozen=True, slots=True)
@@ -207,6 +194,18 @@ class NextStepPlan:
     workspace_revision_sha256: str | None = None
     workspace_observation_sha256: str | None = None
     transition_applied: bool = False
+
+    @property
+    def authority_effect(self) -> str:
+        return "none"
+
+    @property
+    def diagnostic_only(self) -> bool:
+        return True
+
+    @property
+    def requires_authority_decision(self) -> bool:
+        return True
 
 
 def _kind_from_version(artifact_version: object) -> PipelineKind | None:
@@ -772,10 +771,12 @@ def build_generation_readiness(
         blockers.append("rapid mode is preview-only and cannot authorize generation")
 
     unique = tuple(dict.fromkeys(blockers))
-    authorization_ready = not unique and not legacy_planning
+    # W04 deliberately keeps this legacy projection non-authorizing.  A raw
+    # approval document cannot prove current ledger inclusion or revocation.
+    authorization_ready = False
     valid_from: str | None = None
     valid_until: str | None = None
-    if authorization_ready:
+    if not unique and not legacy_planning:
         approvals = tuple(
             item for item in (storyboard_approval, approval) if item is not None
         )

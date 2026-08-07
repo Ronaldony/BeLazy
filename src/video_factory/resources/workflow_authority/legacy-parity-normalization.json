@@ -1,0 +1,82 @@
+{
+  "normalization_version": "legacy-next-step-normalization/1.0",
+  "blocker_rules": [
+    {
+      "contains": "artifact",
+      "reason_code": "workflow.artifact_graph_valid.blocked"
+    },
+    {
+      "contains": "brief",
+      "reason_code": "workflow.brief_present.blocked"
+    },
+    {
+      "contains": "storyboard",
+      "reason_code": "workflow.storyboard_present.blocked"
+    },
+    {
+      "contains": "review",
+      "reason_code": "workflow.review.blocked"
+    },
+    {
+      "contains": "approval",
+      "reason_code": "workflow.approval.blocked"
+    },
+    {
+      "contains": "packet",
+      "reason_code": "workflow.packet_contract_valid.blocked"
+    },
+    {
+      "contains": "feasibility",
+      "reason_code": "workflow.feasibility_pass.blocked"
+    },
+    {
+      "contains": "rapid mode",
+      "reason_code": "workflow.mode.preview_only"
+    },
+    {
+      "contains": "workspace",
+      "reason_code": "workflow.workspace_trusted.blocked"
+    },
+    {
+      "contains": "QC",
+      "reason_code": "workflow.qc.blocked"
+    },
+    {
+      "contains": "continuity",
+      "reason_code": "workflow.continuity_qc.blocked"
+    },
+    {
+      "contains": "ranking",
+      "reason_code": "workflow.candidate_ranking_current.blocked"
+    },
+    {
+      "contains": "edit",
+      "reason_code": "workflow.edit_manifest_current.blocked"
+    },
+    {
+      "contains": "rough-cut",
+      "reason_code": "workflow.rough_cut_pass.blocked"
+    },
+    {
+      "contains": "final-delivery",
+      "reason_code": "workflow.final_delivery_valid.blocked"
+    },
+    {
+      "contains": "publish metadata",
+      "reason_code": "workflow.publish_metadata_bound.blocked"
+    }
+  ],
+  "authority_by_action": {
+    "approve_storyboard": "human_or_campaign",
+    "approve_generation": "human_or_campaign",
+    "reconcile_workspace": "two_independent_humans",
+    "run_external_generation": "standing_or_one_human",
+    "remediate_or_repeat_shot_qc": "standing_or_one_human",
+    "select_edit_inputs": "human_or_campaign",
+    "approve_publish": "human_or_campaign",
+    "ready_for_human_publish": "human_or_campaign"
+  },
+  "default_authority": "policy",
+  "unmapped_behavior": "MISMATCH",
+  "authority_effect": "none"
+}

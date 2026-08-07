@@ -19,8 +19,10 @@ Production planning is evidence-based, not presence-based:
    reviewer counts from workflow policy.
 4. Generation requires `generation-packet/2.0` or `2.1`, the version-specific
    complete independent feasibility pass, and exact human approval evidence in
-   Standard/Controlled. Production authorization also requires a complete,
-   trusted current `WorkspaceObservation` bound to the same revision/manifest.
+   Standard/Controlled. Those facts establish structural readiness only.
+   Execution additionally requires a current W04 `AuthorityDecision`, a fresh
+   purpose-bound trusted-ledger receipt, and a complete trusted
+   `WorkspaceObservation` bound to the same revision and manifest.
 5. Every packet shot needs one current QC verdict of pass or warn. Failed or
    inconclusive QC cannot advance.
 6. Multi-shot packets additionally need one current pass/warn continuity QC
@@ -39,6 +41,8 @@ Production planning is evidence-based, not presence-based:
 | `video_factory.policy` | Rapid/Standard/Controlled workflow policy data, mode resolution (no silent default), and ADR-004 bridge helpers |
 | `video_factory.providers` | capability registry, shared descriptor/envelopes, injected constraint profiles, separate media-provider/task-executor ports, and managed-mutation authority/authenticator/executor Protocols with an immediate pre-side-effect guard |
 | `video_factory.approvals` | pending requirements and granted evidence as distinct contracts; deterministic requirement IDs and exact evidence binding |
+| `video_factory.workflow` | target-owned versioned claims/gates/actions DAG, complete blocker and parallel-frontier evaluation, incremental invalidation, per-action executable plan identities, and non-authorizing legacy parity reports |
+| `video_factory.authority` | separate assurance/autonomy/risk contracts, exact action requests, parse-only standing grants, non-authorizing approval requests, target policy classification, authority decisions, and trusted ledger verification/revalidation ports |
 | `video_factory.feasibility` | pure checks for capability, minimum duration, first-frame aspect/before-state, continuity anchors, cross-shot first-frame state carryover, and unsupported render dependencies |
 | `video_factory.qc` | injected constraints with pass/warn/fail/inconclusive/not-applicable outcomes and fallback measurement hints |
 | `video_factory.continuity` | cross-shot comparison of one opaque element between two generated clips (relative-scale / orientation-shape / presence); plan-only, caller-supplied finite nonnegative tolerances, closed measurement serialization, and pure serialized-document rejudgment |
@@ -51,7 +55,7 @@ Production planning is evidence-based, not presence-based:
 | `video_factory.security` | path guard, secret reference, purity-scanner port, and in-process `scan_repository` / `RepositoryPurityScanner` |
 | `video_factory.artifacts` | artifact schema registry (`artifact_version` → schema), single-document and batch JSON Schema validation runner, structured field-path errors |
 | `video_factory.lint` | injected `VerbatimRule` / `SourceLockRule` data, JSON rule-file loader, `run_lint` → `LintReport` reusing `qc.Finding` (byte/sha256 equality + source drift); **no channel text in core** |
-| `video_factory.sheets` | deterministic generation sheet; preview-only unless readiness proof matches the exact packet content |
+| `video_factory.sheets` | deterministic human generation sheet; always preview-only and never an execution-authority surface |
 | `video_factory.encode` | concat/re-encode/mux command plans, explicit input roles, optional soundtrack, post-checks/fallbacks; never executes |
 | `video_factory.analytics` | injected `AnalyticsRecord` snapshots, `VerificationRule`/`RetroPolicy` data, deterministic `compute_retro` → `RetroReport` (`supported`/`refuted`/`inconclusive`); **no external analytics APIs**; CLI analytics commands not wired yet |
 | `video_factory.distribution` | ADR-001 `core.lock` document types, deterministic `build_core_lock` (string only), `parse_core_lock`, observation-only `verify_lock_against_installed`, and `plan_wheel_build` (argv/string only; **never builds or installs**) |
@@ -78,7 +82,9 @@ This generalizes the existing `EncodeCommandPlan` pattern (`executed=False` alwa
 | `build_qc_plan` / `judge_measurements` | `QCPlan` / `QCJudgment` | primary/fallback method hints and pass/warn/fail/inconclusive/not-applicable judgment | empty plan; unknown comparison |
 | `build_approval_requirement` | `ApprovalRequirement` | path+sha256-bound requirement document | empty artifacts; invalid sha256 |
 | `observe_episode_state` / `plan_next_step` | `EpisodeStateObservation` / `NextStepPlan` | validated current snapshot graph and deterministic next action | raw docs, mixed provenance, ambiguous current artifacts, missing mode |
-| `build_generation_readiness` | `GenerationReadinessPlan` | `ready` preserves structural legacy planning; only `authorization_ready` means exact reviews, feasibility, current `GateContext`, trusted workspace revision/observation, explicit evaluation time, and the aggregate approval window all bind | stale/missing/expired evidence, context, or workspace trust; Rapid mode |
+| `build_generation_readiness` | `GenerationReadinessPlan` | `ready` preserves structural legacy planning and diagnostics; `authorization_ready` is always false in W04 and a separate authority decision is required | stale/missing/expired evidence, context, or workspace trust; Rapid mode |
+| `evaluate_workflow` / `build_executable_production_plan` | `WorkflowEvaluation` / `ExecutableProductionPlan` | every gate result is evaluated, every blocker is preserved, the parallel action frontier is explicit, and each action gets its own material-context/plan digest; `authority_effect=none` | unknown/cyclic definition, missing gate, stale context, invalid incremental reuse |
+| `evaluate_authority` / `revalidate_authority_for_side_effect` | `ActionRiskAssessment` / `AuthorityDecision` / `AuthorityVerificationReceipt` | target policy recomputes risk and a trusted ledger proves current scope, signature/ledger state, revocation, limits, identity, and purpose immediately before a side effect | unknown action, stale context, insufficient source, revoked/expired grant, kill switch, budget/idempotency mismatch |
 | `draft_*_config` | validated config mapping | schema-valid channel/concept/episode draft | invalid scope id / settings |
 | `build_core_lock` | TOML `str` | deterministic lock document text (caller writes file) | invalid artifact / path escape |
 | `plan_wheel_build` | `WheelBuildPlan` | `python -m build --wheel` argv + vendor placement notes | invalid version |
@@ -134,6 +140,73 @@ All W03 immutable references share one canonical relative POSIX/NFC path rule:
 empty, `.`, `..`, repeated-separator, trailing-separator, absolute, drive,
 backslash, control, case and Unicode aliases fail closed.
 
+## Declarative workflow and authority control (W04)
+
+`video_factory.workflow` adds the exact target-owned
+`episode-production-workflow/1.0` definition with 24 claims/gates and 26 legacy
+action identities. Evaluation is pure and complete: it returns satisfied
+claims, every blocker, all currently executable actions, the stable recommended
+action, consumed evidence, and the six material context inputs. Packet review
+and feasibility, and final review and metadata preparation, can appear together
+on the frontier. Incremental evaluation fingerprints each gate and invalidates
+the transitive dependent claims; its semantic projection must equal a clean
+full recomputation.
+
+Each frontier action produces a distinct `executable-production-plan/1.0` and
+full seven-digest `GateContext`, including that action's plan digest. A
+`WorkflowEvaluation`, executable plan, legacy `NextStepPlan`, parity report,
+Director result, Blueprint, mode name, or AI consensus has
+`authority_effect=none`. The legacy planner remains available during dual-run.
+The characterization corpus contains 26 fixed seed states evaluated in Rapid,
+Standard, and Controlled (78 rows). Rapid intentionally maps production-ready
+seeds to preview-only; a committed expected-action matrix records this rather
+than pretending every action is reachable in every mode. The corpus union
+covers all 26 action identities and compares action, blockers, actor, required
+authority, consumed evidence, and prohibited actions. Loaded evaluations are
+cleanly recomputed from their gate results under the exact target DAG before
+comparison or plan construction. A parity report cannot cut over or authorize,
+and any unexplained dimension fails.
+
+`video_factory.authority` keeps three independent axes: `AssuranceProfile`
+describes evidence rigor, `AutonomyProfile` describes how work may be proposed,
+and `ActionRisk` determines authority. An `ActionAuthorityRequest` binds the
+exact request-envelope/idempotency identity, workflow action and executable
+plan, all seven current-context digests, workspace/channel/concept/episode,
+provider/model/destination, canonical artifact and output scopes, cost/currency,
+candidate/retry limits, and requested profiles. The target-owned policy bundle
+recomputes risk; an unknown action is unsupported and fails closed.
+
+`standing-authorization/1.0` is parse-only unverified input. Core exposes no
+grant/sign/issue API, and R4 can never use a standing grant. Standing scope
+binds complete input identities (path, digest, version) and exact output
+prefix/version scopes; a content digest cannot transfer permission to another
+artifact identity. Human-required R0 actions still need their declared human
+or campaign authority source.
+`approval-request/1.0` is a human-facing request with
+`creates_authority=false`; legacy `ApprovalEvidence` and readiness records do
+not prove signature, ledger inclusion, or current revocation. Only an
+`authority-decision/1.0` produced from a trusted ledger receipt can carry
+`execution_authority`.
+
+Initial evaluation verifies the exact request/risk/context and allowed authority
+source. Every actual executor dispatch, reconcile, and managed mutation then
+calls `TrustedAuthorizationLedger.revalidate_and_reserve_current` immediately
+before the side effect. The fresh receipt is bound to the distinct purpose,
+decision, request, context, workspace observation, adapter/service identity,
+ledger head/state, current signature and revocation evidence, kill switch,
+cost/candidate reservation,
+retry index, and idempotency key. A receipt for dispatch cannot be replayed for
+reconcile or mutation. Missing, unavailable, stale, expired, superseded,
+revoked, over-limit, or rebound state fails before the external call.
+
+The W02 bridge remains deliberately conservative: `managed_mutation` is fixed
+at R4 in the target policy, requires a W04 dual-human ledger decision, and then
+also requires the existing exact break-glass evidence and two-human binding.
+W04 does not activate lower mutation tiers merely from a path or requester
+label. Concrete durable ledger storage, signatures, clocks, budget settlement,
+executor/journal persistence, and crash/TOCTOU recovery remain W06 runtime
+implementations behind the completed W04 ports.
+
 ## Managed mutation plane (W02)
 
 The normal flow is `ChangeRequest` → deterministic `MutationPlan` plus
@@ -147,9 +220,10 @@ filesystem executor or approval issuer.
   current source digest; move also requires destination absence. Caller input
   cannot lower risk. W02 treats every mutation, including every CREATE path, as
   R4 because a path string cannot prove lower semantic risk. R1/R2/R3 execution
-  remains disabled until W04 supplies a trusted, current, exact-request and
-  policy-bound classifier decision. Normal authority and R4 break-glass are
-  both required in the meantime.
+  remains disabled. W04 now supplies the exact-request policy decision and
+  trusted-ledger seam, but its target policy intentionally classifies
+  `managed_mutation` as R4; no lower semantic classifier has been activated.
+  W04 authority and R4 break-glass are both required.
 - Every plan binds the workspace revision, before-manifest digest, serialized
   base revision digest, policy digest, request digest, and idempotency key.
 - Managed paths are canonical relative POSIX NFC strings and reject absolute,

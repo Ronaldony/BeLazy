@@ -1,0 +1,18 @@
+{
+  "manifest_version": "workflow-authority-resource-manifest/1.0",
+  "resource_count": 3,
+  "resources": [
+    {
+      "filename": "authority-policy-v2.1.json",
+      "sha256": "72f48c99953ce41305bd9c34fa86690d607503bb37a88a22a731f082757011e1"
+    },
+    {
+      "filename": "episode-production-workflow.json",
+      "sha256": "f7d005c4d2f17b1b0da923800f86fdf9d6cc3f3d4c55d741d7e41f166f0eb2c7"
+    },
+    {
+      "filename": "legacy-parity-normalization.json",
+      "sha256": "60b579d3f79826027bc36de0c6f97a9d84dcdf957f88e1b96599e7e51f0b8453"
+    }
+  ]
+}

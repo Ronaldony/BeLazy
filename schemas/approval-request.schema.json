@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.video-factory.invalid/authority/approval-request.schema.json",
+  "title": "Non-authorizing request for human authority evidence",
+  "type": "object",
+  "required": [
+    "artifact_version", "approval_request_id", "approval_request_sha256",
+    "action_request_sha256", "gate_context_sha256", "risk_assessment_sha256",
+    "required_authority", "required_independent_humans", "reason_codes",
+    "material_diff_sha256", "safe_default", "creates_authority", "authority_effect"
+  ],
+  "properties": {
+    "artifact_version": { "const": "approval-request/1.0" },
+    "approval_request_id": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" },
+    "approval_request_sha256": { "$ref": "artifact-common.schema.json#/$defs/sha256" },
+    "action_request_sha256": { "$ref": "artifact-common.schema.json#/$defs/sha256" },
+    "gate_context_sha256": { "$ref": "artifact-common.schema.json#/$defs/sha256" },
+    "risk_assessment_sha256": { "$ref": "artifact-common.schema.json#/$defs/sha256" },
+    "required_authority": { "$ref": "workflow-authority-common.schema.json#/$defs/authorityRequirement" },
+    "required_independent_humans": { "enum": [1, 2] },
+    "reason_codes": { "$ref": "workflow-authority-common.schema.json#/$defs/reasonCodes" },
+    "material_diff_sha256": { "$ref": "artifact-common.schema.json#/$defs/sha256" },
+    "safe_default": { "const": "denied" },
+    "creates_authority": { "const": false },
+    "authority_effect": { "const": "none" }
+  },
+  "additionalProperties": false
+}

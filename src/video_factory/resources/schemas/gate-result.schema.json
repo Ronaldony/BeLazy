@@ -1,0 +1,7 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.video-factory.invalid/workflow/gate-result.schema.json",
+  "title": "Stable declarative gate result",
+  "$ref": "workflow-authority-common.schema.json#/$defs/gateResult",
+  "properties": { "artifact_version": { "const": "gate-result/1.0" } }
+}

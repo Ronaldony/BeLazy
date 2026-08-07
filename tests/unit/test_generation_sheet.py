@@ -205,7 +205,7 @@ def test_packet_flag_never_authorizes_generation() -> None:
     assert "generation_readiness: `blocked`" in sheet
 
 
-def test_bound_readiness_authorizes_sheet() -> None:
+def test_bound_legacy_readiness_remains_preview_only() -> None:
     packet = _sample_packet()
     sheet = render_generation_sheet(
         packet,
@@ -215,47 +215,47 @@ def test_bound_readiness_authorizes_sheet() -> None:
         workspace_observation=_workspace_observation(),
         expected_workspace_revision=_workspace_revision(),
     )
-    assert "DO NOT GENERATE" not in sheet
-    assert "generation_readiness: `ready`" in sheet
+    assert "DO NOT GENERATE" in sheet
+    assert "generation_readiness: `blocked`" in sheet
     assert "feasibility_evidence:" in sheet
     assert "approval_evidence:" in sheet
 
 
-def test_authorized_sheet_revalidates_current_workspace_observation() -> None:
+def test_preview_sheet_does_not_promote_workspace_observations_to_authority() -> None:
     packet = _sample_packet()
     readiness = _readiness(packet)
-    with pytest.raises(GenerationSheetError, match="observation_missing"):
-        render_generation_sheet(
-            packet,
-            readiness=readiness,
-            current_context=_context(),
-            evaluated_at=datetime(2026, 7, 21, 1, 0, tzinfo=timezone.utc),
-            expected_workspace_revision=_workspace_revision(),
-        )
+    missing = render_generation_sheet(
+        packet,
+        readiness=readiness,
+        current_context=_context(),
+        evaluated_at=datetime(2026, 7, 21, 1, 0, tzinfo=timezone.utc),
+        expected_workspace_revision=_workspace_revision(),
+    )
+    assert "DO NOT GENERATE" in missing
 
     untrusted = replace(
         _workspace_observation(), trust_state=WorkspaceTrustState.UNTRUSTED
     )
-    with pytest.raises(GenerationSheetError, match="workspace.untrusted"):
-        render_generation_sheet(
-            packet,
-            readiness=readiness,
-            current_context=_context(),
-            evaluated_at=datetime(2026, 7, 21, 1, 0, tzinfo=timezone.utc),
-            workspace_observation=untrusted,
-            expected_workspace_revision=_workspace_revision(),
-        )
+    untrusted_sheet = render_generation_sheet(
+        packet,
+        readiness=readiness,
+        current_context=_context(),
+        evaluated_at=datetime(2026, 7, 21, 1, 0, tzinfo=timezone.utc),
+        workspace_observation=untrusted,
+        expected_workspace_revision=_workspace_revision(),
+    )
+    assert "DO NOT GENERATE" in untrusted_sheet
 
     changed = replace(_workspace_observation(), workspace_id=OpaqueId("workspace-b"))
-    with pytest.raises(GenerationSheetError, match="workspace_mismatch"):
-        render_generation_sheet(
-            packet,
-            readiness=readiness,
-            current_context=_context(),
-            evaluated_at=datetime(2026, 7, 21, 1, 0, tzinfo=timezone.utc),
-            workspace_observation=changed,
-            expected_workspace_revision=_workspace_revision(),
-        )
+    foreign_sheet = render_generation_sheet(
+        packet,
+        readiness=readiness,
+        current_context=_context(),
+        evaluated_at=datetime(2026, 7, 21, 1, 0, tzinfo=timezone.utc),
+        workspace_observation=changed,
+        expected_workspace_revision=_workspace_revision(),
+    )
+    assert "DO NOT GENERATE" in foreign_sheet
 
 
 def test_stale_readiness_is_rejected() -> None:
@@ -293,18 +293,18 @@ def test_context_free_legacy_readiness_is_preview_only() -> None:
         "executable_plan_sha256",
     ],
 )
-def test_sheet_rejects_every_current_context_digest_change(field: str) -> None:
+def test_sheet_cannot_authorize_for_any_current_context_digest_change(field: str) -> None:
     packet = _sample_packet()
     changed = replace(_context(), **{field: HashDigest("e" * 64)})
-    with pytest.raises(GenerationSheetError, match="another gate context"):
-        render_generation_sheet(
-            packet,
-            readiness=_readiness(packet),
-            current_context=changed,
-            evaluated_at=datetime(2026, 7, 21, 1, 0, tzinfo=timezone.utc),
-            workspace_observation=_workspace_observation(),
-            expected_workspace_revision=_workspace_revision(),
-        )
+    sheet = render_generation_sheet(
+        packet,
+        readiness=_readiness(packet),
+        current_context=changed,
+        evaluated_at=datetime(2026, 7, 21, 1, 0, tzinfo=timezone.utc),
+        workspace_observation=_workspace_observation(),
+        expected_workspace_revision=_workspace_revision(),
+    )
+    assert "DO NOT GENERATE" in sheet
 
 
 @pytest.mark.parametrize(
@@ -316,19 +316,19 @@ def test_sheet_rejects_every_current_context_digest_change(field: str) -> None:
         (datetime(2026, 7, 21, 2, 0, tzinfo=timezone.utc), "expired"),
     ],
 )
-def test_sheet_rechecks_readiness_validity_window(
+def test_sheet_never_treats_legacy_validity_window_as_authority(
     evaluated_at: datetime | None,
     message: str,
 ) -> None:
-    with pytest.raises(GenerationSheetError, match=message):
-        render_generation_sheet(
-            _sample_packet(),
-            readiness=_readiness(_sample_packet()),
-            current_context=_context(),
-            evaluated_at=evaluated_at,
-            workspace_observation=_workspace_observation(),
-            expected_workspace_revision=_workspace_revision(),
-        )
+    sheet = render_generation_sheet(
+        _sample_packet(),
+        readiness=_readiness(_sample_packet()),
+        current_context=_context(),
+        evaluated_at=evaluated_at,
+        workspace_observation=_workspace_observation(),
+        expected_workspace_revision=_workspace_revision(),
+    )
+    assert "DO NOT GENERATE" in sheet
 
 
 def test_authorization_ready_plan_rejects_internal_inconsistency() -> None:

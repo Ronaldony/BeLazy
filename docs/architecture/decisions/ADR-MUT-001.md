@@ -18,8 +18,10 @@ The pure core plans and validates only. Concrete file mutation remains outside `
 
 W02 implements this boundary additively as `video_factory.mutation` plus
 `video_factory.providers.ManagedMutationExecutorPort`. It does not add a
-filesystem executor, durable journal implementation, authority ledger, or
-human-approval issuer. Those implementations remain W06/W04 responsibilities.
+filesystem executor, durable journal implementation, or human-approval issuer.
+W04 supplies the trusted authority-ledger port and exact decision/receipt
+contracts; concrete durable ledger and executor implementations remain W06
+responsibilities.
 
 ## Required contracts
 
@@ -41,9 +43,12 @@ human-approval issuer. Those implementations remain W06/W04 responsibilities.
   workspace revision, observation digest, service identity, and kill switch;
 - request-declared risk is never authoritative. W02 has no trusted semantic
   classifier evidence, so every mutation (including every CREATE path) is
-  conservatively R4. R1/R2/R3 activation is disabled until W04 can bind a
-  current classifier decision to the exact request and policy digest. Normal
-  authority remains required and R4 break-glass is additive;
+  conservatively R4. W04 now binds a current classifier decision to the exact
+  request, target policy, seven-digest context, workspace, and side-effect
+  purpose, but its target policy deliberately keeps `managed_mutation` at R4.
+  R1/R2/R3 activation remains disabled until a later trusted semantic
+  classifier is explicitly adopted. W04 authority remains required and R4
+  break-glass is additive;
 - create/replace content is re-resolved by a trusted port and exact object ID,
   digest, and byte length are bound into the execution authorization; identical
   objects reused across operations are resolved once and conflicting reuse of

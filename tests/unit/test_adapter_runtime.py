@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import ast
 from dataclasses import replace
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
 
@@ -14,6 +14,23 @@ from video_factory.approvals import (
     ApprovalState,
     GateContext,
     build_approval_requirement,
+    gate_context_sha256,
+)
+from video_factory.authority import (
+    AssuranceProfile,
+    AuthorityDecisionStatus,
+    AuthorityScope,
+    AuthoritySource,
+    AuthorityVerificationReceipt,
+    AutonomyProfile,
+    LedgerRecordState,
+    OutputScope,
+    ProfileSelection,
+    VerificationPurpose,
+    authority_verification_receipt_sha256,
+    build_action_authority_request,
+    evaluate_authority,
+    target_policy_bundle,
 )
 from video_factory.config import (
     CONFIG_CONTRACT_VERSION,
@@ -81,24 +98,72 @@ from video_factory.providers import (
     unknown_cost,
     validate_descriptor,
 )
+from video_factory.workflow import (
+    GateStatus,
+    MaterialContextSeed,
+    build_executable_production_plan,
+    build_gate_result,
+    default_workflow_definition,
+    evaluate_workflow,
+)
 
 
 INPUT_VERSION = ArtifactVersion("input/1.0")
 OUTPUT_VERSION = ArtifactVersion("output/1.0")
 MEDIA_CAPABILITY = CapabilityId("media.video.generate")
-TASK_CAPABILITY = CapabilityId("artifact.review")
+TASK_CAPABILITY = CapabilityId("paid_external_generation")
 
 
-def _gate_context() -> GateContext:
-    return GateContext(
-        workflow_definition_sha256=HashDigest("1" * 64),
-        policy_bundle_sha256=HashDigest("2" * 64),
+def _workflow_plan():
+    definition = default_workflow_definition()
+    policy = target_policy_bundle()
+    action = next(
+        item for item in definition.actions if item.action_id == "run_external_generation"
+    )
+    earlier_claims = {
+        item.satisfies_claim_id
+        for item in definition.actions
+        if item.priority < action.priority
+        and item.satisfies_claim_id != action.satisfies_claim_id
+    }
+    results = tuple(
+        build_gate_result(
+            str(claim.gate_id),
+            GateStatus.PASS,
+            evidence_sha256s=("a" * 64,),
+        )
+        if claim.claim_id in earlier_claims
+        else build_gate_result(
+            str(claim.gate_id),
+            GateStatus.BLOCKED,
+            reason_codes=(
+                action.trigger_reason_codes[0]
+                if claim.claim_id == action.satisfies_claim_id
+                else "workflow.gate.missing"
+            ,),
+            messages=("blocked",),
+        )
+        for claim in definition.claims
+    )
+    seed = MaterialContextSeed(
+        workflow_definition_sha256=definition.definition_sha256,
+        policy_bundle_sha256=policy.bundle_sha256,
         rules_bundle_sha256=HashDigest("3" * 64),
         effective_config_sha256=HashDigest("b" * 64),
         current_manifest_sha256=HashDigest("4" * 64),
         evidence_graph_sha256=HashDigest("5" * 64),
-        executable_plan_sha256=HashDigest("6" * 64),
     )
+    evaluation = evaluate_workflow(definition, results, seed)
+    assert evaluation.recommended_action_id == action.action_id
+    return build_executable_production_plan(
+        definition,
+        evaluation,
+        str(action.action_id),
+    )
+
+
+def _gate_context() -> GateContext:
+    return _workflow_plan().gate_context
 
 
 def _workspace_observation() -> WorkspaceObservation:
@@ -338,6 +403,185 @@ def _executor_context(request: RequestEnvelope) -> ExecutorDispatchContext:
 _DISPATCH_TIME = datetime(2026, 7, 21, 1, 0, tzinfo=timezone.utc)
 
 
+def _authority_reference(
+    path: str,
+    digest: str,
+    version: str,
+) -> ArtifactReference:
+    return ArtifactReference(
+        RelativeArtifactPath(path),
+        HashDigest(digest * 64),
+        ArtifactVersion(version),
+    )
+
+
+class _TrustedAuthorityLedger:
+    def _receipt(
+        self,
+        request,
+        risk_sha256,
+        *,
+        purpose: VerificationPurpose,
+        evaluated_at: datetime,
+        decision_sha256=None,
+        adapter_id=None,
+        service_identity=None,
+        workspace_observation_sha256=None,
+    ) -> AuthorityVerificationReceipt:
+        provisional = AuthorityVerificationReceipt(
+            artifact_version="authority-verification-receipt/1.0",
+            receipt_id=OpaqueId("pending"),
+            receipt_sha256=HashDigest("0" * 64),
+            purpose=purpose,
+            action_request_sha256=request.request_sha256,
+            authority_decision_sha256=decision_sha256,
+            gate_context_sha256=gate_context_sha256(request.gate_context),
+            risk_assessment_sha256=risk_sha256,
+            authority_source=AuthoritySource.ONE_SHOT_HUMAN,
+            ledger_state=LedgerRecordState.ACTIVE,
+            ledger_head_sha256=HashDigest("7" * 64),
+            ledger_entry=_authority_reference(
+                "authority/ledger-entry.json",
+                "8",
+                "authority-ledger-entry/1.0",
+            ),
+            grant_sha256=None,
+            principal_ids=(OpaqueId("human-a"),),
+            signature_verification_refs=(
+                _authority_reference(
+                    "authority/signature.json",
+                    "9",
+                    "signature-verification/1.0",
+                ),
+            ),
+            revocation_checked_at=evaluated_at.isoformat(),
+            kill_switch_clear=True,
+            reserved_cost_minor_units=request.scope.cost_minor_units,
+            currency=request.scope.currency,
+            reserved_candidates=request.scope.candidate_count,
+            retry_index=request.scope.retry_index,
+            idempotency_key=request.idempotency_key,
+            workspace_id=request.scope.workspace_id,
+            workspace_observation_sha256=(
+                HashDigest(str(workspace_observation_sha256))
+                if workspace_observation_sha256 is not None
+                else None
+            ),
+            adapter_id=OpaqueId(str(adapter_id)) if adapter_id is not None else None,
+            service_identity=(
+                OpaqueId(str(service_identity))
+                if service_identity is not None
+                else None
+            ),
+            evaluated_at=evaluated_at.isoformat(),
+            valid_until=(evaluated_at + timedelta(minutes=5)).isoformat(),
+        )
+        digest = authority_verification_receipt_sha256(provisional)
+        return replace(
+            provisional,
+            receipt_id=OpaqueId(f"authority-receipt-{str(digest)[:20]}"),
+            receipt_sha256=digest,
+        )
+
+    def verify_current(
+        self,
+        request,
+        risk,
+        presented_grant,
+        authority_references,
+        *,
+        current_context,
+        evaluated_at,
+    ):
+        return self._receipt(
+            request,
+            risk.assessment_sha256,
+            purpose=VerificationPurpose.INITIAL_DECISION,
+            evaluated_at=evaluated_at,
+        )
+
+    def revalidate_and_reserve_current(
+        self,
+        decision,
+        request,
+        *,
+        current_context,
+        workspace_observation_sha256,
+        adapter_id,
+        service_identity,
+        evaluated_at,
+        purpose,
+    ):
+        return self._receipt(
+            request,
+            decision.risk_assessment_sha256,
+            purpose=purpose,
+            evaluated_at=evaluated_at,
+            decision_sha256=decision.decision_sha256,
+            adapter_id=adapter_id,
+            service_identity=service_identity,
+            workspace_observation_sha256=workspace_observation_sha256,
+        )
+
+
+def _w04_authority_kwargs(request: RequestEnvelope) -> dict[str, object]:
+    plan = _workflow_plan()
+    assert plan.capability_id == request.capability_id
+    scope = AuthorityScope(
+        workspace_id=OpaqueId("workspace-a"),
+        channel_id=OpaqueId("channel-a"),
+        concept_id=OpaqueId("concept-a"),
+        episode_id=OpaqueId("episode-a"),
+        provider_id=OpaqueId("adapter-b"),
+        model_id=OpaqueId("executor-model-a"),
+        destination="executor:adapter-b",
+        cost_minor_units=1,
+        currency="USD",
+        candidate_count=1,
+        retry_index=0,
+        input_artifacts=request.input_artifacts,
+        allowed_outputs=tuple(
+            OutputScope(
+                str(item.path_prefix),
+                tuple(sorted(str(version) for version in item.artifact_versions)),
+            )
+            for item in request.allowed_outputs
+        ),
+    )
+    authority_request = build_action_authority_request(
+        request_id=str(request.request_id),
+        request_envelope_sha256=request_envelope_sha256(request),
+        idempotency_key=str(request.idempotency_key),
+        plan=plan,
+        profiles=ProfileSelection(
+            AssuranceProfile.PRODUCTION,
+            AutonomyProfile.ASSISTED,
+        ),
+        scope=scope,
+    )
+    ledger = _TrustedAuthorityLedger()
+    _, decision = evaluate_authority(
+        authority_request,
+        target_policy_bundle(),
+        ledger=ledger,
+        authority_references=(
+            _authority_reference(
+                "authority/human-approval.json",
+                "6",
+                "human-approval/1.0",
+            ),
+        ),
+        evaluated_at=_DISPATCH_TIME,
+    )
+    assert decision.status is AuthorityDecisionStatus.AUTHORIZED
+    return {
+        "authority_request": authority_request,
+        "authority_decision": decision,
+        "authority_ledger": ledger,
+        "service_identity": "executor-service-a",
+    }
+
+
 def _executor_authorization(request: RequestEnvelope):
     authorization = OrchestrationGuard().authorize(
         request,
@@ -365,6 +609,7 @@ def _authorized_dispatch(
         authorization=_executor_authorization(request),
         current_context=_gate_context(),
         evaluated_at=_DISPATCH_TIME,
+        **_w04_authority_kwargs(request),
         **_workspace_authority_kwargs(),
     )
 
@@ -378,6 +623,7 @@ def _authorized_reconcile(
         authorization=_executor_authorization(request),
         current_context=_gate_context(),
         evaluated_at=_DISPATCH_TIME,
+        **_w04_authority_kwargs(request),
         **_workspace_authority_kwargs(),
     )
 
@@ -725,6 +971,7 @@ def test_executor_side_effect_boundary_rejects_missing_or_mismatched_authorizati
             authorization=_executor_authorization(other_request),
             current_context=_gate_context(),
             evaluated_at=_DISPATCH_TIME,
+            **_w04_authority_kwargs(request),
             **_workspace_authority_kwargs(),
         )
     assert executor.external_calls == 0
@@ -738,6 +985,18 @@ def test_executor_side_effect_boundary_rejects_missing_or_mismatched_authorizati
             _executor_context(request),
             authorization=_executor_authorization(request),
             current_context=stale_context,
+            evaluated_at=_DISPATCH_TIME,
+            **_w04_authority_kwargs(request),
+            **_workspace_authority_kwargs(),
+        )
+    assert executor.external_calls == 0
+
+    with pytest.raises(ModeEnforcementError, match="exact W04 authority decision"):
+        executor.dispatch(
+            request,
+            _executor_context(request),
+            authorization=_executor_authorization(request),
+            current_context=_gate_context(),
             evaluated_at=_DISPATCH_TIME,
             **_workspace_authority_kwargs(),
         )
@@ -771,6 +1030,7 @@ def test_executor_rechecks_authorization_time_before_external_call() -> None:
             authorization=future,
             current_context=_gate_context(),
             evaluated_at=_DISPATCH_TIME,
+            **_w04_authority_kwargs(request),
             **_workspace_authority_kwargs(),
         )
     assert executor.external_calls == 0
@@ -787,6 +1047,7 @@ def test_executor_rechecks_authorization_time_before_external_call() -> None:
             authorization=expired,
             current_context=_gate_context(),
             evaluated_at=_DISPATCH_TIME,
+            **_w04_authority_kwargs(request),
             **_workspace_authority_kwargs(),
         )
     assert executor.external_calls == 0
@@ -830,6 +1091,7 @@ def test_executor_authorization_binds_the_full_request_envelope(mutate) -> None:
             authorization=authorization,
             current_context=_gate_context(),
             evaluated_at=_DISPATCH_TIME,
+            **_w04_authority_kwargs(changed),
             **_workspace_authority_kwargs(),
         )
     assert executor.external_calls == 0
@@ -906,6 +1168,7 @@ def test_workspace_trust_is_revalidated_at_authorize_dispatch_and_reconcile() ->
             authorization=authorization,
             current_context=_gate_context(),
             evaluated_at=_DISPATCH_TIME,
+            **_w04_authority_kwargs(request),
             **_workspace_binding_kwargs(),
         )
     assert executor.external_calls == 0
@@ -918,6 +1181,7 @@ def test_workspace_trust_is_revalidated_at_authorize_dispatch_and_reconcile() ->
             authorization=authorization,
             current_context=_gate_context(),
             evaluated_at=_DISPATCH_TIME,
+            **_w04_authority_kwargs(request),
             **_workspace_authority_kwargs(changed_observation),
         )
     assert executor.external_calls == 0
@@ -929,6 +1193,7 @@ def test_workspace_trust_is_revalidated_at_authorize_dispatch_and_reconcile() ->
             authorization=authorization,
             current_context=_gate_context(),
             evaluated_at=_DISPATCH_TIME,
+            **_w04_authority_kwargs(request),
             **_workspace_authority_kwargs(drifted),
         )
     assert executor.external_calls == 0
@@ -942,6 +1207,7 @@ def test_workspace_trust_is_revalidated_at_authorize_dispatch_and_reconcile() ->
             authorization=authorization,
             current_context=_gate_context(),
             evaluated_at=_DISPATCH_TIME,
+            **_w04_authority_kwargs(request),
             **_workspace_authority_kwargs(untrusted),
         )
     assert uncertain.timeout is True

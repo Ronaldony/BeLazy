@@ -19,6 +19,21 @@ NON_REGISTERED = {
     "config-layer.schema.json",
     "encode-command-plan.schema.json",
     "encode-request.schema.json",
+    "workflow-authority-common.schema.json",
+}
+
+W04_REGISTERED_VERSIONS = {
+    "action-risk-assessment/1.0",
+    "approval-request/1.0",
+    "authority-decision/1.0",
+    "authority-verification-receipt/1.0",
+    "executable-production-plan/1.0",
+    "gate-result/1.0",
+    "policy-bundle/1.0",
+    "standing-authorization/1.0",
+    "workflow-definition/1.0",
+    "workflow-evaluation/1.0",
+    "workflow-parity-report/1.0",
 }
 
 
@@ -35,15 +50,16 @@ def test_packaged_manifest_loads_all_schemas_and_versions() -> None:
     registry = ArtifactSchemaRegistry()
     assert registry.manifest_validated is True
     assert registry.manifest_sha256 is not None
-    assert len(registry.all_schemas()) == 61
-    assert len(registry.list_versions()) == 57
+    assert len(registry.all_schemas()) == 73
+    assert len(registry.list_versions()) == 68
+    assert W04_REGISTERED_VERSIONS <= set(registry.list_versions())
     assert set(registry.all_schemas()) - {
         registry.get(version).filename for version in registry.list_versions()
     } == NON_REGISTERED
     manifest = registry.manifest
     assert manifest is not None
-    assert manifest["schema_count"] == 61
-    assert manifest["registered_version_count"] == 57
+    assert manifest["schema_count"] == 73
+    assert manifest["registered_version_count"] == 68
 
 
 def test_root_schema_projection_matches_packaged_resources_byte_for_byte() -> None:
@@ -65,11 +81,11 @@ def test_manifest_entries_are_sorted_unique_and_digest_exact() -> None:
     assert isinstance(entries, list)
     filenames = [entry["filename"] for entry in entries]
     assert filenames == sorted(filenames)
-    assert len(filenames) == len(set(filenames)) == 61
+    assert len(filenames) == len(set(filenames)) == 73
     schema_ids = [entry["schema_id"] for entry in entries]
-    assert len(schema_ids) == len(set(schema_ids)) == 61
+    assert len(schema_ids) == len(set(schema_ids)) == 73
     versions = [entry["artifact_version"] for entry in entries if entry["artifact_version"]]
-    assert len(versions) == len(set(versions)) == 57
+    assert len(versions) == len(set(versions)) == 68
     for entry in entries:
         payload = resource_root.joinpath(entry["filename"]).read_bytes()
         assert hashlib.sha256(payload).hexdigest() == entry["sha256"]

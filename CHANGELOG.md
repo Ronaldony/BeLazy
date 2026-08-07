@@ -2,6 +2,29 @@
 
 ## Unreleased
 
+- Added the W04 target-owned declarative workflow plane: 24 versioned claims
+  and gates, 26 legacy action identities, complete blocker/frontier evaluation,
+  parallel review opportunities, action-specific material-context plans, and
+  transitive incremental invalidation with full-recompute equivalence.
+- Added non-authorizing dual-run parity over all 26 actions and three workflow
+  modes. Reports compare action, blockers, actor, required authority, consumed
+  evidence, and prohibited actions; unexplained differences fail and no report
+  applies cutover.
+- Added the authority control plane with separate assurance, autonomy, and risk;
+  exact action/scope requests; a target-owned policy and enforcement matrix;
+  parse-only standing grants; non-authorizing approval requests; ledger-backed
+  decisions; and fresh purpose-bound dispatch, reconcile, and mutation
+  revalidation/reservation receipts.
+- Legacy approvals, readiness, sheets, modes, AI reviews, Director results, and
+  Blueprints can no longer self-assert execution authority. Generation sheets
+  are always previews. Managed mutation remains fixed R4 and now requires the
+  W04 dual-human ledger decision in addition to its existing exact break-glass
+  evidence.
+- Added 12 closed workflow/authority schemas (73 packaged schemas, 68 registered
+  versions), exact packaged workflow/policy/parity resources, semantic resource
+  verification in offline wheels, and public `video_factory.workflow` and
+  `video_factory.authority` packages. Concrete ledger/executor persistence
+  remains deferred to W06.
 - Added the W03 ProductionBlueprint shadow plane with nine packaged artifact
   contracts, complete root/per-shot design validation, exact field ownership
   and distinct verification, material-context binding, and strict typed JSON

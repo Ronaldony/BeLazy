@@ -57,8 +57,9 @@ def render_generation_sheet(
     """Render a packet to deterministic human copy-paste Markdown.
 
     The prompt for each shot is emitted **byte-for-byte** inside a fenced block.
-    Packet-local flags never authorize generation. Only a validated readiness
-    plan bound to this exact packet content removes the preview warning.
+    Packet-local flags and legacy readiness never authorize generation.  W04
+    authority is consumed only by a runtime guard immediately before a side
+    effect, so this human-facing sheet always remains a diagnostic preview.
     """
 
     if not isinstance(packet_doc, Mapping):
@@ -97,7 +98,7 @@ def render_generation_sheet(
             raise GenerationSheetError(
                 "generation readiness is bound to different packet content"
             )
-        if readiness.authorization_ready:
+        if readiness.authorization_ready:  # defensive; W04 plans force False
             if current_context is None:
                 raise GenerationSheetError(
                     "authorization-ready plan requires current gate context"
@@ -146,7 +147,9 @@ def render_generation_sheet(
                 raise GenerationSheetError(
                     "generation readiness is bound to another workspace observation"
                 )
-            generation_authorized = True
+            raise GenerationSheetError(
+                "legacy generation readiness cannot grant W04 execution authority"
+            )
     total_candidates = 0
     for index, shot in enumerate(shots):
         if not isinstance(shot, Mapping):

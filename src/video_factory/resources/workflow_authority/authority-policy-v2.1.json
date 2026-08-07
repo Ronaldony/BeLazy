@@ -1,0 +1,265 @@
+{
+  "artifact_version": "policy-bundle/1.0",
+  "policy_version": "authority-policy/2.1",
+  "classifier_version": "authority-risk-classifier/1.0",
+  "default_decision": "denied",
+  "unknown_state_fail_closed": true,
+  "action_risk_by_action": [
+    {
+      "action_id": "resolve_artifact_graph",
+      "risk": "R0"
+    },
+    {
+      "action_id": "create_brief",
+      "risk": "R1"
+    },
+    {
+      "action_id": "create_storyboard",
+      "risk": "R1"
+    },
+    {
+      "action_id": "review_or_revise_storyboard",
+      "risk": "R0"
+    },
+    {
+      "action_id": "approve_storyboard",
+      "risk": "R0"
+    },
+    {
+      "action_id": "create_generation_packet",
+      "risk": "R1"
+    },
+    {
+      "action_id": "rebuild_generation_packet",
+      "risk": "R1"
+    },
+    {
+      "action_id": "review_or_revise_generation_packet",
+      "risk": "R0"
+    },
+    {
+      "action_id": "review_generation_feasibility",
+      "risk": "R0"
+    },
+    {
+      "action_id": "approve_generation",
+      "risk": "R0"
+    },
+    {
+      "action_id": "preview_complete",
+      "risk": "R0"
+    },
+    {
+      "action_id": "reconcile_workspace",
+      "risk": "R4"
+    },
+    {
+      "action_id": "run_external_generation",
+      "risk": "R2"
+    },
+    {
+      "action_id": "remediate_or_repeat_shot_qc",
+      "risk": "R2"
+    },
+    {
+      "action_id": "run_continuity_qc",
+      "risk": "R0"
+    },
+    {
+      "action_id": "remediate_continuity_qc",
+      "risk": "R0"
+    },
+    {
+      "action_id": "rank_generation_candidates",
+      "risk": "R0"
+    },
+    {
+      "action_id": "select_edit_inputs",
+      "risk": "R0"
+    },
+    {
+      "action_id": "assemble_or_repair_rough_cut",
+      "risk": "R1"
+    },
+    {
+      "action_id": "prepare_final_delivery",
+      "risk": "R1"
+    },
+    {
+      "action_id": "repair_final_delivery",
+      "risk": "R1"
+    },
+    {
+      "action_id": "review_or_revise_final_delivery",
+      "risk": "R0"
+    },
+    {
+      "action_id": "prepare_publish_metadata",
+      "risk": "R1"
+    },
+    {
+      "action_id": "repair_publish_metadata",
+      "risk": "R1"
+    },
+    {
+      "action_id": "approve_publish",
+      "risk": "R0"
+    },
+    {
+      "action_id": "ready_for_human_publish",
+      "risk": "R3"
+    },
+    {
+      "action_id": "managed_mutation",
+      "risk": "R4"
+    }
+  ],
+  "enforcement_matrix": [
+    {
+      "policy_path": "default_decision",
+      "owner": "authority.policy",
+      "enforcement_phase": "initial",
+      "reason_code": "authority.policy.default_deny",
+      "positive_test_id": "test_policy_01_positive",
+      "negative_test_id": "test_policy_01_negative"
+    },
+    {
+      "policy_path": "unknown_state_behavior",
+      "owner": "authority.policy",
+      "enforcement_phase": "initial",
+      "reason_code": "authority.policy.unknown",
+      "positive_test_id": "test_policy_02_positive",
+      "negative_test_id": "test_policy_02_negative"
+    },
+    {
+      "policy_path": "ai_human_approval_creation_forbidden",
+      "owner": "authority.requests",
+      "enforcement_phase": "serialization",
+      "reason_code": "authority.ai_cannot_grant",
+      "positive_test_id": "test_policy_03_positive",
+      "negative_test_id": "test_policy_03_negative"
+    },
+    {
+      "policy_path": "executor_revalidation_required",
+      "owner": "authority.guard",
+      "enforcement_phase": "predispatch",
+      "reason_code": "authority.predispatch.required",
+      "positive_test_id": "test_policy_04_positive",
+      "negative_test_id": "test_policy_04_negative"
+    },
+    {
+      "policy_path": "material_change_invalidates_authority",
+      "owner": "authority.guard",
+      "enforcement_phase": "initial",
+      "reason_code": "authority.context.mismatch",
+      "positive_test_id": "test_policy_05_positive",
+      "negative_test_id": "test_policy_05_negative"
+    },
+    {
+      "policy_path": "scope.capability",
+      "owner": "authority.scope",
+      "enforcement_phase": "initial",
+      "reason_code": "authority.scope.capability",
+      "positive_test_id": "test_policy_06_positive",
+      "negative_test_id": "test_policy_06_negative"
+    },
+    {
+      "policy_path": "scope.channel_concept_episode",
+      "owner": "authority.scope",
+      "enforcement_phase": "initial",
+      "reason_code": "authority.scope.subject",
+      "positive_test_id": "test_policy_07_positive",
+      "negative_test_id": "test_policy_07_negative"
+    },
+    {
+      "policy_path": "scope.provider_model",
+      "owner": "authority.scope",
+      "enforcement_phase": "initial",
+      "reason_code": "authority.scope.provider",
+      "positive_test_id": "test_policy_08_positive",
+      "negative_test_id": "test_policy_08_negative"
+    },
+    {
+      "policy_path": "scope.destination",
+      "owner": "authority.scope",
+      "enforcement_phase": "initial",
+      "reason_code": "authority.scope.destination",
+      "positive_test_id": "test_policy_09_positive",
+      "negative_test_id": "test_policy_09_negative"
+    },
+    {
+      "policy_path": "scope.cost_per_run",
+      "owner": "authority.scope",
+      "enforcement_phase": "initial",
+      "reason_code": "authority.scope.cost_run",
+      "positive_test_id": "test_policy_10_positive",
+      "negative_test_id": "test_policy_10_negative"
+    },
+    {
+      "policy_path": "scope.cost_per_day",
+      "owner": "authority.ledger",
+      "enforcement_phase": "predispatch",
+      "reason_code": "authority.scope.cost_day",
+      "positive_test_id": "test_policy_11_positive",
+      "negative_test_id": "test_policy_11_negative"
+    },
+    {
+      "policy_path": "scope.candidates",
+      "owner": "authority.scope",
+      "enforcement_phase": "initial",
+      "reason_code": "authority.scope.candidates",
+      "positive_test_id": "test_policy_12_positive",
+      "negative_test_id": "test_policy_12_negative"
+    },
+    {
+      "policy_path": "scope.retries",
+      "owner": "authority.scope",
+      "enforcement_phase": "initial",
+      "reason_code": "authority.scope.retries",
+      "positive_test_id": "test_policy_13_positive",
+      "negative_test_id": "test_policy_13_negative"
+    },
+    {
+      "policy_path": "validity",
+      "owner": "authority.ledger",
+      "enforcement_phase": "initial",
+      "reason_code": "authority.grant.expired",
+      "positive_test_id": "test_policy_14_positive",
+      "negative_test_id": "test_policy_14_negative"
+    },
+    {
+      "policy_path": "revocation",
+      "owner": "authority.ledger",
+      "enforcement_phase": "predispatch",
+      "reason_code": "authority.grant.revoked",
+      "positive_test_id": "test_policy_15_positive",
+      "negative_test_id": "test_policy_15_negative"
+    },
+    {
+      "policy_path": "kill_switch",
+      "owner": "authority.ledger",
+      "enforcement_phase": "predispatch",
+      "reason_code": "authority.kill_switch.engaged",
+      "positive_test_id": "test_policy_16_positive",
+      "negative_test_id": "test_policy_16_negative"
+    },
+    {
+      "policy_path": "R4.independent_approvers",
+      "owner": "authority.ledger",
+      "enforcement_phase": "initial",
+      "reason_code": "authority.r4.principals",
+      "positive_test_id": "test_policy_17_positive",
+      "negative_test_id": "test_policy_17_negative"
+    },
+    {
+      "policy_path": "R4.standing_grant_forbidden",
+      "owner": "authority.policy",
+      "enforcement_phase": "initial",
+      "reason_code": "authority.r4.standing_forbidden",
+      "positive_test_id": "test_policy_18_positive",
+      "negative_test_id": "test_policy_18_negative"
+    }
+  ],
+  "bundle_id": "policy-bundle-1ed31dd671814ff4cef8",
+  "bundle_sha256": "1ed31dd671814ff4cef8e756a41aec7ffe664cf5c214c775490192ffeb6844f4"
+}

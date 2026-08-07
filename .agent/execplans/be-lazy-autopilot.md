@@ -24,7 +24,7 @@ evidence and no external side effects.
 | Wave | Status | Tasks | Checkpoint |
 |---|---|---|---|
 | W00 Bootstrap/Baseline | passed | BOOT-001..005 | `d00856550f7f66618e3d365725e6b2d9054380c1` |
-| W01 Trust Boundary | pending | P0-PKG-001, P0-JSON-001, P0-AUTH-001 | pending |
+| W01 Trust Boundary | reviewing | P0-PKG-001, P0-JSON-001, P0-AUTH-001 | pending evidence checkpoint |
 | W02 Managed Mutation | pending | MUT-001..004 | pending |
 | W03 Director/Blueprint | pending | BP-001, DIR-001, DIR-002, BP-002 | pending |
 | W04 Workflow/Authority | pending | WF-001, AUTH-001, AUTH-002, WF-002 | pending |
@@ -83,9 +83,49 @@ evidence and no external side effects.
 
 - No source license or license metadata was supplied.
 - The host lacks an offline standard build frontend, setuptools, and wheel.
-  The original source's trusted audit already demonstrates the known
-  zero-Schema wheel defect; W01 owns the packaging repair and offline
-  verification strategy.
+  W01 therefore verified an explicitly classified stdlib PEP 427 fallback;
+  this is not represented as verification of the unavailable backend.
+
+## W01 decisions and evidence
+
+1. All 46 Schemas are package resources behind `importlib.resources`; a
+   digest-checked manifest records 46 files and 42 artifact registrations.
+   The four unregistered files are shared contracts, not missing versions.
+2. Public distribution, import, CLI, Schema IDs, and serialized version
+   identifiers remain compatibility contracts. No public migration occurred.
+3. JSON entry points are explicit for bytes, paths, and mappings. Duplicate
+   keys, non-finite or unsupported numbers, malformed UTF-8, invalid RFC 3339,
+   missing paths, and resource-limit violations return stable domain errors.
+4. Numeric limits cover both parsed token size and fixed-point expansion so a
+   compact exponent cannot allocate an unbounded canonical representation.
+5. Authorization binds seven material context digests, exact artifacts, the
+   entire request envelope, effective configuration, evaluation time, and
+   expiry. Generation sheets, dispatch, and reconciliation all revalidate.
+6. Legacy documents remain loadable and legacy structural planning order is
+   retained, but neither is an execution authorization without current context.
+7. The offline wheel fallback binds filename, dist-info, unique identity
+   headers, tags, every RECORD digest/size row, and isolated registry loading.
+8. Approval authenticity, revocation, and a durable ledger remain assigned to
+   W04; runtime token consumption and durable execution remain assigned to W06.
+
+## W01 actual checks
+
+- Final implementation: `2ba74f80b62d5a550bb195d0ea4c0d69f0e72c21`
+  (tree `f023d90f7d8791f59741ff7193c4039ca0dc64cd`).
+- Focused trust-boundary suite: 150 passed in 10.92s.
+- Full suite: 447 passed in 32.79s.
+- Manual fallback wheel: 133 members, 215742 bytes, SHA-256
+  `530127e0e2f5c93a7368238e328bffc02a3485b06d31609bb8b62082c8e1b5ce`.
+- Isolated no-index installation: 46 Schemas and 42 versions loaded; RECORD,
+  wheel identity, and metadata verification PASS.
+- Standard backend command: environment blocked with `No module named build`;
+  no dependency download or installation was attempted.
+- Exact W00 parent compatibility audit: 338 passed; five failures are the
+  intentionally retired unsafe authorization successes. All 11 legacy
+  non-authorizing planning-order cases pass.
+- Final fresh architecture, security, and test/packaging reviews: Critical 0,
+  High 0, Medium 0 on the exact final implementation commit and tree.
+- Source archive and handoff manifest post-checks remain byte-identical.
 
 ## Recovery
 

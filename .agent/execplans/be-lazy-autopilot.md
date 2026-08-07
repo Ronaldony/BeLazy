@@ -24,7 +24,7 @@ evidence and no external side effects.
 | Wave | Status | Tasks | Checkpoint |
 |---|---|---|---|
 | W00 Bootstrap/Baseline | passed | BOOT-001..005 | `d00856550f7f66618e3d365725e6b2d9054380c1` |
-| W01 Trust Boundary | reviewing | P0-PKG-001, P0-JSON-001, P0-AUTH-001 | pending evidence checkpoint |
+| W01 Trust Boundary | passed | P0-PKG-001, P0-JSON-001, P0-AUTH-001 | this checkpoint commit; exact hash recorded by recovery seal |
 | W02 Managed Mutation | pending | MUT-001..004 | pending |
 | W03 Director/Blueprint | pending | BP-001, DIR-001, DIR-002, BP-002 | pending |
 | W04 Workflow/Authority | pending | WF-001, AUTH-001, AUTH-002, WF-002 | pending |

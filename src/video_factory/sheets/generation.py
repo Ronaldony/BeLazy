@@ -12,9 +12,11 @@ from video_factory.approvals import GateContext, gate_context_sha256
 from video_factory.artifacts import validate_artifact_mapping
 from video_factory.config import CanonicalizationError, canonical_json_bytes
 from video_factory.engine.orchestration import GenerationReadinessPlan
+from video_factory.domain import OpaqueId
 from video_factory.json_boundary import parse_rfc3339_datetime
 from video_factory.mutation import (
     WorkspaceObservation,
+    WorkspaceRevision,
     workspace_observation_sha256,
     workspace_trust_blockers,
 )
@@ -50,6 +52,7 @@ def render_generation_sheet(
     current_context: GateContext | None = None,
     evaluated_at: datetime | None = None,
     workspace_observation: WorkspaceObservation | None = None,
+    expected_workspace_revision: WorkspaceRevision | None = None,
 ) -> str:
     """Render a packet to deterministic human copy-paste Markdown.
 
@@ -121,8 +124,15 @@ def render_generation_sheet(
                 raise GenerationSheetError("generation readiness has expired")
             workspace_blockers = workspace_trust_blockers(
                 workspace_observation,
+                expected_workspace_id=(
+                    OpaqueId(readiness.workspace_id)
+                    if readiness.workspace_id is not None
+                    else None
+                ),
                 expected_revision_id=readiness.workspace_revision_id,
                 expected_manifest_sha256=current_context.current_manifest_sha256,
+                expected_revision=expected_workspace_revision,
+                expected_revision_sha256=readiness.workspace_revision_sha256,
             )
             if workspace_blockers:
                 raise GenerationSheetError(
@@ -175,6 +185,13 @@ def render_generation_sheet(
         if readiness.workspace_revision_id is not None:
             lines.append(
                 f"- workspace_revision_id: `{readiness.workspace_revision_id}`"
+            )
+        if readiness.workspace_id is not None:
+            lines.append(f"- workspace_id: `{readiness.workspace_id}`")
+        if readiness.workspace_revision_sha256 is not None:
+            lines.append(
+                "- workspace_revision_sha256: "
+                f"`{readiness.workspace_revision_sha256}`"
             )
         if readiness.workspace_observation_sha256 is not None:
             lines.append(

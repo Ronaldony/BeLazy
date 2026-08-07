@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 import pytest
 
 from video_factory.approvals import GateContext, gate_context_sha256
+from video_factory.config import canonical_sha256
 from video_factory.domain import (
     ArtifactReference,
     ArtifactVersion,
@@ -18,8 +19,11 @@ from video_factory.domain import (
 from video_factory.engine import GenerationReadinessPlan, OrchestrationPlanError
 from video_factory.mutation import (
     WorkspaceObservation,
+    WorkspaceRevision,
+    WorkspaceRevisionOrigin,
     WorkspaceTrustState,
     workspace_observation_sha256,
+    workspace_revision_to_mapping,
 )
 from video_factory.sheets import (
     GenerationSheetError,
@@ -49,6 +53,30 @@ def _workspace_observation() -> WorkspaceObservation:
         complete=True,
         entries=(),
     )
+
+
+def _workspace_revision() -> WorkspaceRevision:
+    return WorkspaceRevision(
+        revision_id=OpaqueId("revision-a"),
+        workspace_id=OpaqueId("workspace-a"),
+        origin=WorkspaceRevisionOrigin.RECONCILED_BASELINE,
+        parent_revision_id=None,
+        reconciliation_evidence=ArtifactReference(
+            RelativeArtifactPath("reconciliation/baseline.json"),
+            HashDigest("9" * 64),
+            ArtifactVersion("workspace-reconciliation/1.0"),
+        ),
+        manifest_sha256=HashDigest("5" * 64),
+        created_at="2026-07-21T00:00:00Z",
+        plan_id=OpaqueId("baseline-plan"),
+        receipt_id=OpaqueId("baseline-receipt"),
+        trust_state=WorkspaceTrustState.TRUSTED,
+        entries=(),
+    )
+
+
+def _workspace_revision_sha256() -> str:
+    return str(canonical_sha256(workspace_revision_to_mapping(_workspace_revision())))
 
 
 def _sample_packet() -> dict[str, object]:
@@ -162,6 +190,8 @@ def _readiness(packet: dict[str, object]) -> GenerationReadinessPlan:
         valid_from="2026-07-21T00:00:00Z",
         valid_until="2026-07-21T02:00:00Z",
         workspace_revision_id="revision-a",
+        workspace_id="workspace-a",
+        workspace_revision_sha256=_workspace_revision_sha256(),
         workspace_observation_sha256=str(
             workspace_observation_sha256(_workspace_observation())
         ),
@@ -183,6 +213,7 @@ def test_bound_readiness_authorizes_sheet() -> None:
         current_context=_context(),
         evaluated_at=datetime(2026, 7, 21, 1, 0, tzinfo=timezone.utc),
         workspace_observation=_workspace_observation(),
+        expected_workspace_revision=_workspace_revision(),
     )
     assert "DO NOT GENERATE" not in sheet
     assert "generation_readiness: `ready`" in sheet
@@ -199,6 +230,7 @@ def test_authorized_sheet_revalidates_current_workspace_observation() -> None:
             readiness=readiness,
             current_context=_context(),
             evaluated_at=datetime(2026, 7, 21, 1, 0, tzinfo=timezone.utc),
+            expected_workspace_revision=_workspace_revision(),
         )
 
     untrusted = replace(
@@ -211,16 +243,18 @@ def test_authorized_sheet_revalidates_current_workspace_observation() -> None:
             current_context=_context(),
             evaluated_at=datetime(2026, 7, 21, 1, 0, tzinfo=timezone.utc),
             workspace_observation=untrusted,
+            expected_workspace_revision=_workspace_revision(),
         )
 
     changed = replace(_workspace_observation(), workspace_id=OpaqueId("workspace-b"))
-    with pytest.raises(GenerationSheetError, match="another workspace observation"):
+    with pytest.raises(GenerationSheetError, match="workspace_mismatch"):
         render_generation_sheet(
             packet,
             readiness=readiness,
             current_context=_context(),
             evaluated_at=datetime(2026, 7, 21, 1, 0, tzinfo=timezone.utc),
             workspace_observation=changed,
+            expected_workspace_revision=_workspace_revision(),
         )
 
 
@@ -269,6 +303,7 @@ def test_sheet_rejects_every_current_context_digest_change(field: str) -> None:
             current_context=changed,
             evaluated_at=datetime(2026, 7, 21, 1, 0, tzinfo=timezone.utc),
             workspace_observation=_workspace_observation(),
+            expected_workspace_revision=_workspace_revision(),
         )
 
 
@@ -292,6 +327,7 @@ def test_sheet_rechecks_readiness_validity_window(
             current_context=_context(),
             evaluated_at=evaluated_at,
             workspace_observation=_workspace_observation(),
+            expected_workspace_revision=_workspace_revision(),
         )
 
 

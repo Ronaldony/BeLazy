@@ -11,9 +11,15 @@ from .contracts import (
     PathNodeKind,
     PathObservation,
     WorkspaceObservation,
+    WorkspaceRevision,
     WorkspaceTrustState,
 )
-from .paths import MutationPathError, observation_index, require_managed_path
+from .paths import (
+    MutationPathError,
+    observation_index,
+    require_managed_path,
+    require_no_link_or_reparse_ancestor,
+)
 
 
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
@@ -130,6 +136,8 @@ def workspace_trust_blockers(
     expected_workspace_id: OpaqueId | None = None,
     expected_revision_id: OpaqueId | None,
     expected_manifest_sha256: str | HashDigest | None,
+    expected_revision: WorkspaceRevision | None = None,
+    expected_revision_sha256: str | HashDigest | None = None,
 ) -> tuple[str, ...]:
     """Return stable blockers for generation, publish, and executor gates."""
 
@@ -144,10 +152,9 @@ def workspace_trust_blockers(
         blockers.append("mutation.workspace.observation_incomplete")
     if observation.trust_state is not WorkspaceTrustState.TRUSTED:
         blockers.append("mutation.workspace.untrusted")
-    if (
-        expected_workspace_id is not None
-        and observation.workspace_id != expected_workspace_id
-    ):
+    if expected_workspace_id is None:
+        blockers.append("mutation.workspace.expected_workspace_missing")
+    elif observation.workspace_id != expected_workspace_id:
         blockers.append("mutation.workspace.workspace_mismatch")
     if expected_revision_id is None:
         blockers.append("mutation.workspace.expected_revision_missing")
@@ -157,6 +164,71 @@ def workspace_trust_blockers(
         blockers.append("mutation.workspace.expected_manifest_missing")
     elif str(observation.manifest_sha256) != str(expected_manifest_sha256):
         blockers.append("mutation.workspace.manifest_mismatch")
+    if expected_revision is None:
+        blockers.append("mutation.workspace.expected_revision_artifact_missing")
+    else:
+        try:
+            from .planner import (
+                validate_workspace_revision,
+                workspace_revision_to_mapping,
+            )
+
+            validate_workspace_revision(expected_revision)
+            revision_digest = canonical_sha256(
+                workspace_revision_to_mapping(expected_revision)
+            )
+        except (AttributeError, TypeError, ValueError):
+            blockers.append("mutation.workspace.expected_revision_invalid")
+        else:
+            if expected_revision_sha256 is None:
+                blockers.append("mutation.workspace.expected_revision_digest_missing")
+            elif str(revision_digest) != str(expected_revision_sha256):
+                blockers.append("mutation.workspace.expected_revision_digest_mismatch")
+            if expected_revision.trust_state is not WorkspaceTrustState.TRUSTED:
+                blockers.append("mutation.workspace.expected_revision_untrusted")
+            if expected_revision.workspace_id != observation.workspace_id:
+                blockers.append("mutation.workspace.workspace_mismatch")
+            if expected_revision.revision_id != observation.revision_id:
+                blockers.append("mutation.workspace.revision_mismatch")
+            if expected_revision.manifest_sha256 != observation.manifest_sha256:
+                blockers.append("mutation.workspace.manifest_mismatch")
+
+            latest: dict[str, object] = {}
+            for entry in expected_revision.entries:
+                path = str(entry.path)
+                current = latest.get(path)
+                if (
+                    current is None
+                    or entry.revision_ordinal > current.revision_ordinal  # type: ignore[attr-defined]
+                ):
+                    latest[path] = entry
+            active = {
+                path: entry
+                for path, entry in latest.items()
+                if not entry.tombstone  # type: ignore[attr-defined]
+            }
+            observed_files = {
+                str(item.path): item
+                for item in observation.entries
+                if item.node_kind is PathNodeKind.FILE
+            }
+            if set(observed_files) != set(active):
+                blockers.append("mutation.workspace.content_drift")
+            else:
+                for path, entry in active.items():
+                    item = observed_files[path]
+                    if (
+                        item.exact_sha256 != entry.content_sha256  # type: ignore[attr-defined]
+                        or item.byte_length != entry.byte_length  # type: ignore[attr-defined]
+                    ):
+                        blockers.append("mutation.workspace.content_drift")
+                        break
+            try:
+                observed_index = observation_index(observation.entries)
+                for path in active:
+                    require_no_link_or_reparse_ancestor(path, observed_index)
+            except MutationPathError as error:
+                blockers.append(error.reason_code)
     if any(
         item.node_kind in {PathNodeKind.SYMLINK, PathNodeKind.REPARSE}
         for item in observation.entries

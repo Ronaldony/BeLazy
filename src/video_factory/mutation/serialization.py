@@ -48,6 +48,7 @@ from .contracts import (
     RevisionEntry,
     SemanticDiffEntry,
     WorkspaceRevision,
+    WorkspaceRevisionOrigin,
     WorkspaceTrustState,
 )
 from .paths import MutationPathError, require_collision_free, require_managed_path
@@ -222,6 +223,7 @@ def mutation_plan_from_mapping(document: Mapping[str, object]) -> MutationPlan:
         ),
         before_manifest_sha256=HashDigest(str(value["before_manifest_sha256"])),
         policy_bundle_sha256=HashDigest(str(value["policy_bundle_sha256"])),
+        risk_policy_version=str(value["risk_policy_version"]),
         idempotency_key=IdempotencyKey(str(value["idempotency_key"])),
         risk_tier=MutationRiskTier(str(value["risk_tier"])),
         operations=tuple(_planned(item) for item in operations),
@@ -272,6 +274,20 @@ def mutation_receipt_from_mapping(document: Mapping[str, object]) -> MutationRec
         workspace_id=OpaqueId(str(value["workspace_id"])),
         idempotency_key=IdempotencyKey(str(value["idempotency_key"])),
         executor_identity=OpaqueId(str(value["executor_identity"])),
+        execution_authorization_id=OpaqueId(
+            str(value["execution_authorization_id"])
+        ),
+        execution_authorization_sha256=HashDigest(
+            str(value["execution_authorization_sha256"])
+        ),
+        before_workspace_observation_sha256=HashDigest(
+            str(value["before_workspace_observation_sha256"])
+        ),
+        after_workspace_observation_sha256=HashDigest(
+            str(value["after_workspace_observation_sha256"])
+        ),
+        idempotency_reservation=_reference(value["idempotency_reservation"]),
+        journal_record=_reference(value["journal_record"]),
         started_at=str(value["started_at"]),
         completed_at=str(value["completed_at"]),
         status=MutationReceiptStatus(str(value["status"])),
@@ -280,6 +296,11 @@ def mutation_receipt_from_mapping(document: Mapping[str, object]) -> MutationRec
         operation_results=tuple(results),
         rollback_or_reconciliation_required=bool(
             value["rollback_or_reconciliation_required"]
+        ),
+        rollback_or_reconciliation_plan=(
+            _reference(value["rollback_or_reconciliation_plan"])
+            if value["rollback_or_reconciliation_plan"] is not None
+            else None
         ),
     )
     try:
@@ -311,10 +332,15 @@ def workspace_revision_from_mapping(document: Mapping[str, object]) -> Workspace
             )
         )
     parent = value["parent_revision_id"]
+    reconciliation = value["reconciliation_evidence"]
     revision = WorkspaceRevision(
         revision_id=OpaqueId(str(value["revision_id"])),
         workspace_id=OpaqueId(str(value["workspace_id"])),
+        origin=WorkspaceRevisionOrigin(str(value["origin"])),
         parent_revision_id=OpaqueId(str(parent)) if parent is not None else None,
+        reconciliation_evidence=(
+            _reference(reconciliation) if reconciliation is not None else None
+        ),
         manifest_sha256=HashDigest(str(value["manifest_sha256"])),
         created_at=str(value["created_at"]),
         plan_id=OpaqueId(str(value["plan_id"])),
@@ -401,6 +427,9 @@ def break_glass_authorization_from_mapping(
     approvals = tuple(
         AuthenticatedHumanApproval(
             principal_id=OpaqueId(str(item["principal_id"])),
+            break_glass_request_sha256=HashDigest(
+                str(item["break_glass_request_sha256"])
+            ),
             authentication_evidence=_reference(item["authentication_evidence"]),
             approval_record=_reference(item["approval_record"]),
             approved_at=str(item["approved_at"]),
@@ -421,6 +450,7 @@ def break_glass_authorization_from_mapping(
         approvals=approvals,
         pre_change_snapshot=_reference(value["pre_change_snapshot"]),
         incident_id=OpaqueId(str(value["incident_id"])),
+        incident_record=_reference(value["incident_record"]),
         audit_record=_reference(value["audit_record"]),
         session_id=OpaqueId(str(value["session_id"])),
         executor_identity=OpaqueId(str(value["executor_identity"])),

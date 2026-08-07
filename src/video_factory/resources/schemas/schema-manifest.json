@@ -29,7 +29,7 @@
     },
     {
       "filename": "break-glass-authorization.schema.json",
-      "sha256": "e7f688e4daddef422d88aa6aaef53ce77f43f8b66f42937eb8be1442fa1e30ec",
+      "sha256": "f03a6616b9977421f8722a7aac30fc929bb7d9eca7a5e88f3b265044399f910e",
       "schema_id": "https://schemas.video-factory.invalid/mutation/break-glass-authorization.schema.json",
       "artifact_version": "break-glass-authorization/1.0"
     },
@@ -197,13 +197,13 @@
     },
     {
       "filename": "mutation-plan.schema.json",
-      "sha256": "c2bf18fd679928455c1caa672c1af5b5b8d448f650587c2345d7d2561b96b966",
+      "sha256": "906a4466d856e8929df58c00100f1fddada627b9a0e3c38df23575e31acd53d2",
       "schema_id": "https://schemas.video-factory.invalid/mutation/mutation-plan.schema.json",
       "artifact_version": "mutation-plan/1.0"
     },
     {
       "filename": "mutation-receipt.schema.json",
-      "sha256": "474037f548471368a38952386b74a0fedf57c4f1fad66ff62dd76a1b0dfd1c77",
+      "sha256": "617ba3960e839890650f979b5649b9406f33abd8a57549d12fa8fe8eb90f3e0c",
       "schema_id": "https://schemas.video-factory.invalid/mutation/mutation-receipt.schema.json",
       "artifact_version": "mutation-receipt/1.0"
     },
@@ -311,7 +311,7 @@
     },
     {
       "filename": "workspace-revision.schema.json",
-      "sha256": "da756de66e50e955dac83076f747f0618481d5f064e920869f76093c11251f54",
+      "sha256": "9cde8f14f147bae21fa836c0982905ed1b3bf00befe36bbea4646de476947ef3",
       "schema_id": "https://schemas.video-factory.invalid/mutation/workspace-revision.schema.json",
       "artifact_version": "workspace-revision/1.0"
     }

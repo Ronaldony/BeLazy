@@ -38,6 +38,11 @@ class WorkspaceTrustState(StrEnum):
     UNTRUSTED = "UNTRUSTED"
 
 
+class WorkspaceRevisionOrigin(StrEnum):
+    RECONCILED_BASELINE = "reconciled_baseline"
+    MANAGED_MUTATION = "managed_mutation"
+
+
 class PathNodeKind(StrEnum):
     FILE = "file"
     DIRECTORY = "directory"
@@ -50,6 +55,8 @@ class MutationReceiptStatus(StrEnum):
     PARTIALLY_APPLIED = "PARTIALLY_APPLIED"
     REJECTED = "REJECTED"
     FAILED = "FAILED"
+    UNCERTAIN = "UNCERTAIN"
+    RECONCILED = "RECONCILED"
 
 
 class OperationOutcome(StrEnum):
@@ -73,6 +80,14 @@ class ContentObject:
     object_id: OpaqueId
     exact_sha256: HashDigest
     byte_length: int
+
+
+@dataclass(frozen=True, slots=True)
+class ContentObjectObservation:
+    object_id: OpaqueId
+    exact_sha256: HashDigest
+    byte_length: int
+    resolver_evidence: ArtifactReference
 
 
 @dataclass(frozen=True, slots=True)
@@ -135,6 +150,7 @@ class MutationPlan:
     before_workspace_revision_sha256: HashDigest
     before_manifest_sha256: HashDigest
     policy_bundle_sha256: HashDigest
+    risk_policy_version: str
     idempotency_key: IdempotencyKey
     risk_tier: MutationRiskTier
     operations: tuple[PlannedMutationOperation, ...]
@@ -180,6 +196,12 @@ class MutationReceipt:
     workspace_id: OpaqueId
     idempotency_key: IdempotencyKey
     executor_identity: OpaqueId
+    execution_authorization_id: OpaqueId
+    execution_authorization_sha256: HashDigest
+    before_workspace_observation_sha256: HashDigest
+    after_workspace_observation_sha256: HashDigest
+    idempotency_reservation: ArtifactReference
+    journal_record: ArtifactReference
     started_at: str
     completed_at: str
     status: MutationReceiptStatus
@@ -187,6 +209,7 @@ class MutationReceipt:
     after_manifest_sha256: HashDigest
     operation_results: tuple[OperationResult, ...]
     rollback_or_reconciliation_required: bool
+    rollback_or_reconciliation_plan: ArtifactReference | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -203,7 +226,9 @@ class RevisionEntry:
 class WorkspaceRevision:
     revision_id: OpaqueId
     workspace_id: OpaqueId
+    origin: WorkspaceRevisionOrigin
     parent_revision_id: OpaqueId | None
+    reconciliation_evidence: ArtifactReference | None
     manifest_sha256: HashDigest
     created_at: str
     plan_id: OpaqueId
@@ -242,6 +267,7 @@ class DriftReport:
 @dataclass(frozen=True, slots=True)
 class AuthenticatedHumanApproval:
     principal_id: OpaqueId
+    break_glass_request_sha256: HashDigest
     authentication_evidence: ArtifactReference
     approval_record: ArtifactReference
     approved_at: str
@@ -261,6 +287,7 @@ class BreakGlassAuthorization:
     approvals: tuple[AuthenticatedHumanApproval, ...]
     pre_change_snapshot: ArtifactReference
     incident_id: OpaqueId
+    incident_record: ArtifactReference
     audit_record: ArtifactReference
     session_id: OpaqueId
     executor_identity: OpaqueId
@@ -271,11 +298,23 @@ class BreakGlassAuthorization:
 
 
 @dataclass(frozen=True, slots=True)
-class IdempotencyRecord:
+class IdempotencyReservation:
     idempotency_key: IdempotencyKey
     plan_sha256: HashDigest
-    status: MutationReceiptStatus
-    receipt_id: OpaqueId | None
+    workspace_observation_sha256: HashDigest
+    reservation_record: ArtifactReference
+    newly_reserved: bool
+    existing_receipt_id: OpaqueId | None
+
+
+@dataclass(frozen=True, slots=True)
+class BreakGlassEvidenceVerification:
+    """Trusted verifier output for the snapshot, incident, and audit records."""
+
+    break_glass_request_sha256: HashDigest
+    snapshot_verification: ArtifactReference
+    incident_verification: ArtifactReference
+    audit_verification: ArtifactReference
 
 
 @dataclass(frozen=True, slots=True)
@@ -285,10 +324,19 @@ class MutationExecutionAuthorization:
     plan_sha256: HashDigest
     workspace_id: OpaqueId
     revision_id: OpaqueId
+    workspace_revision_sha256: HashDigest
     manifest_sha256: HashDigest
+    workspace_observation_sha256: HashDigest
     idempotency_key: IdempotencyKey
+    idempotency_reservation: ArtifactReference
+    content_observation_sha256: HashDigest
+    content_verifications: tuple[ArtifactReference, ...]
     service_identity: OpaqueId
     evaluated_at: str
     gate_context_sha256: HashDigest
     authority_decision: ArtifactReference | None
     break_glass_authorization_id: OpaqueId | None
+    break_glass_authorization_sha256: HashDigest | None
+    break_glass_request_sha256: HashDigest | None
+    human_approval_verifications: tuple[ArtifactReference, ...]
+    break_glass_evidence_verifications: tuple[ArtifactReference, ...]

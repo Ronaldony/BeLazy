@@ -4,7 +4,8 @@
   "title": "Immutable managed workspace revision",
   "type": "object",
   "required": [
-    "artifact_version", "revision_id", "workspace_id", "parent_revision_id",
+    "artifact_version", "revision_id", "workspace_id", "origin", "parent_revision_id",
+    "reconciliation_evidence",
     "manifest_sha256", "created_at", "plan_id", "receipt_id",
     "trust_state", "entries"
   ],
@@ -12,8 +13,18 @@
     "artifact_version": { "const": "workspace-revision/1.0" },
     "revision_id": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" },
     "workspace_id": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" },
+    "origin": {
+      "type": "string",
+      "enum": ["reconciled_baseline", "managed_mutation"]
+    },
     "parent_revision_id": {
       "oneOf": [{ "type": "null" }, { "$ref": "artifact-common.schema.json#/$defs/opaqueId" }]
+    },
+    "reconciliation_evidence": {
+      "oneOf": [
+        { "type": "null" },
+        { "$ref": "artifact-common.schema.json#/$defs/boundArtifact" }
+      ]
     },
     "manifest_sha256": { "$ref": "artifact-common.schema.json#/$defs/sha256" },
     "created_at": { "type": "string", "format": "date-time" },
@@ -59,6 +70,23 @@
       }
     }
   },
+  "allOf": [
+    {
+      "if": { "properties": { "origin": { "const": "reconciled_baseline" } } },
+      "then": {
+        "properties": {
+          "parent_revision_id": { "type": "null" },
+          "reconciliation_evidence": { "$ref": "artifact-common.schema.json#/$defs/boundArtifact" }
+        }
+      },
+      "else": {
+        "properties": {
+          "parent_revision_id": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" },
+          "reconciliation_evidence": { "type": "null" }
+        }
+      }
+    }
+  ],
   "additionalProperties": false,
   "x-artifact-migration": {
     "id_pattern": "^workspace-revision/[1-9][0-9]*-to-[1-9][0-9]*/[1-9][0-9]*$",

@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 
 from video_factory.approvals import GateContext
+from video_factory.config import canonical_sha256
 from video_factory.domain import (
     ArtifactReference,
     ArtifactVersion,
@@ -23,7 +24,13 @@ from video_factory.domain import (
     RoleId,
 )
 from video_factory.engine import ExecutionMode
-from video_factory.mutation import WorkspaceObservation, WorkspaceTrustState
+from video_factory.mutation import (
+    WorkspaceObservation,
+    WorkspaceRevision,
+    WorkspaceRevisionOrigin,
+    WorkspaceTrustState,
+    workspace_revision_to_mapping,
+)
 from video_factory.providers import (
     AdapterBinding,
     AdapterKind,
@@ -257,6 +264,26 @@ def test_registry_resolves_synthetic_adapters_by_capability_and_kind() -> None:
         complete=True,
         entries=(),
     )
+    workspace_revision = WorkspaceRevision(
+        revision_id=OpaqueId("revision-compat"),
+        workspace_id=OpaqueId("workspace-compat"),
+        origin=WorkspaceRevisionOrigin.RECONCILED_BASELINE,
+        parent_revision_id=None,
+        reconciliation_evidence=ArtifactReference(
+            RelativeArtifactPath("reconciliation/baseline.json"),
+            HashDigest("9" * 64),
+            ArtifactVersion("workspace-reconciliation/1.0"),
+        ),
+        manifest_sha256=HashDigest("4" * 64),
+        created_at="2026-07-21T00:00:00Z",
+        plan_id=OpaqueId("baseline-plan"),
+        receipt_id=OpaqueId("baseline-receipt"),
+        trust_state=WorkspaceTrustState.TRUSTED,
+        entries=(),
+    )
+    workspace_revision_sha256 = str(
+        canonical_sha256(workspace_revision_to_mapping(workspace_revision))
+    )
     authorization = OrchestrationGuard().authorize(
         request,
         OrchestrationPolicy(
@@ -268,7 +295,10 @@ def test_registry_resolves_synthetic_adapters_by_capability_and_kind() -> None:
         current_context=gate_context,
         evaluated_at=evaluated_at,
         workspace_observation=workspace_observation,
+        expected_workspace_id="workspace-compat",
         expected_workspace_revision_id="revision-compat",
+        expected_workspace_revision=workspace_revision,
+        expected_workspace_revision_sha256=workspace_revision_sha256,
     )
     result = executor.dispatch(
         request,
@@ -277,7 +307,10 @@ def test_registry_resolves_synthetic_adapters_by_capability_and_kind() -> None:
         current_context=gate_context,
         evaluated_at=evaluated_at,
         workspace_observation=workspace_observation,
+        expected_workspace_id="workspace-compat",
         expected_workspace_revision_id="revision-compat",
+        expected_workspace_revision=workspace_revision,
+        expected_workspace_revision_sha256=workspace_revision_sha256,
     )
     assert result.outcome is Outcome.SUCCEEDED
     assert executor.external_calls == 1

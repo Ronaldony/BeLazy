@@ -9,7 +9,7 @@
     "plan_sha256", "workspace_id", "before_revision_id",
     "before_manifest_sha256", "issued_at", "expires_at", "exact_paths",
     "operation_kinds", "approvals", "pre_change_snapshot", "incident_id",
-    "audit_record", "session_id", "executor_identity", "reconciliation_required",
+    "incident_record", "audit_record", "session_id", "executor_identity", "reconciliation_required",
     "post_change_validation_required"
   ],
   "properties": {
@@ -41,10 +41,11 @@
       "maxItems": 2,
       "items": {
         "type": "object",
-        "required": ["principal_id", "actor_kind", "authentication_evidence", "approval_record", "approved_at"],
+        "required": ["principal_id", "actor_kind", "break_glass_request_sha256", "authentication_evidence", "approval_record", "approved_at"],
         "properties": {
           "principal_id": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" },
           "actor_kind": { "const": "human" },
+          "break_glass_request_sha256": { "$ref": "artifact-common.schema.json#/$defs/sha256" },
           "authentication_evidence": { "$ref": "artifact-common.schema.json#/$defs/boundArtifact" },
           "approval_record": { "$ref": "artifact-common.schema.json#/$defs/boundArtifact" },
           "approved_at": { "type": "string", "format": "date-time" }
@@ -54,6 +55,7 @@
     },
     "pre_change_snapshot": { "$ref": "artifact-common.schema.json#/$defs/boundArtifact" },
     "incident_id": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" },
+    "incident_record": { "$ref": "artifact-common.schema.json#/$defs/boundArtifact" },
     "audit_record": { "$ref": "artifact-common.schema.json#/$defs/boundArtifact" },
     "session_id": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" },
     "executor_identity": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" },

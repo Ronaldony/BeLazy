@@ -68,9 +68,20 @@ execution:
   runtime_service_identity_required: true
   durable_journal_required: true
   idempotency_key_required: true
+  atomic_idempotency_reservation_required: true
+  reservation_binds_plan_and_workspace_observation: true
   same_key_different_plan_digest: DENIED
+  same_key_same_plan_reauthorization: DENIED_USE_EXISTING_RECEIPT_OR_RECONCILE
+  every_risk_tier_requires_trusted_authority_decision: true
+  requester_declared_risk_can_lower_effective_risk: false
+  versioned_risk_classifier_required: true
+  create_replace_content_resolver_required: true
   before_manifest_digest_required: true
   after_manifest_digest_required: true
+  execution_authorization_digest_in_receipt_required: true
+  before_after_workspace_observation_digests_required: true
+  idempotency_reservation_reference_in_receipt_required: true
+  durable_journal_reference_in_receipt_required: true
   partial_success_must_be_explicit: true
   rollback_or_reconciliation_plan_required: true
 
@@ -101,6 +112,8 @@ break_glass:
   standing_grant_allowed: false
   required_risk_tier: R4
   independent_approvers: 2
+  each_approval_binds_canonical_break_glass_request: true
+  trusted_current_ledger_verification_required: true
   short_expiry_required: true
   exact_path_scope_required: true
   exact_operation_scope_required: true
@@ -108,9 +121,13 @@ break_glass:
   immutable_audit_required: true
   post_change_validation_required: true
   incident_record_required: true
+  snapshot_incident_audit_trusted_verification_required: true
 
 drift_detection:
   compare_against_current_manifest: true
+  compare_workspace_id_and_canonical_revision_digest: true
+  compare_complete_active_file_set_and_bytes: true
+  caller_trust_label_is_not_sufficient: true
   on_unplanned_change:
     workspace_trust_state: UNTRUSTED
     generation: BLOCK

@@ -10,7 +10,7 @@ import pytest
 
 from video_factory.approvals import GateContext
 from video_factory.artifacts import validate_artifact_mapping
-from video_factory.config import canonical_json_bytes
+from video_factory.config import canonical_json_bytes, canonical_sha256
 from video_factory.domain import (
     ArtifactReference,
     ArtifactVersion,
@@ -22,10 +22,12 @@ from video_factory.domain import (
 from video_factory.mutation import (
     AuthenticatedHumanApproval,
     BreakGlassAuthorization,
+    BreakGlassEvidenceVerification,
     ChangeRequest,
     ContentObject,
+    ContentObjectObservation,
     ExpectedBefore,
-    IdempotencyRecord,
+    IdempotencyReservation,
     MutationKind,
     MutationOperationIntent,
     MutationPathError,
@@ -41,8 +43,11 @@ from video_factory.mutation import (
     RevisionEntry,
     WorkspaceObservation,
     WorkspaceRevision,
+    WorkspaceRevisionOrigin,
+    WorkspaceRevisionError,
     WorkspaceTrustState,
     break_glass_authorization_to_mapping,
+    break_glass_request_sha256,
     change_request_to_mapping,
     derive_workspace_revision,
     detect_workspace_drift,
@@ -51,6 +56,9 @@ from video_factory.mutation import (
     mutation_artifact_from_mapping,
     mutation_artifact_to_mapping,
     mutation_plan_to_mapping,
+    mutation_execution_authorization_sha256,
+    mutation_execution_authorization_id,
+    mutation_receipt_id,
     mutation_receipt_to_mapping,
     path_collision_key,
     plan_mutation,
@@ -58,6 +66,7 @@ from video_factory.mutation import (
     require_managed_path,
     require_no_link_or_reparse_ancestor,
     validate_mutation_plan,
+    workspace_observation_sha256,
     workspace_trust_blockers,
     workspace_revision_to_mapping,
 )
@@ -93,7 +102,13 @@ def _revision(
     return WorkspaceRevision(
         revision_id=REVISION_ID,
         workspace_id=WORKSPACE_ID,
+        origin=WorkspaceRevisionOrigin.RECONCILED_BASELINE,
         parent_revision_id=None,
+        reconciliation_evidence=_reference(
+            "reconciliation/baseline.json",
+            SHA_C,
+            "workspace-reconciliation/1.0",
+        ),
         manifest_sha256=MANIFEST_A,
         created_at="2026-08-07T00:00:00Z",
         plan_id=OpaqueId("baseline-plan"),
@@ -135,6 +150,18 @@ def _observation(
             entries
             if entries is not None
             else (
+                PathObservation(
+                    path=RelativeArtifactPath("archive"),
+                    node_kind=PathNodeKind.DIRECTORY,
+                    exact_sha256=None,
+                    byte_length=None,
+                ),
+                PathObservation(
+                    path=RelativeArtifactPath("artifacts"),
+                    node_kind=PathNodeKind.DIRECTORY,
+                    exact_sha256=None,
+                    byte_length=None,
+                ),
                 PathObservation(
                     path=RelativeArtifactPath("artifacts/a.txt"),
                     node_kind=PathNodeKind.FILE,
@@ -185,9 +212,24 @@ def _request(
     )
 
 
-def _plan(*, risk: MutationRiskTier = MutationRiskTier.R1):
+def _plan(
+    *,
+    risk: MutationRiskTier = MutationRiskTier.R1,
+    kind: MutationKind = MutationKind.REPLACE,
+):
+    request = (
+        _request(
+            risk=risk,
+            kind=MutationKind.CREATE,
+            path="artifacts/new.txt",
+            expected=None,
+            key=f"create-{risk.value}",
+        )
+        if kind is MutationKind.CREATE
+        else _request(risk=risk, kind=kind)
+    )
     return plan_mutation(
-        _request(risk=risk),
+        request,
         _revision(),
         _observation(),
         policy_bundle_sha256=POLICY_SHA,
@@ -206,7 +248,63 @@ def _gate_context(plan) -> GateContext:
     )
 
 
-def _receipt(plan) -> MutationReceipt:
+def _after_observation(plan) -> WorkspaceObservation:
+    latest: dict[str, tuple[HashDigest, int]] = {}
+    for entry in _revision().entries:
+        if entry.tombstone:
+            latest.pop(str(entry.path), None)
+        else:
+            assert entry.content_sha256 is not None and entry.byte_length is not None
+            latest[str(entry.path)] = (entry.content_sha256, entry.byte_length)
+    for operation in plan.operations:
+        path = str(operation.path)
+        if operation.kind in {MutationKind.CREATE, MutationKind.REPLACE}:
+            assert operation.new_content is not None
+            latest[path] = (
+                operation.new_content.exact_sha256,
+                operation.new_content.byte_length,
+            )
+        elif operation.kind is MutationKind.DELETE:
+            latest.pop(path, None)
+        else:
+            assert operation.destination_path is not None
+            source = latest.pop(path)
+            latest[str(operation.destination_path)] = source
+    directories = {
+        "/".join(path.split("/")[:index])
+        for path in latest
+        for index in range(1, len(path.split("/")))
+    }
+    return WorkspaceObservation(
+        workspace_id=plan.workspace_id,
+        revision_id=plan.before_revision_id,
+        manifest_sha256=MANIFEST_B,
+        trust_state=WorkspaceTrustState.TRUSTED,
+        complete=True,
+        entries=tuple(
+            PathObservation(
+                RelativeArtifactPath(path),
+                PathNodeKind.DIRECTORY,
+                None,
+                None,
+            )
+            for path in sorted(directories)
+        )
+        + tuple(
+            PathObservation(
+                RelativeArtifactPath(path),
+                PathNodeKind.FILE,
+                digest,
+                length,
+            )
+            for path, (digest, length) in sorted(latest.items())
+        ),
+    )
+
+
+def _receipt(plan, *, authorization=None, after_observation=None) -> MutationReceipt:
+    authorization = authorization or _execution_authorization(plan)
+    after_observation = after_observation or _after_observation(plan)
     results: list[OperationResult] = []
     for operation in plan.operations:
         if operation.new_content is not None:
@@ -231,13 +329,29 @@ def _receipt(plan) -> MutationReceipt:
                 reason_code="mutation.operation.applied",
             )
         )
-    return MutationReceipt(
+    provisional = MutationReceipt(
         receipt_id=OpaqueId("receipt-a"),
         plan_id=plan.plan_id,
         plan_sha256=plan.plan_sha256,
         workspace_id=plan.workspace_id,
         idempotency_key=plan.idempotency_key,
         executor_identity=OpaqueId("mutation-service"),
+        execution_authorization_id=authorization.authorization_id,
+        execution_authorization_sha256=mutation_execution_authorization_sha256(
+            authorization
+        ),
+        before_workspace_observation_sha256=(
+            authorization.workspace_observation_sha256
+        ),
+        after_workspace_observation_sha256=workspace_observation_sha256(
+            after_observation
+        ),
+        idempotency_reservation=authorization.idempotency_reservation,
+        journal_record=_reference(
+            "journal/mutation-a.json",
+            SHA_C,
+            "mutation-journal-record/1.0",
+        ),
         started_at="2026-08-07T01:00:00Z",
         completed_at="2026-08-07T01:01:00Z",
         status=MutationReceiptStatus.SUCCEEDED,
@@ -245,7 +359,9 @@ def _receipt(plan) -> MutationReceipt:
         after_manifest_sha256=MANIFEST_B,
         operation_results=tuple(results),
         rollback_or_reconciliation_required=False,
+        rollback_or_reconciliation_plan=None,
     )
+    return replace(provisional, receipt_id=mutation_receipt_id(provisional))
 
 
 @pytest.mark.parametrize(
@@ -261,6 +377,8 @@ def _receipt(plan) -> MutationReceipt:
         "a/stream:name.txt",
         "a/trailing. ",
         "a/CON.txt",
+        "a/COM¹.txt",
+        "a/LPT².txt",
         "a/control\x00.txt",
     ],
 )
@@ -286,6 +404,68 @@ def test_managed_paths_reject_unicode_and_case_collisions_and_link_ancestors() -
         require_no_link_or_reparse_ancestor(
             "assets/file.txt", {"assets": link}
         )
+    regular_file = PathObservation(
+        RelativeArtifactPath("assets"), PathNodeKind.FILE, SHA_A, 10
+    )
+    with pytest.raises(MutationPathError) as non_directory:
+        require_no_link_or_reparse_ancestor(
+            "assets/file.txt", {"assets": regular_file}
+        )
+    assert non_directory.value.reason_code == (
+        "mutation.path.non_directory_ancestor"
+    )
+    with pytest.raises(MutationPathError) as missing_ancestor:
+        require_no_link_or_reparse_ancestor("assets/file.txt", {})
+    assert missing_ancestor.value.reason_code == "mutation.path.ancestor_unobserved"
+
+
+def test_planner_rejects_casefolded_ancestor_overlap_and_file_ancestors() -> None:
+    first = _request(
+        kind=MutationKind.CREATE,
+        path="Assets",
+        expected=None,
+        key="ancestor-first",
+    ).operations[0]
+    second = _request(
+        kind=MutationKind.CREATE,
+        path="assets/file.txt",
+        expected=None,
+        key="ancestor-second",
+    ).operations[0]
+    request = replace(
+        _request(
+            kind=MutationKind.CREATE,
+            path="new.txt",
+            expected=None,
+            key="ancestor-pair",
+        ),
+        operations=(first, second),
+    )
+    with pytest.raises(MutationPlanError) as overlap:
+        plan_mutation(
+            request,
+            _revision(entries=()),
+            _observation(entries=()),
+            policy_bundle_sha256=POLICY_SHA,
+        )
+    assert overlap.value.reason_code == "mutation.path.overlap"
+
+    child = _request(
+        kind=MutationKind.CREATE,
+        path="artifacts/a.txt/child.txt",
+        expected=None,
+        key="file-ancestor",
+    )
+    with pytest.raises(MutationPlanError) as file_ancestor:
+        plan_mutation(
+            child,
+            _revision(),
+            _observation(),
+            policy_bundle_sha256=POLICY_SHA,
+        )
+    assert file_ancestor.value.reason_code == (
+        "mutation.path.non_directory_ancestor"
+    )
 
 
 def test_planner_is_deterministic_hash_bound_and_has_structured_semantic_diff() -> None:
@@ -385,6 +565,61 @@ def test_workspace_trust_rejects_malformed_contract_values_fail_closed() -> None
         expected_revision_id=REVISION_ID,
         expected_manifest_sha256=MANIFEST_A,
     ) == ("mutation.workspace.trust_state",)
+    with pytest.raises(MutationPlanError) as missing_baseline_evidence:
+        workspace_revision_to_mapping(
+            replace(_revision(), reconciliation_evidence=None)
+        )
+    assert missing_baseline_evidence.value.reason_code == (
+        "mutation.revision.baseline_provenance"
+    )
+
+
+def test_workspace_trust_requires_exact_revision_workspace_and_current_bytes() -> None:
+    revision = _revision()
+    revision_sha256 = str(canonical_sha256(workspace_revision_to_mapping(revision)))
+    arguments = {
+        "expected_workspace_id": WORKSPACE_ID,
+        "expected_revision_id": REVISION_ID,
+        "expected_manifest_sha256": MANIFEST_A,
+        "expected_revision": revision,
+        "expected_revision_sha256": revision_sha256,
+    }
+    assert workspace_trust_blockers(_observation(), **arguments) == ()
+
+    foreign = replace(_observation(), workspace_id=OpaqueId("workspace-foreign"))
+    assert "mutation.workspace.workspace_mismatch" in workspace_trust_blockers(
+        foreign, **arguments
+    )
+    changed = _observation(digest=SHA_C)
+    assert "mutation.workspace.content_drift" in workspace_trust_blockers(
+        changed, **arguments
+    )
+    added = replace(
+        _observation(),
+        entries=(
+            *_observation().entries,
+            PathObservation(
+                RelativeArtifactPath("artifacts/unplanned.txt"),
+                PathNodeKind.FILE,
+                SHA_B,
+                12,
+            ),
+        ),
+    )
+    assert "mutation.workspace.content_drift" in workspace_trust_blockers(
+        added, **arguments
+    )
+    missing_parent = replace(
+        _observation(),
+        entries=tuple(
+            item
+            for item in _observation().entries
+            if item.node_kind is PathNodeKind.FILE
+        ),
+    )
+    assert "mutation.path.ancestor_unobserved" in workspace_trust_blockers(
+        missing_parent, **arguments
+    )
 
 
 def test_create_and_move_preconditions_are_derived_from_current_state() -> None:
@@ -443,6 +678,75 @@ def test_create_and_move_preconditions_are_derived_from_current_state() -> None:
         plan_mutation(move, _revision(), occupied, policy_bundle_sha256=POLICY_SHA)
 
 
+@pytest.mark.parametrize(
+    "kind", (MutationKind.REPLACE, MutationKind.DELETE, MutationKind.MOVE)
+)
+@pytest.mark.parametrize(
+    "declared",
+    (MutationRiskTier.R1, MutationRiskTier.R2, MutationRiskTier.R3),
+)
+def test_risk_policy_cannot_be_downgraded_by_requester(
+    kind: MutationKind,
+    declared: MutationRiskTier,
+) -> None:
+    request = _request(
+        kind=kind,
+        destination="archive/a.txt" if kind is MutationKind.MOVE else None,
+        risk=declared,
+        key=f"risk-{kind.value}-{declared.value}",
+    )
+    plan = plan_mutation(
+        request,
+        _revision(),
+        _observation(),
+        policy_bundle_sha256=POLICY_SHA,
+    )
+    assert plan.risk_tier is MutationRiskTier.R4
+    with pytest.raises(MutationRuntimeError) as no_break_glass:
+        MutationPreSideEffectGuard().authorize(
+            plan,
+            _observation(),
+            service_identity=OpaqueId("mutation-service"),
+            current_context=_gate_context(plan),
+            evaluated_at=EVALUATED_AT,
+            authority_verifier=_TrustedAuthority(),
+            **_runtime_dependencies(),
+        )
+    assert no_break_glass.value.reason_code == "mutation.break_glass.missing"
+
+
+def test_risk_policy_protects_authority_paths_and_requires_authority_for_r1() -> None:
+    protected = _request(
+        kind=MutationKind.CREATE,
+        path="policy.json",
+        expected=None,
+        risk=MutationRiskTier.R1,
+        key="protected-create",
+    )
+    protected_plan = plan_mutation(
+        protected,
+        _revision(),
+        _observation(),
+        policy_bundle_sha256=POLICY_SHA,
+    )
+    assert protected_plan.risk_tier is MutationRiskTier.R4
+
+    bounded = _plan(kind=MutationKind.CREATE)
+    assert bounded.risk_tier is MutationRiskTier.R1
+    with pytest.raises(MutationRuntimeError) as missing_authority:
+        MutationPreSideEffectGuard().authorize(
+            bounded,
+            _observation(),
+            service_identity=OpaqueId("mutation-service"),
+            current_context=_gate_context(bounded),
+            evaluated_at=EVALUATED_AT,
+            **_runtime_dependencies(),
+        )
+    assert missing_authority.value.reason_code == (
+        "mutation.authority.verifier_missing"
+    )
+
+
 def test_successful_receipt_creates_immutable_revision_and_tombstones() -> None:
     move_request = _request(
         kind=MutationKind.MOVE,
@@ -456,8 +760,16 @@ def test_successful_receipt_creates_immutable_revision_and_tombstones() -> None:
         policy_bundle_sha256=POLICY_SHA,
     )
     receipt = _receipt(plan)
-    revision = derive_workspace_revision(_revision(), plan, receipt)
+    revision = derive_workspace_revision(
+        _revision(),
+        plan,
+        receipt,
+        _execution_authorization(plan),
+        _after_observation(plan),
+    )
     assert revision.parent_revision_id == REVISION_ID
+    assert revision.origin is WorkspaceRevisionOrigin.MANAGED_MUTATION
+    assert revision.reconciliation_evidence is None
     assert revision.manifest_sha256 == MANIFEST_B
     assert revision.entries[0] == _revision().entries[0]
     source_latest = [
@@ -473,11 +785,182 @@ def test_successful_receipt_creates_immutable_revision_and_tombstones() -> None:
 
     partial = replace(
         receipt,
-        status=MutationReceiptStatus.PARTIALLY_APPLIED,
+        status=MutationReceiptStatus.FAILED,
+        operation_results=(
+            replace(
+                receipt.operation_results[0],
+                outcome=OperationOutcome.FAILED,
+                after_sha256=None,
+                after_byte_length=None,
+                reason_code="mutation.operation.failed",
+            ),
+        ),
         rollback_or_reconciliation_required=True,
+        rollback_or_reconciliation_plan=_reference(
+            "recovery/mutation-a.json",
+            SHA_B,
+            "mutation-recovery-plan/1.0",
+        ),
     )
+    partial = replace(partial, receipt_id=mutation_receipt_id(partial))
     with pytest.raises(Exception, match="fully successful"):
-        derive_workspace_revision(_revision(), plan, partial)
+        derive_workspace_revision(
+            _revision(),
+            plan,
+            partial,
+            _execution_authorization(plan),
+            _after_observation(plan),
+        )
+
+    with pytest.raises(WorkspaceRevisionError) as reused_receipt:
+        derive_workspace_revision(
+            _revision(),
+            plan,
+            replace(receipt, after_manifest_sha256=SHA_C),
+            _execution_authorization(plan),
+            _after_observation(plan),
+        )
+    assert reused_receipt.value.reason_code == "mutation.receipt.identity"
+
+    tampered_parent = replace(
+        _revision(),
+        entries=(replace(_revision().entries[0], byte_length=11),),
+    )
+    with pytest.raises(WorkspaceRevisionError) as parent_digest:
+        derive_workspace_revision(
+            tampered_parent,
+            plan,
+            receipt,
+            _execution_authorization(plan),
+            _after_observation(plan),
+        )
+    assert parent_digest.value.reason_code == (
+        "mutation.revision.parent_digest_mismatch"
+    )
+
+
+def test_revision_promotion_rejects_forged_authorization_and_after_bytes() -> None:
+    plan = _plan()
+    authorization = _execution_authorization(plan)
+    after_observation = _after_observation(plan)
+    receipt = _receipt(
+        plan,
+        authorization=authorization,
+        after_observation=after_observation,
+    )
+
+    other_service = replace(
+        authorization,
+        service_identity=OpaqueId("other-service"),
+    )
+    other_service = replace(
+        other_service,
+        authorization_id=mutation_execution_authorization_id(other_service),
+    )
+    with pytest.raises(WorkspaceRevisionError) as wrong_authorization:
+        derive_workspace_revision(
+            _revision(),
+            plan,
+            receipt,
+            other_service,
+            after_observation,
+        )
+    assert wrong_authorization.value.reason_code == (
+        "mutation.revision.receipt_authorization_binding"
+    )
+
+    wrong_reservation = replace(
+        receipt,
+        idempotency_reservation=_reference(
+            "idempotency/foreign.json",
+            SHA_B,
+            "idempotency-reservation/1.0",
+        ),
+    )
+    wrong_reservation = replace(
+        wrong_reservation,
+        receipt_id=mutation_receipt_id(wrong_reservation),
+    )
+    with pytest.raises(WorkspaceRevisionError) as reservation_binding:
+        derive_workspace_revision(
+            _revision(),
+            plan,
+            wrong_reservation,
+            authorization,
+            after_observation,
+        )
+    assert reservation_binding.value.reason_code == (
+        "mutation.revision.receipt_authorization_binding"
+    )
+
+    changed_entries = tuple(
+        replace(item, exact_sha256=SHA_C)
+        if item.node_kind is PathNodeKind.FILE
+        else item
+        for item in after_observation.entries
+    )
+    changed_observation = replace(after_observation, entries=changed_entries)
+    rebound_receipt = replace(
+        receipt,
+        after_workspace_observation_sha256=workspace_observation_sha256(
+            changed_observation
+        ),
+    )
+    rebound_receipt = replace(
+        rebound_receipt,
+        receipt_id=mutation_receipt_id(rebound_receipt),
+    )
+    with pytest.raises(WorkspaceRevisionError) as changed_bytes:
+        derive_workspace_revision(
+            _revision(),
+            plan,
+            rebound_receipt,
+            authorization,
+            changed_observation,
+        )
+    assert changed_bytes.value.reason_code == (
+        "mutation.revision.after_content_mismatch"
+    )
+
+
+@pytest.mark.parametrize(
+    ("status", "recovery_required"),
+    [
+        (MutationReceiptStatus.UNCERTAIN, True),
+        (MutationReceiptStatus.RECONCILED, False),
+    ],
+)
+def test_receipt_uncertain_and_reconciled_states_are_explicit(
+    status: MutationReceiptStatus,
+    recovery_required: bool,
+) -> None:
+    plan = _plan()
+    receipt = replace(
+        _receipt(plan),
+        status=status,
+        rollback_or_reconciliation_required=recovery_required,
+        rollback_or_reconciliation_plan=_reference(
+            "recovery/mutation-a.json",
+            SHA_B,
+            "mutation-reconciliation/1.0",
+        ),
+    )
+    receipt = replace(receipt, receipt_id=mutation_receipt_id(receipt))
+    mapping = mutation_receipt_to_mapping(receipt)
+    assert validate_artifact_mapping(mapping).ok
+    assert mutation_artifact_from_mapping(mapping) == receipt
+
+    with pytest.raises(WorkspaceRevisionError) as not_successful:
+        derive_workspace_revision(
+            _revision(),
+            plan,
+            receipt,
+            _execution_authorization(plan),
+            _after_observation(plan),
+        )
+    assert not_successful.value.reason_code == (
+        "mutation.revision.incomplete_receipt"
+    )
 
 
 def test_drift_report_is_deterministic_and_invalidates_all_authority_consumers() -> None:
@@ -508,7 +991,7 @@ def test_drift_ignores_structural_directories_but_keeps_path_safety_evidence() -
         _observation(),
         entries=(
             PathObservation(
-                path=RelativeArtifactPath("artifacts"),
+                path=RelativeArtifactPath("structural"),
                 node_kind=PathNodeKind.DIRECTORY,
                 exact_sha256=None,
                 byte_length=None,
@@ -525,7 +1008,13 @@ def test_all_six_contracts_validate_and_round_trip_through_strict_bytes() -> Non
     request = _request()
     plan = _plan()
     receipt = _receipt(plan)
-    revision = derive_workspace_revision(_revision(), plan, receipt)
+    revision = derive_workspace_revision(
+        _revision(),
+        plan,
+        receipt,
+        _execution_authorization(plan),
+        _after_observation(plan),
+    )
     drift = detect_workspace_drift(
         revision,
         replace(
@@ -563,7 +1052,7 @@ def test_all_six_contracts_validate_and_round_trip_through_strict_bytes() -> Non
     results[0]["outcome"] = "REJECTED"
     with pytest.raises(MutationSerializationError) as inconsistent:
         mutation_artifact_from_mapping(inconsistent_receipt)
-    assert inconsistent.value.reason_code == "mutation.receipt.success_inconsistent"
+    assert inconsistent.value.reason_code == "mutation.receipt.operation_shape"
 
     aliased_revision = workspace_revision_to_mapping(revision)
     revision_entries = aliased_revision["entries"]
@@ -591,18 +1080,125 @@ class _TrustedAuthority:
         )
 
 
+class _TrustedContent:
+    def __init__(self, *, digest: HashDigest | None = None) -> None:
+        self.digest = digest
+
+    def resolve_current(self, content, *, evaluated_at):
+        return ContentObjectObservation(
+            object_id=content.object_id,
+            exact_sha256=self.digest or content.exact_sha256,
+            byte_length=content.byte_length,
+            resolver_evidence=_reference(
+                f"content/{content.object_id}.json",
+                self.digest or content.exact_sha256,
+                "content-resolution/1.0",
+            ),
+        )
+
+
+class _TrustedIdempotency:
+    def __init__(
+        self,
+        *,
+        plan_sha256: HashDigest | None = None,
+        newly_reserved: bool = True,
+        existing_receipt_id: OpaqueId | None = None,
+    ) -> None:
+        self.plan_sha256 = plan_sha256
+        self.newly_reserved = newly_reserved
+        self.existing_receipt_id = existing_receipt_id
+
+    def reserve_current(
+        self,
+        plan,
+        observation,
+        *,
+        workspace_observation_sha256,
+        service_identity,
+        evaluated_at,
+    ):
+        return IdempotencyReservation(
+            idempotency_key=plan.idempotency_key,
+            plan_sha256=self.plan_sha256 or plan.plan_sha256,
+            workspace_observation_sha256=workspace_observation_sha256,
+            reservation_record=_reference(
+                "idempotency/reservation.json",
+                SHA_A,
+                "idempotency-reservation/1.0",
+            ),
+            newly_reserved=self.newly_reserved,
+            existing_receipt_id=self.existing_receipt_id,
+        )
+
+
+def _runtime_dependencies(
+    *,
+    ledger: _TrustedIdempotency | None = None,
+    resolver: _TrustedContent | None = None,
+) -> dict[str, object]:
+    return {
+        "expected_revision": _revision(),
+        "content_resolver": resolver or _TrustedContent(),
+        "idempotency_ledger": ledger or _TrustedIdempotency(),
+    }
+
+
 class _TrustedHumans:
     def __init__(self, principals: set[str]) -> None:
         self.principals = principals
 
-    def verify_current_human_approval(self, approval, *, evaluated_at):
-        return str(approval.principal_id) in self.principals
+    def verify_current_human_approval(
+        self,
+        approval,
+        authorization,
+        *,
+        expected_request_sha256,
+        current_context,
+        evaluated_at,
+    ):
+        if str(approval.principal_id) not in self.principals:
+            return None
+        number = str(approval.principal_id).rsplit("-", 1)[-1]
+        return _reference(
+            f"verification/human-{number}.json",
+            HashDigest(number * 64),
+            "human-approval-verification/1.0",
+        )
 
 
-def _human(number: int) -> AuthenticatedHumanApproval:
+class _TrustedBreakGlassEvidence:
+    def verify_current_evidence(
+        self,
+        authorization,
+        plan,
+        *,
+        expected_request_sha256,
+        current_context,
+        evaluated_at,
+    ):
+        return BreakGlassEvidenceVerification(
+            break_glass_request_sha256=expected_request_sha256,
+            snapshot_verification=_reference(
+                "verification/snapshot.json", SHA_A, "evidence-verification/1.0"
+            ),
+            incident_verification=_reference(
+                "verification/incident.json", SHA_B, "evidence-verification/1.0"
+            ),
+            audit_verification=_reference(
+                "verification/audit.json", SHA_C, "evidence-verification/1.0"
+            ),
+        )
+
+
+def _human(
+    number: int,
+    binding: HashDigest = HashDigest("0" * 64),
+) -> AuthenticatedHumanApproval:
     digest = HashDigest(str(number) * 64)
     return AuthenticatedHumanApproval(
         principal_id=OpaqueId(f"human-{number}"),
+        break_glass_request_sha256=binding,
         authentication_evidence=_reference(
             f"identity/human-{number}.json",
             digest,
@@ -629,7 +1225,7 @@ def _break_glass(plan) -> BreakGlassAuthorization:
             }
         )
     )
-    return BreakGlassAuthorization(
+    provisional = BreakGlassAuthorization(
         authorization_id=OpaqueId("break-glass-a"),
         plan_sha256=plan.plan_sha256,
         workspace_id=plan.workspace_id,
@@ -644,27 +1240,82 @@ def _break_glass(plan) -> BreakGlassAuthorization:
             "snapshots/pre-change.json", MANIFEST_A, "workspace-snapshot/1.0"
         ),
         incident_id=OpaqueId("incident-a"),
+        incident_record=_reference(
+            "incidents/incident-a.json", SHA_B, "incident-record/1.0"
+        ),
         audit_record=_reference(
             "audit/break-glass.json", SHA_C, "immutable-audit-record/1.0"
         ),
         session_id=OpaqueId("session-a"),
         executor_identity=OpaqueId("mutation-service"),
     )
+    binding = break_glass_request_sha256(provisional)
+    return replace(
+        provisional,
+        approvals=tuple(
+            replace(approval, break_glass_request_sha256=binding)
+            for approval in provisional.approvals
+        ),
+    )
+
+
+def _execution_authorization(plan):
+    options: dict[str, object] = {
+        "authority_verifier": _TrustedAuthority(),
+        **_runtime_dependencies(),
+    }
+    if plan.risk_tier is MutationRiskTier.R4:
+        options.update(
+            {
+                "break_glass": _break_glass(plan),
+                "break_glass_policy": BreakGlassPolicy(
+                    maximum_validity_seconds=3600
+                ),
+                "human_authenticator": _TrustedHumans(
+                    {"human-1", "human-2"}
+                ),
+                "break_glass_evidence_verifier": (
+                    _TrustedBreakGlassEvidence()
+                ),
+            }
+        )
+    return MutationPreSideEffectGuard().authorize(
+        plan,
+        _observation(),
+        service_identity=OpaqueId("mutation-service"),
+        current_context=_gate_context(plan),
+        evaluated_at=EVALUATED_AT,
+        **options,
+    )
 
 
 def test_pre_side_effect_guard_rechecks_workspace_authority_and_idempotency() -> None:
     guard = MutationPreSideEffectGuard()
     plan = _plan()
+    assert plan.risk_tier is MutationRiskTier.R4
+    break_glass = _break_glass(plan)
     granted = guard.authorize(
         plan,
         _observation(),
         service_identity=OpaqueId("mutation-service"),
         current_context=_gate_context(plan),
         evaluated_at=EVALUATED_AT,
+        authority_verifier=_TrustedAuthority(),
+        break_glass=break_glass,
+        break_glass_policy=BreakGlassPolicy(maximum_validity_seconds=3600),
+        human_authenticator=_TrustedHumans({"human-1", "human-2"}),
+        break_glass_evidence_verifier=_TrustedBreakGlassEvidence(),
+        **_runtime_dependencies(),
     )
     assert granted.plan_sha256 == plan.plan_sha256
     assert granted.manifest_sha256 == MANIFEST_A
     assert granted.gate_context_sha256
+    assert granted.workspace_observation_sha256
+    assert granted.content_observation_sha256
+    assert len(granted.content_verifications) == 1
+    assert granted.idempotency_reservation.artifact_version == (
+        "idempotency-reservation/1.0"
+    )
 
     stale_context = replace(
         _gate_context(plan), executable_plan_sha256=SHA_C
@@ -676,6 +1327,7 @@ def test_pre_side_effect_guard_rechecks_workspace_authority_and_idempotency() ->
             service_identity=OpaqueId("mutation-service"),
             current_context=stale_context,
             evaluated_at=EVALUATED_AT,
+            **_runtime_dependencies(),
         )
     assert stale_plan_context.value.reason_code == (
         "mutation.runtime.plan_context_mismatch"
@@ -689,6 +1341,7 @@ def test_pre_side_effect_guard_rechecks_workspace_authority_and_idempotency() ->
             current_context=_gate_context(plan),
             evaluated_at=EVALUATED_AT,
             kill_switch_engaged=True,
+            **_runtime_dependencies(),
         )
     assert killed.value.reason_code == "mutation.runtime.kill_switch"
 
@@ -699,42 +1352,43 @@ def test_pre_side_effect_guard_rechecks_workspace_authority_and_idempotency() ->
             service_identity=OpaqueId("mutation-service"),
             current_context=_gate_context(plan),
             evaluated_at=EVALUATED_AT,
+            **_runtime_dependencies(),
         )
-    assert stale.value.reason_code == "mutation.precondition.exact_before_mismatch"
+    assert stale.value.reason_code == "mutation.workspace.content_drift"
 
+    idempotent_plan = _plan(kind=MutationKind.CREATE)
     with pytest.raises(MutationRuntimeError) as conflict:
         guard.authorize(
-            plan,
+            idempotent_plan,
             _observation(),
             service_identity=OpaqueId("mutation-service"),
-            current_context=_gate_context(plan),
+            current_context=_gate_context(idempotent_plan),
             evaluated_at=EVALUATED_AT,
-            idempotency_record=IdempotencyRecord(
-                plan.idempotency_key,
-                SHA_C,
-                MutationReceiptStatus.REJECTED,
-                None,
+            authority_verifier=_TrustedAuthority(),
+            **_runtime_dependencies(
+                ledger=_TrustedIdempotency(plan_sha256=SHA_C)
             ),
         )
     assert conflict.value.reason_code == "mutation.idempotency.conflict"
 
     with pytest.raises(MutationRuntimeError) as replay:
         guard.authorize(
-            plan,
+            idempotent_plan,
             _observation(),
             service_identity=OpaqueId("mutation-service"),
-            current_context=_gate_context(plan),
+            current_context=_gate_context(idempotent_plan),
             evaluated_at=EVALUATED_AT,
-            idempotency_record=IdempotencyRecord(
-                plan.idempotency_key,
-                plan.plan_sha256,
-                MutationReceiptStatus.SUCCEEDED,
-                OpaqueId("receipt-a"),
+            authority_verifier=_TrustedAuthority(),
+            **_runtime_dependencies(
+                ledger=_TrustedIdempotency(
+                    newly_reserved=False,
+                    existing_receipt_id=OpaqueId("receipt-a"),
+                )
             ),
         )
     assert replay.value.reason_code == "mutation.idempotency.replay"
 
-    elevated = _plan(risk=MutationRiskTier.R2)
+    elevated = _plan(risk=MutationRiskTier.R2, kind=MutationKind.CREATE)
     with pytest.raises(MutationRuntimeError) as missing:
         guard.authorize(
             elevated,
@@ -742,6 +1396,7 @@ def test_pre_side_effect_guard_rechecks_workspace_authority_and_idempotency() ->
             service_identity=OpaqueId("mutation-service"),
             current_context=_gate_context(elevated),
             evaluated_at=EVALUATED_AT,
+            **_runtime_dependencies(),
         )
     assert missing.value.reason_code == "mutation.authority.verifier_missing"
     authority = guard.authorize(
@@ -751,8 +1406,21 @@ def test_pre_side_effect_guard_rechecks_workspace_authority_and_idempotency() ->
         current_context=_gate_context(elevated),
         evaluated_at=EVALUATED_AT,
         authority_verifier=_TrustedAuthority(),
+        **_runtime_dependencies(),
     )
     assert authority.authority_decision is not None
+
+    with pytest.raises(MutationRuntimeError) as content_changed:
+        guard.authorize(
+            idempotent_plan,
+            _observation(),
+            service_identity=OpaqueId("mutation-service"),
+            current_context=_gate_context(idempotent_plan),
+            evaluated_at=EVALUATED_AT,
+            authority_verifier=_TrustedAuthority(),
+            **_runtime_dependencies(resolver=_TrustedContent(digest=SHA_C)),
+        )
+    assert content_changed.value.reason_code == "mutation.content.mismatch"
 
 
 def test_r4_break_glass_requires_two_current_distinct_authenticated_humans() -> None:
@@ -766,11 +1434,45 @@ def test_r4_break_glass_requires_two_current_distinct_authenticated_humans() -> 
         service_identity=OpaqueId("mutation-service"),
         current_context=_gate_context(plan),
         evaluated_at=EVALUATED_AT,
+        authority_verifier=_TrustedAuthority(),
         break_glass=evidence,
         break_glass_policy=BreakGlassPolicy(maximum_validity_seconds=3600),
         human_authenticator=authenticator,
+        break_glass_evidence_verifier=_TrustedBreakGlassEvidence(),
+        **_runtime_dependencies(),
     )
     assert authorized.break_glass_authorization_id == evidence.authorization_id
+    assert authorized.break_glass_authorization_sha256 is not None
+    assert authorized.break_glass_request_sha256 == break_glass_request_sha256(
+        evidence
+    )
+    assert len(authorized.human_approval_verifications) == 2
+    assert len(authorized.break_glass_evidence_verifications) == 3
+
+    unrelated = replace(
+        evidence,
+        incident_id=OpaqueId("incident-other"),
+        incident_record=_reference(
+            "incidents/incident-other.json", SHA_C, "incident-record/1.0"
+        ),
+    )
+    with pytest.raises(MutationRuntimeError) as reused_approvals:
+        guard.authorize(
+            plan,
+            _observation(),
+            service_identity=OpaqueId("mutation-service"),
+            current_context=_gate_context(plan),
+            evaluated_at=EVALUATED_AT,
+            authority_verifier=_TrustedAuthority(),
+            break_glass=unrelated,
+            break_glass_policy=BreakGlassPolicy(maximum_validity_seconds=3600),
+            human_authenticator=authenticator,
+            break_glass_evidence_verifier=_TrustedBreakGlassEvidence(),
+            **_runtime_dependencies(),
+        )
+    assert reused_approvals.value.reason_code == (
+        "mutation.break_glass.approval_binding"
+    )
 
     same_person = replace(
         evidence,
@@ -786,9 +1488,12 @@ def test_r4_break_glass_requires_two_current_distinct_authenticated_humans() -> 
             service_identity=OpaqueId("mutation-service"),
             current_context=_gate_context(plan),
             evaluated_at=EVALUATED_AT,
+            authority_verifier=_TrustedAuthority(),
             break_glass=same_person,
             break_glass_policy=BreakGlassPolicy(maximum_validity_seconds=3600),
             human_authenticator=authenticator,
+            break_glass_evidence_verifier=_TrustedBreakGlassEvidence(),
+            **_runtime_dependencies(),
         )
     assert duplicate.value.reason_code == "mutation.break_glass.approver_distinctness"
 
@@ -799,9 +1504,12 @@ def test_r4_break_glass_requires_two_current_distinct_authenticated_humans() -> 
             service_identity=OpaqueId("mutation-service"),
             current_context=_gate_context(plan),
             evaluated_at=datetime(2026, 8, 7, 1, 30, tzinfo=timezone.utc),
+            authority_verifier=_TrustedAuthority(),
             break_glass=evidence,
             break_glass_policy=BreakGlassPolicy(maximum_validity_seconds=3600),
             human_authenticator=authenticator,
+            break_glass_evidence_verifier=_TrustedBreakGlassEvidence(),
+            **_runtime_dependencies(),
         )
     assert expired.value.reason_code == "mutation.break_glass.expired_or_future"
 
@@ -813,9 +1521,12 @@ def test_r4_break_glass_requires_two_current_distinct_authenticated_humans() -> 
             service_identity=OpaqueId("mutation-service"),
             current_context=_gate_context(plan),
             evaluated_at=EVALUATED_AT,
+            authority_verifier=_TrustedAuthority(),
             break_glass=evidence,
             break_glass_policy=BreakGlassPolicy(maximum_validity_seconds=3600),
             human_authenticator=untrusted,
+            break_glass_evidence_verifier=_TrustedBreakGlassEvidence(),
+            **_runtime_dependencies(),
         )
     assert not_authenticated.value.reason_code == (
         "mutation.break_glass.human_authentication"

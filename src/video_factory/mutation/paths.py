@@ -19,6 +19,8 @@ _RESERVED_BASENAMES = frozenset(
     {"con", "prn", "aux", "nul"}
     | {f"com{number}" for number in range(1, 10)}
     | {f"lpt{number}" for number in range(1, 10)}
+    | {f"com{number}" for number in ("¹", "²", "³")}
+    | {f"lpt{number}" for number in ("¹", "²", "³")}
 )
 
 
@@ -143,9 +145,15 @@ def require_no_link_or_reparse_ancestor(
         path_collision_key(observed_path): (observed_path, observed)
         for observed_path, observed in observations.items()
     }
+    target = str(require_managed_path(value))
     for candidate in path_and_ancestors(value):
         owner = aliases.get(path_collision_key(candidate))
         if owner is None:
+            if candidate != target:
+                raise MutationPathError(
+                    "mutation.path.ancestor_unobserved",
+                    f"managed path ancestor was not observed: {candidate!r}",
+                )
             continue
         observed_path, observed = owner
         if observed_path != candidate:
@@ -162,4 +170,9 @@ def require_no_link_or_reparse_ancestor(
             raise MutationPathError(
                 "mutation.path.reparse",
                 f"managed path crosses a reparse point at {candidate!r}",
+            )
+        if candidate != target and observed.node_kind is not PathNodeKind.DIRECTORY:
+            raise MutationPathError(
+                "mutation.path.non_directory_ancestor",
+                f"managed path crosses a non-directory node at {candidate!r}",
             )

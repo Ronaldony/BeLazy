@@ -27,18 +27,21 @@ from .contracts import (
     DriftReport,
     ExpectedBefore,
     MutationKind,
+    MutationExecutionAuthorization,
     MutationOperationIntent,
     MutationPlan,
     MutationReceipt,
     MutationReceiptStatus,
     MutationRiskTier,
     OperationOutcome,
+    OperationResult,
     PathNodeKind,
     PlannedMutationOperation,
     RevisionEntry,
     SemanticDiffEntry,
     WorkspaceObservation,
     WorkspaceRevision,
+    WorkspaceRevisionOrigin,
     WorkspaceTrustState,
 )
 from .paths import (
@@ -54,6 +57,14 @@ from .paths import (
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 _OPAQUE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
 _ROLLBACK = "restore_previous_revision"
+MANAGED_MUTATION_RISK_POLICY_VERSION = "managed-mutation-risk-policy/1.0"
+_RISK_RANK = {
+    MutationRiskTier.R1: 1,
+    MutationRiskTier.R2: 2,
+    MutationRiskTier.R3: 3,
+    MutationRiskTier.R4: 4,
+}
+_AUTHORITY_PATH_MARKERS = ("policy", "approval", "ledger", "authority")
 
 
 class MutationPlanError(ValueError):
@@ -279,14 +290,39 @@ def _require_nonoverlapping_paths(
         normalized = require_collision_free(touched, label="mutation operation paths")
     except MutationPathError as error:
         raise MutationPlanError(error.reason_code, str(error)) from error
-    paths = sorted(str(path) for path in normalized)
-    for left_index, left in enumerate(paths):
-        for right in paths[left_index + 1 :]:
-            if right.startswith(left + "/"):
+    paths = sorted((path_collision_key(path), str(path)) for path in normalized)
+    for left_index, (left_key, left) in enumerate(paths):
+        for right_key, right in paths[left_index + 1 :]:
+            if right_key.startswith(left_key + "/"):
                 raise MutationPlanError(
                     "mutation.path.overlap",
                     f"mutation paths overlap: {left!r} and {right!r}",
                 )
+
+
+def _minimum_risk_tier(
+    operations: Sequence[MutationOperationIntent],
+) -> MutationRiskTier:
+    """Apply the non-downgradable managed-mutation risk policy v1."""
+
+    for operation in operations:
+        if operation.kind is not MutationKind.CREATE:
+            return MutationRiskTier.R4
+        for path in (operation.path, operation.destination_path):
+            if path is None:
+                continue
+            folded = path_collision_key(path)
+            if any(marker in folded for marker in _AUTHORITY_PATH_MARKERS):
+                return MutationRiskTier.R4
+    return MutationRiskTier.R1
+
+
+def _effective_risk_tier(
+    declared: MutationRiskTier,
+    operations: Sequence[MutationOperationIntent],
+) -> MutationRiskTier:
+    required = _minimum_risk_tier(operations)
+    return declared if _RISK_RANK[declared] >= _RISK_RANK[required] else required
 
 
 def _change_request_mapping(request: ChangeRequest) -> dict[str, object]:
@@ -313,6 +349,7 @@ def _plan_projection(
     before_workspace_revision_sha256: HashDigest,
     before_manifest_sha256: HashDigest,
     policy_bundle_sha256: HashDigest,
+    risk_policy_version: str,
     idempotency_key: IdempotencyKey,
     risk_tier: MutationRiskTier,
     operations: Sequence[PlannedMutationOperation],
@@ -326,6 +363,7 @@ def _plan_projection(
         "before_workspace_revision_sha256": str(before_workspace_revision_sha256),
         "before_manifest_sha256": str(before_manifest_sha256),
         "policy_bundle_sha256": str(policy_bundle_sha256),
+        "risk_policy_version": risk_policy_version,
         "idempotency_key": str(idempotency_key),
         "risk_tier": risk_tier.value,
         "operations": [_planned_mapping(operation) for operation in operations],
@@ -363,7 +401,7 @@ def build_mutation_plan(
         str(_opaque(str(request.idempotency_key), "idempotency_key"))
     )
     try:
-        risk_tier = MutationRiskTier(request.risk_tier)
+        declared_risk_tier = MutationRiskTier(request.risk_tier)
     except ValueError as error:
         raise MutationPlanError(
             "mutation.request.risk_tier",
@@ -389,6 +427,7 @@ def build_mutation_plan(
             ),
         )
     )
+    risk_tier = _effective_risk_tier(declared_risk_tier, canonical_intents)
     planned: list[PlannedMutationOperation] = []
     for operation in canonical_intents:
         identity = {
@@ -437,6 +476,7 @@ def build_mutation_plan(
         before_workspace_revision_sha256=revision_digest,
         before_manifest_sha256=before_manifest,
         policy_bundle_sha256=policy_digest,
+        risk_policy_version=MANAGED_MUTATION_RISK_POLICY_VERSION,
         idempotency_key=idempotency,
         risk_tier=risk_tier,
         operations=planned,
@@ -453,6 +493,7 @@ def build_mutation_plan(
         before_workspace_revision_sha256=revision_digest,
         before_manifest_sha256=before_manifest,
         policy_bundle_sha256=policy_digest,
+        risk_policy_version=MANAGED_MUTATION_RISK_POLICY_VERSION,
         idempotency_key=idempotency,
         risk_tier=risk_tier,
         operations=tuple(planned),
@@ -542,8 +583,12 @@ def plan_mutation(
             )
         active_aliases[alias] = path
     observed_aliases = {path_collision_key(path): path for path in observed}
-    for index, raw_operation in enumerate(request.operations):
-        operation = _validate_intent(raw_operation, index=index)
+    validated_operations = tuple(
+        _validate_intent(raw_operation, index=index)
+        for index, raw_operation in enumerate(request.operations)
+    )
+    _require_nonoverlapping_paths(validated_operations)
+    for operation in validated_operations:
         try:
             require_no_link_or_reparse_ancestor(operation.path, observed)
             if operation.destination_path is not None:
@@ -681,6 +726,11 @@ def validate_mutation_plan(plan: MutationPlan) -> MutationPlan:
         str(plan.before_manifest_sha256), "before_manifest_sha256"
     )
     policy_digest = _sha256(str(plan.policy_bundle_sha256), "policy_bundle_sha256")
+    if plan.risk_policy_version != MANAGED_MUTATION_RISK_POLICY_VERSION:
+        raise MutationPlanError(
+            "mutation.plan.risk_policy_version",
+            "mutation plan uses an unsupported risk policy",
+        )
     idempotency = IdempotencyKey(
         str(_opaque(str(plan.idempotency_key), "idempotency_key"))
     )
@@ -732,6 +782,17 @@ def validate_mutation_plan(plan: MutationPlan) -> MutationPlan:
             "mutation.plan.semantic_diff",
             "semantic diff does not exactly describe the planned operations",
         )
+    try:
+        effective_risk = MutationRiskTier(plan.risk_tier)
+    except ValueError as error:
+        raise MutationPlanError(
+            "mutation.plan.risk_tier", "mutation plan risk tier is invalid"
+        ) from error
+    if _RISK_RANK[effective_risk] < _RISK_RANK[_minimum_risk_tier(intents)]:
+        raise MutationPlanError(
+            "mutation.plan.risk_downgrade",
+            "mutation plan risk tier is below the non-downgradable policy floor",
+        )
     projection = _plan_projection(
         request_id=request_id,
         change_request_sha256=change_request_digest,
@@ -740,8 +801,9 @@ def validate_mutation_plan(plan: MutationPlan) -> MutationPlan:
         before_workspace_revision_sha256=revision_digest,
         before_manifest_sha256=before_manifest,
         policy_bundle_sha256=policy_digest,
+        risk_policy_version=plan.risk_policy_version,
         idempotency_key=idempotency,
-        risk_tier=MutationRiskTier(plan.risk_tier),
+        risk_tier=effective_risk,
         operations=plan.operations,
         semantic_diff=plan.semantic_diff,
     )
@@ -778,12 +840,109 @@ def mutation_plan_to_mapping(plan: MutationPlan) -> dict[str, object]:
             before_workspace_revision_sha256=plan.before_workspace_revision_sha256,
             before_manifest_sha256=plan.before_manifest_sha256,
             policy_bundle_sha256=plan.policy_bundle_sha256,
+            risk_policy_version=plan.risk_policy_version,
             idempotency_key=plan.idempotency_key,
             risk_tier=plan.risk_tier,
             operations=plan.operations,
             semantic_diff=plan.semantic_diff,
         ),
     }
+
+
+def _operation_result_mapping(result: OperationResult) -> dict[str, object]:
+    return {
+        "operation_id": str(result.operation_id),
+        "kind": result.kind.value,
+        "path": str(result.path),
+        "destination_path": (
+            str(result.destination_path)
+            if result.destination_path is not None
+            else None
+        ),
+        "outcome": result.outcome.value,
+        "before_sha256": (
+            str(result.before_sha256)
+            if result.before_sha256 is not None
+            else None
+        ),
+        "after_sha256": (
+            str(result.after_sha256)
+            if result.after_sha256 is not None
+            else None
+        ),
+        "after_byte_length": result.after_byte_length,
+        "reason_code": result.reason_code,
+    }
+
+
+def _validate_artifact_reference(
+    reference: ArtifactReference,
+    label: str,
+) -> ArtifactReference:
+    if not isinstance(reference, ArtifactReference):
+        raise MutationPlanError(
+            "mutation.contract.artifact_reference",
+            f"{label} must be an artifact reference",
+        )
+    try:
+        require_managed_path(reference.path, label=f"{label}.path")
+    except MutationPathError as error:
+        raise MutationPlanError(error.reason_code, str(error)) from error
+    _sha256(str(reference.sha256), f"{label}.sha256")
+    if not isinstance(reference.artifact_version, str) or not str(
+        reference.artifact_version
+    ):
+        raise MutationPlanError(
+            "mutation.contract.artifact_version",
+            f"{label}.artifact_version must be non-empty",
+        )
+    return reference
+
+
+def _receipt_identity_mapping(receipt: MutationReceipt) -> dict[str, object]:
+    return {
+        "artifact_version": "mutation-receipt/1.0",
+        "plan_id": str(receipt.plan_id),
+        "plan_sha256": str(receipt.plan_sha256),
+        "workspace_id": str(receipt.workspace_id),
+        "idempotency_key": str(receipt.idempotency_key),
+        "executor_identity": str(receipt.executor_identity),
+        "execution_authorization_id": str(receipt.execution_authorization_id),
+        "execution_authorization_sha256": str(
+            receipt.execution_authorization_sha256
+        ),
+        "before_workspace_observation_sha256": str(
+            receipt.before_workspace_observation_sha256
+        ),
+        "after_workspace_observation_sha256": str(
+            receipt.after_workspace_observation_sha256
+        ),
+        "idempotency_reservation": _artifact_mapping(
+            receipt.idempotency_reservation
+        ),
+        "journal_record": _artifact_mapping(receipt.journal_record),
+        "started_at": receipt.started_at,
+        "completed_at": receipt.completed_at,
+        "status": receipt.status.value,
+        "before_manifest_sha256": str(receipt.before_manifest_sha256),
+        "after_manifest_sha256": str(receipt.after_manifest_sha256),
+        "operation_results": [
+            _operation_result_mapping(result) for result in receipt.operation_results
+        ],
+        "rollback_or_reconciliation_required": (
+            receipt.rollback_or_reconciliation_required
+        ),
+        "rollback_or_reconciliation_plan": (
+            _artifact_mapping(receipt.rollback_or_reconciliation_plan)
+            if receipt.rollback_or_reconciliation_plan is not None
+            else None
+        ),
+    }
+
+
+def mutation_receipt_id(receipt: MutationReceipt) -> OpaqueId:
+    digest = canonical_sha256(_receipt_identity_mapping(receipt))
+    return OpaqueId(f"receipt-{str(digest)[:24]}")
 
 
 def validate_mutation_receipt(receipt: MutationReceipt) -> MutationReceipt:
@@ -799,6 +958,37 @@ def validate_mutation_receipt(receipt: MutationReceipt) -> MutationReceipt:
     _opaque(str(receipt.workspace_id), "workspace_id")
     _opaque(str(receipt.idempotency_key), "idempotency_key")
     _opaque(str(receipt.executor_identity), "executor_identity")
+    _opaque(
+        str(receipt.execution_authorization_id),
+        "execution_authorization_id",
+    )
+    _sha256(
+        str(receipt.execution_authorization_sha256),
+        "execution_authorization_sha256",
+    )
+    _sha256(
+        str(receipt.before_workspace_observation_sha256),
+        "before_workspace_observation_sha256",
+    )
+    _sha256(
+        str(receipt.after_workspace_observation_sha256),
+        "after_workspace_observation_sha256",
+    )
+    _validate_artifact_reference(
+        receipt.idempotency_reservation,
+        "idempotency_reservation",
+    )
+    _validate_artifact_reference(receipt.journal_record, "journal_record")
+    if receipt.rollback_or_reconciliation_plan is not None:
+        _validate_artifact_reference(
+            receipt.rollback_or_reconciliation_plan,
+            "rollback_or_reconciliation_plan",
+        )
+    if receipt.idempotency_reservation == receipt.journal_record:
+        raise MutationPlanError(
+            "mutation.receipt.evidence_alias",
+            "idempotency reservation and journal record must be distinct",
+        )
     started = parse_rfc3339_datetime(_timestamp(receipt.started_at, "started_at"))
     completed = parse_rfc3339_datetime(
         _timestamp(receipt.completed_at, "completed_at")
@@ -819,6 +1009,8 @@ def validate_mutation_receipt(receipt: MutationReceipt) -> MutationReceipt:
 
     operation_ids: set[str] = set()
     all_applied = True
+    any_applied = False
+    all_rejected = True
     for index, result in enumerate(receipt.operation_results):
         operation_id = str(_opaque(str(result.operation_id), "operation_id"))
         if operation_id in operation_ids:
@@ -904,22 +1096,62 @@ def validate_mutation_receipt(receipt: MutationReceipt) -> MutationReceipt:
                     and destination is not None
                 )
             )
+            shape_ok = shape_ok and after is None and length is None
         if not shape_ok:
             raise MutationPlanError(
                 "mutation.receipt.operation_shape",
                 f"receipt result does not match {kind.value} semantics for {path}",
             )
         all_applied = all_applied and outcome is OperationOutcome.APPLIED
+        any_applied = any_applied or outcome is OperationOutcome.APPLIED
+        all_rejected = all_rejected and outcome is OperationOutcome.REJECTED
     if status is MutationReceiptStatus.SUCCEEDED:
-        if not all_applied or receipt.rollback_or_reconciliation_required:
+        if (
+            not all_applied
+            or receipt.rollback_or_reconciliation_required
+            or receipt.rollback_or_reconciliation_plan is not None
+        ):
             raise MutationPlanError(
                 "mutation.receipt.success_inconsistent",
-                "successful receipt requires all operations applied and no reconciliation",
+                "successful receipt requires all operations applied and no recovery plan",
             )
-    elif receipt.rollback_or_reconciliation_required is not True:
+    elif status is MutationReceiptStatus.REJECTED:
+        if (
+            not all_rejected
+            or receipt.after_manifest_sha256 != receipt.before_manifest_sha256
+            or receipt.rollback_or_reconciliation_required
+            or receipt.rollback_or_reconciliation_plan is not None
+        ):
+            raise MutationPlanError(
+                "mutation.receipt.rejected_inconsistent",
+                "rejected receipt must prove no change and require no recovery",
+            )
+    elif status is MutationReceiptStatus.RECONCILED:
+        if (
+            receipt.rollback_or_reconciliation_required
+            or receipt.rollback_or_reconciliation_plan is None
+        ):
+            raise MutationPlanError(
+                "mutation.receipt.reconciled_inconsistent",
+                "reconciled receipt requires terminal reconciliation evidence",
+            )
+    elif (
+        receipt.rollback_or_reconciliation_required is not True
+        or receipt.rollback_or_reconciliation_plan is None
+        or (
+            status is MutationReceiptStatus.PARTIALLY_APPLIED
+            and (not any_applied or all_applied)
+        )
+        or (status is MutationReceiptStatus.FAILED and all_applied)
+    ):
         raise MutationPlanError(
             "mutation.receipt.failure_inconsistent",
-            "non-success receipt must require rollback or reconciliation",
+            "nonterminal receipt must require a concrete rollback or reconciliation plan",
+        )
+    if receipt.receipt_id != mutation_receipt_id(receipt):
+        raise MutationPlanError(
+            "mutation.receipt.identity",
+            "receipt ID does not match its complete canonical content",
         )
     return receipt
 
@@ -927,45 +1159,8 @@ def validate_mutation_receipt(receipt: MutationReceipt) -> MutationReceipt:
 def mutation_receipt_to_mapping(receipt: MutationReceipt) -> dict[str, object]:
     validate_mutation_receipt(receipt)
     return {
-        "artifact_version": "mutation-receipt/1.0",
         "receipt_id": str(receipt.receipt_id),
-        "plan_id": str(receipt.plan_id),
-        "plan_sha256": str(receipt.plan_sha256),
-        "workspace_id": str(receipt.workspace_id),
-        "idempotency_key": str(receipt.idempotency_key),
-        "executor_identity": str(receipt.executor_identity),
-        "started_at": receipt.started_at,
-        "completed_at": receipt.completed_at,
-        "status": receipt.status.value,
-        "before_manifest_sha256": str(receipt.before_manifest_sha256),
-        "after_manifest_sha256": str(receipt.after_manifest_sha256),
-        "operation_results": [
-            {
-                "operation_id": str(result.operation_id),
-                "kind": result.kind.value,
-                "path": str(result.path),
-                "destination_path": (
-                    str(result.destination_path)
-                    if result.destination_path is not None
-                    else None
-                ),
-                "outcome": result.outcome.value,
-                "before_sha256": (
-                    str(result.before_sha256)
-                    if result.before_sha256 is not None
-                    else None
-                ),
-                "after_sha256": (
-                    str(result.after_sha256)
-                    if result.after_sha256 is not None
-                    else None
-                ),
-                "after_byte_length": result.after_byte_length,
-                "reason_code": result.reason_code,
-            }
-            for result in receipt.operation_results
-        ],
-        "rollback_or_reconciliation_required": receipt.rollback_or_reconciliation_required,
+        **_receipt_identity_mapping(receipt),
     }
 
 
@@ -980,6 +1175,28 @@ def validate_workspace_revision(revision: WorkspaceRevision) -> WorkspaceRevisio
     _opaque(str(revision.workspace_id), "workspace_id")
     if revision.parent_revision_id is not None:
         _opaque(str(revision.parent_revision_id), "parent_revision_id")
+    if not isinstance(revision.origin, WorkspaceRevisionOrigin):
+        raise MutationPlanError(
+            "mutation.revision.origin", "workspace revision origin is invalid"
+        )
+    if revision.origin is WorkspaceRevisionOrigin.RECONCILED_BASELINE:
+        if revision.parent_revision_id is not None or revision.reconciliation_evidence is None:
+            raise MutationPlanError(
+                "mutation.revision.baseline_provenance",
+                "reconciled baseline requires evidence and cannot have a parent",
+            )
+        _validate_artifact_reference(
+            revision.reconciliation_evidence,
+            "reconciliation_evidence",
+        )
+    elif (
+        revision.parent_revision_id is None
+        or revision.reconciliation_evidence is not None
+    ):
+        raise MutationPlanError(
+            "mutation.revision.managed_provenance",
+            "managed revisions require a parent and cannot claim baseline evidence",
+        )
     _sha256(str(revision.manifest_sha256), "manifest_sha256")
     _timestamp(revision.created_at, "created_at")
     _opaque(str(revision.plan_id), "plan_id")
@@ -1059,9 +1276,15 @@ def workspace_revision_to_mapping(revision: WorkspaceRevision) -> dict[str, obje
         "artifact_version": "workspace-revision/1.0",
         "revision_id": str(revision.revision_id),
         "workspace_id": str(revision.workspace_id),
+        "origin": revision.origin.value,
         "parent_revision_id": (
             str(revision.parent_revision_id)
             if revision.parent_revision_id is not None
+            else None
+        ),
+        "reconciliation_evidence": (
+            _artifact_mapping(revision.reconciliation_evidence)
+            if revision.reconciliation_evidence is not None
             else None
         ),
         "manifest_sha256": str(revision.manifest_sha256),
@@ -1243,10 +1466,266 @@ def _artifact_mapping(reference: ArtifactReference) -> dict[str, str]:
     }
 
 
+def _execution_authorization_identity_mapping(
+    authorization: MutationExecutionAuthorization,
+) -> dict[str, object]:
+    return {
+        "plan_id": str(authorization.plan_id),
+        "plan_sha256": str(authorization.plan_sha256),
+        "workspace_id": str(authorization.workspace_id),
+        "revision_id": str(authorization.revision_id),
+        "workspace_revision_sha256": str(
+            authorization.workspace_revision_sha256
+        ),
+        "manifest_sha256": str(authorization.manifest_sha256),
+        "workspace_observation_sha256": str(
+            authorization.workspace_observation_sha256
+        ),
+        "idempotency_key": str(authorization.idempotency_key),
+        "idempotency_reservation": _artifact_mapping(
+            authorization.idempotency_reservation
+        ),
+        "content_observation_sha256": str(
+            authorization.content_observation_sha256
+        ),
+        "content_verifications": [
+            _artifact_mapping(item) for item in authorization.content_verifications
+        ],
+        "service_identity": str(authorization.service_identity),
+        "evaluated_at": authorization.evaluated_at,
+        "gate_context_sha256": str(authorization.gate_context_sha256),
+        "authority_decision": (
+            _artifact_mapping(authorization.authority_decision)
+            if authorization.authority_decision is not None
+            else None
+        ),
+        "break_glass_authorization_id": (
+            str(authorization.break_glass_authorization_id)
+            if authorization.break_glass_authorization_id is not None
+            else None
+        ),
+        "break_glass_authorization_sha256": (
+            str(authorization.break_glass_authorization_sha256)
+            if authorization.break_glass_authorization_sha256 is not None
+            else None
+        ),
+        "break_glass_request_sha256": (
+            str(authorization.break_glass_request_sha256)
+            if authorization.break_glass_request_sha256 is not None
+            else None
+        ),
+        "human_approval_verifications": [
+            _artifact_mapping(item)
+            for item in authorization.human_approval_verifications
+        ],
+        "break_glass_evidence_verifications": [
+            _artifact_mapping(item)
+            for item in authorization.break_glass_evidence_verifications
+        ],
+    }
+
+
+def mutation_execution_authorization_id(
+    authorization: MutationExecutionAuthorization,
+) -> OpaqueId:
+    digest = canonical_sha256(_execution_authorization_identity_mapping(authorization))
+    return OpaqueId(f"mutation-auth-{str(digest)[:20]}")
+
+
+def validate_mutation_execution_authorization(
+    authorization: MutationExecutionAuthorization,
+) -> MutationExecutionAuthorization:
+    """Validate a guard result before it can be persisted or consumed."""
+
+    if not isinstance(authorization, MutationExecutionAuthorization):
+        raise MutationPlanError(
+            "mutation.authorization.type",
+            "mutation execution authorization has an invalid type",
+        )
+    _opaque(str(authorization.authorization_id), "authorization_id")
+    _opaque(str(authorization.plan_id), "plan_id")
+    _sha256(str(authorization.plan_sha256), "plan_sha256")
+    _opaque(str(authorization.workspace_id), "workspace_id")
+    _opaque(str(authorization.revision_id), "revision_id")
+    _sha256(
+        str(authorization.workspace_revision_sha256),
+        "workspace_revision_sha256",
+    )
+    _sha256(str(authorization.manifest_sha256), "manifest_sha256")
+    _sha256(
+        str(authorization.workspace_observation_sha256),
+        "workspace_observation_sha256",
+    )
+    _opaque(str(authorization.idempotency_key), "idempotency_key")
+    _validate_artifact_reference(
+        authorization.idempotency_reservation,
+        "idempotency_reservation",
+    )
+    _sha256(
+        str(authorization.content_observation_sha256),
+        "content_observation_sha256",
+    )
+    _opaque(str(authorization.service_identity), "service_identity")
+    _timestamp(authorization.evaluated_at, "evaluated_at")
+    _sha256(str(authorization.gate_context_sha256), "gate_context_sha256")
+    if authorization.authority_decision is None:
+        raise MutationPlanError(
+            "mutation.authorization.authority_missing",
+            "every mutation authorization requires a trusted authority decision",
+        )
+    _validate_artifact_reference(
+        authorization.authority_decision,
+        "authority_decision",
+    )
+
+    reference_groups = (
+        ("content_verifications", authorization.content_verifications),
+        (
+            "human_approval_verifications",
+            authorization.human_approval_verifications,
+        ),
+        (
+            "break_glass_evidence_verifications",
+            authorization.break_glass_evidence_verifications,
+        ),
+    )
+    for label, references in reference_groups:
+        if not isinstance(references, tuple):
+            raise MutationPlanError(
+                "mutation.authorization.reference_set",
+                f"{label} must be an immutable tuple",
+            )
+        keys: set[tuple[str, str, str]] = set()
+        for index, reference in enumerate(references):
+            _validate_artifact_reference(reference, f"{label}[{index}]")
+            key = (
+                str(reference.path),
+                str(reference.sha256),
+                str(reference.artifact_version),
+            )
+            if key in keys:
+                raise MutationPlanError(
+                    "mutation.authorization.duplicate_reference",
+                    f"{label} contains duplicate evidence",
+                )
+            keys.add(key)
+
+    break_glass_fields = (
+        authorization.break_glass_authorization_id,
+        authorization.break_glass_authorization_sha256,
+        authorization.break_glass_request_sha256,
+    )
+    if all(item is None for item in break_glass_fields):
+        if (
+            authorization.human_approval_verifications
+            or authorization.break_glass_evidence_verifications
+        ):
+            raise MutationPlanError(
+                "mutation.authorization.break_glass_shape",
+                "break-glass verification evidence lacks a bound authorization",
+            )
+    elif any(item is None for item in break_glass_fields):
+        raise MutationPlanError(
+            "mutation.authorization.break_glass_shape",
+            "break-glass binding fields must be present together",
+        )
+    else:
+        _opaque(
+            str(authorization.break_glass_authorization_id),
+            "break_glass_authorization_id",
+        )
+        _sha256(
+            str(authorization.break_glass_authorization_sha256),
+            "break_glass_authorization_sha256",
+        )
+        _sha256(
+            str(authorization.break_glass_request_sha256),
+            "break_glass_request_sha256",
+        )
+        if (
+            len(authorization.human_approval_verifications) != 2
+            or len(authorization.break_glass_evidence_verifications) != 3
+        ):
+            raise MutationPlanError(
+                "mutation.authorization.break_glass_evidence",
+                "break-glass execution requires two human and three record verifications",
+            )
+
+    if authorization.authorization_id != mutation_execution_authorization_id(
+        authorization
+    ):
+        raise MutationPlanError(
+            "mutation.authorization.identity",
+            "authorization ID does not match its complete canonical content",
+        )
+    return authorization
+
+
+def mutation_execution_authorization_to_mapping(
+    authorization: MutationExecutionAuthorization,
+) -> dict[str, object]:
+    validate_mutation_execution_authorization(authorization)
+    return {
+        "authorization_id": str(authorization.authorization_id),
+        **_execution_authorization_identity_mapping(authorization),
+    }
+
+
+def mutation_execution_authorization_sha256(
+    authorization: MutationExecutionAuthorization,
+) -> HashDigest:
+    return canonical_sha256(
+        mutation_execution_authorization_to_mapping(authorization)
+    )
+
+
+def break_glass_request_mapping(
+    authorization: BreakGlassAuthorization,
+) -> dict[str, object]:
+    """Canonical approval preimage; excludes approval records and outer ID."""
+
+    return {
+        "risk_policy_version": MANAGED_MUTATION_RISK_POLICY_VERSION,
+        "risk_tier": authorization.risk_tier.value,
+        "standing_grant": authorization.standing_grant,
+        "plan_sha256": str(authorization.plan_sha256),
+        "workspace_id": str(authorization.workspace_id),
+        "before_revision_id": str(authorization.before_revision_id),
+        "before_manifest_sha256": str(authorization.before_manifest_sha256),
+        "issued_at": authorization.issued_at,
+        "expires_at": authorization.expires_at,
+        "exact_paths": sorted(str(path) for path in authorization.exact_paths),
+        "operation_kinds": sorted(
+            kind.value for kind in authorization.operation_kinds
+        ),
+        "pre_change_snapshot": _artifact_mapping(
+            authorization.pre_change_snapshot
+        ),
+        "incident_id": str(authorization.incident_id),
+        "incident_record": _artifact_mapping(authorization.incident_record),
+        "audit_record": _artifact_mapping(authorization.audit_record),
+        "session_id": str(authorization.session_id),
+        "executor_identity": str(authorization.executor_identity),
+        "reconciliation_required": authorization.reconciliation_required,
+        "post_change_validation_required": (
+            authorization.post_change_validation_required
+        ),
+    }
+
+
+def break_glass_request_sha256(
+    authorization: BreakGlassAuthorization,
+) -> HashDigest:
+    return canonical_sha256(break_glass_request_mapping(authorization))
+
+
 def _approval_mapping(approval: AuthenticatedHumanApproval) -> dict[str, object]:
     return {
         "principal_id": str(approval.principal_id),
         "actor_kind": "human",
+        "break_glass_request_sha256": str(
+            approval.break_glass_request_sha256
+        ),
         "authentication_evidence": _artifact_mapping(
             approval.authentication_evidence
         ),
@@ -1276,6 +1755,7 @@ def break_glass_authorization_to_mapping(
             authorization.pre_change_snapshot
         ),
         "incident_id": str(authorization.incident_id),
+        "incident_record": _artifact_mapping(authorization.incident_record),
         "audit_record": _artifact_mapping(authorization.audit_record),
         "session_id": str(authorization.session_id),
         "executor_identity": str(authorization.executor_identity),

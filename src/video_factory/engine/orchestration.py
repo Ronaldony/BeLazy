@@ -29,6 +29,7 @@ from video_factory.domain import ArtifactReference, OpaqueId
 from video_factory.json_boundary import parse_rfc3339_datetime
 from video_factory.mutation import (
     WorkspaceObservation,
+    WorkspaceRevision,
     workspace_observation_sha256 as hash_workspace_observation,
     workspace_trust_blockers,
 )
@@ -136,6 +137,8 @@ class GenerationReadinessPlan:
     valid_from: str | None = None
     valid_until: str | None = None
     workspace_revision_id: str | None = None
+    workspace_id: str | None = None
+    workspace_revision_sha256: str | None = None
     workspace_observation_sha256: str | None = None
 
     def __post_init__(self) -> None:
@@ -156,11 +159,12 @@ class GenerationReadinessPlan:
             or self.valid_from is None
             or self.valid_until is None
             or self.workspace_revision_id is None
+            or self.workspace_id is None
+            or self.workspace_revision_sha256 is None
             or self.workspace_observation_sha256 is None
         ):
-            raise OrchestrationPlanError(
-                "authorization-ready plan lacks proof or validity-window fields"
-            )
+            object.__setattr__(self, "authorization_ready", False)
+            return
         try:
             valid_from = parse_rfc3339_datetime(self.valid_from)
             valid_until = parse_rfc3339_datetime(self.valid_until)
@@ -199,6 +203,8 @@ class NextStepPlan:
     observation: EpisodeStateObservation
     gate_context_sha256: str | None = None
     workspace_revision_id: str | None = None
+    workspace_id: str | None = None
+    workspace_revision_sha256: str | None = None
     workspace_observation_sha256: str | None = None
     transition_applied: bool = False
 
@@ -661,7 +667,10 @@ def build_generation_readiness(
     current_context: GateContext | None = None,
     evaluated_at: datetime | None = None,
     workspace_observation: WorkspaceObservation | None = None,
+    expected_workspace_id: str | None = None,
     expected_workspace_revision_id: str | None = None,
+    expected_workspace_revision: WorkspaceRevision | None = None,
+    expected_workspace_revision_sha256: str | None = None,
 ) -> GenerationReadinessPlan:
     """Evaluate all generation gates without executing or approving anything."""
 
@@ -676,12 +685,19 @@ def build_generation_readiness(
         blockers.extend(
             workspace_trust_blockers(
                 workspace_observation,
+                expected_workspace_id=(
+                    OpaqueId(expected_workspace_id)
+                    if expected_workspace_id is not None
+                    else None
+                ),
                 expected_revision_id=expected_workspace_revision_id,
                 expected_manifest_sha256=(
                     current_context.current_manifest_sha256
                     if current_context is not None
                     else None
                 ),
+                expected_revision=expected_workspace_revision,
+                expected_revision_sha256=expected_workspace_revision_sha256,
             )
         )
     storyboard = observation.graph.one(PipelineKind.STORYBOARD.value)
@@ -804,6 +820,8 @@ def build_generation_readiness(
             if workspace_observation is not None
             else None
         ),
+        workspace_id=expected_workspace_id,
+        workspace_revision_sha256=expected_workspace_revision_sha256,
         workspace_observation_sha256=(
             str(hash_workspace_observation(workspace_observation))
             if workspace_observation is not None
@@ -820,6 +838,8 @@ def _plan_id(
     blockers: Sequence[str],
     current_context: GateContext | None,
     workspace_observation: WorkspaceObservation | None,
+    expected_workspace_id: str | None,
+    expected_workspace_revision_sha256: str | None,
 ) -> OpaqueId:
     identity = {
         "mode": mode.value,
@@ -849,6 +869,12 @@ def _plan_id(
         identity["workspace_observation_sha256"] = str(
             hash_workspace_observation(workspace_observation)
         )
+    if expected_workspace_id is not None:
+        identity["expected_workspace_id"] = expected_workspace_id
+    if expected_workspace_revision_sha256 is not None:
+        identity["expected_workspace_revision_sha256"] = (
+            expected_workspace_revision_sha256
+        )
     return OpaqueId(f"next-{str(canonical_sha256(identity))[:20]}")
 
 
@@ -859,7 +885,10 @@ def plan_next_step(
     current_context: GateContext | None = None,
     evaluated_at: datetime | None = None,
     workspace_observation: WorkspaceObservation | None = None,
+    expected_workspace_id: str | None = None,
     expected_workspace_revision_id: str | None = None,
+    expected_workspace_revision: WorkspaceRevision | None = None,
+    expected_workspace_revision_sha256: str | None = None,
 ) -> NextStepPlan:
     """Derive one safe next action from validated evidence."""
 
@@ -874,12 +903,19 @@ def plan_next_step(
         if legacy_planning
         else workspace_trust_blockers(
             workspace_observation,
+            expected_workspace_id=(
+                OpaqueId(expected_workspace_id)
+                if expected_workspace_id is not None
+                else None
+            ),
             expected_revision_id=expected_workspace_revision_id,
             expected_manifest_sha256=(
                 current_context.current_manifest_sha256
                 if current_context is not None
                 else None
             ),
+            expected_revision=expected_workspace_revision,
+            expected_revision_sha256=expected_workspace_revision_sha256,
         )
     )
     prohibited = (
@@ -911,6 +947,8 @@ def plan_next_step(
                 blockers,
                 current_context,
                 workspace_observation,
+                expected_workspace_id,
+                expected_workspace_revision_sha256,
             ),
             workflow_mode=mode,
             action_type=action_type,
@@ -936,6 +974,8 @@ def plan_next_step(
                 if workspace_observation is not None
                 else None
             ),
+            workspace_id=expected_workspace_id,
+            workspace_revision_sha256=expected_workspace_revision_sha256,
             workspace_observation_sha256=(
                 str(hash_workspace_observation(workspace_observation))
                 if workspace_observation is not None
@@ -1944,6 +1984,12 @@ def next_step_to_mapping(
         payload["gate_context_sha256"] = plan.gate_context_sha256
         if plan.workspace_revision_id is not None:
             payload["workspace_revision_id"] = plan.workspace_revision_id
+        if plan.workspace_id is not None:
+            payload["workspace_id"] = plan.workspace_id
+        if plan.workspace_revision_sha256 is not None:
+            payload["workspace_revision_sha256"] = (
+                plan.workspace_revision_sha256
+            )
         if plan.workspace_observation_sha256 is not None:
             payload["workspace_observation_sha256"] = (
                 plan.workspace_observation_sha256

@@ -39,8 +39,26 @@ human-approval issuer. Those implementations remain W06/W04 responsibilities.
 - runtime revalidates manifest, bytes, authority, and idempotency immediately before mutation;
 - runtime revalidates the exact `GateContext`, plan digest, policy digest,
   workspace revision, observation digest, service identity, and kill switch;
+- request-declared risk is never authoritative: a versioned classifier computes
+  a minimum tier, every tier requires a trusted authority decision, and R4 adds
+  break-glass rather than replacing normal authority;
+- create/replace content is re-resolved by a trusted port and exact object ID,
+  digest, and byte length are bound into the execution authorization;
+- idempotency is an atomic trusted reservation over key, exact plan, and exact
+  workspace observation; a caller-supplied optional lookup cannot authorize;
 - out-of-band change sets workspace trust to `UNTRUSTED` and blocks generation/publish;
-- emergency manual mutation is R4 break-glass with two independent approvers, short expiry, snapshot, immutable audit, and reconciliation.
+- generation, publish, dispatch, reconcile, and mutation gates compare the
+  complete observed file set with a canonical trusted revision artifact and
+  bind workspace identity as well as revision/manifest strings;
+- emergency manual mutation is R4 break-glass with two independent approvers
+  whose trusted ledger records bind the exact canonical request scope, short
+  expiry, verified snapshot/incident/audit evidence, and reconciliation;
+- a successful receipt binds the exact execution authorization, pre/post
+  workspace observations, idempotency reservation, journal, and service
+  identity; immutable revision promotion independently rechecks the parent
+  revision digest and every resulting active file.
+- baseline and managed lineage cannot be conflated: genesis revisions require
+  explicit reconciliation evidence, while managed revisions require a parent.
 
 ## Consequences
 

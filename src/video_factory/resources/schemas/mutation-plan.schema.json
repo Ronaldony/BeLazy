@@ -14,6 +14,7 @@
     "before_workspace_revision_sha256",
     "before_manifest_sha256",
     "policy_bundle_sha256",
+    "risk_policy_version",
     "idempotency_key",
     "risk_tier",
     "operations",
@@ -30,6 +31,7 @@
     "before_workspace_revision_sha256": { "$ref": "artifact-common.schema.json#/$defs/sha256" },
     "before_manifest_sha256": { "$ref": "artifact-common.schema.json#/$defs/sha256" },
     "policy_bundle_sha256": { "$ref": "artifact-common.schema.json#/$defs/sha256" },
+    "risk_policy_version": { "const": "managed-mutation-risk-policy/1.0" },
     "idempotency_key": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" },
     "risk_tier": { "$ref": "artifact-common.schema.json#/$defs/mutationRiskTier" },
     "operations": {

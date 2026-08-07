@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 import re
 from typing import Protocol
@@ -14,12 +14,15 @@ from video_factory.approvals import (
     gate_context_to_mapping,
 )
 from video_factory.config.canonical import canonical_sha256
-from video_factory.domain import ArtifactReference, OpaqueId
+from video_factory.domain import ArtifactReference, HashDigest, OpaqueId
 from video_factory.json_boundary import parse_rfc3339_datetime
 from video_factory.mutation.contracts import (
     AuthenticatedHumanApproval,
     BreakGlassAuthorization,
-    IdempotencyRecord,
+    BreakGlassEvidenceVerification,
+    ContentObject,
+    ContentObjectObservation,
+    IdempotencyReservation,
     MutationExecutionAuthorization,
     MutationKind,
     MutationPlan,
@@ -27,6 +30,7 @@ from video_factory.mutation.contracts import (
     MutationRiskTier,
     PathNodeKind,
     WorkspaceObservation,
+    WorkspaceRevision,
     WorkspaceTrustState,
 )
 from video_factory.mutation.paths import (
@@ -37,8 +41,18 @@ from video_factory.mutation.paths import (
     require_managed_path,
     require_no_link_or_reparse_ancestor,
 )
-from video_factory.mutation.planner import MutationPlanError, validate_mutation_plan
-from video_factory.mutation.trust import workspace_trust_blockers
+from video_factory.mutation.planner import (
+    MutationPlanError,
+    break_glass_authorization_to_mapping,
+    break_glass_request_sha256,
+    mutation_execution_authorization_id,
+    validate_mutation_plan,
+    validate_mutation_execution_authorization,
+)
+from video_factory.mutation.trust import (
+    workspace_observation_sha256,
+    workspace_trust_blockers,
+)
 
 
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
@@ -61,18 +75,35 @@ class BreakGlassPolicy:
 
 
 class HumanApprovalAuthenticator(Protocol):
-    """Trusted identity/ledger boundary; validation never synthesizes a human."""
+    """Trusted current GRANTED/non-revoked human-ledger verification port."""
 
     def verify_current_human_approval(
         self,
         approval: AuthenticatedHumanApproval,
+        authorization: BreakGlassAuthorization,
         *,
+        expected_request_sha256: HashDigest,
+        current_context: GateContext,
         evaluated_at: datetime,
-    ) -> bool: ...
+    ) -> ArtifactReference | None: ...
+
+
+class BreakGlassEvidenceVerifier(Protocol):
+    """Trusted existence/immutability verifier for snapshot/incident/audit."""
+
+    def verify_current_evidence(
+        self,
+        authorization: BreakGlassAuthorization,
+        plan: MutationPlan,
+        *,
+        expected_request_sha256: HashDigest,
+        current_context: GateContext,
+        evaluated_at: datetime,
+    ) -> BreakGlassEvidenceVerification | None: ...
 
 
 class MutationAuthorityVerifier(Protocol):
-    """W04-compatible authority port for R2/R3 managed mutations."""
+    """W04-compatible trusted authority port required for every mutation."""
 
     def verify(
         self,
@@ -82,6 +113,31 @@ class MutationAuthorityVerifier(Protocol):
         current_context: GateContext,
         evaluated_at: datetime,
     ) -> ArtifactReference | None: ...
+
+
+class MutationContentResolver(Protocol):
+    """Trusted resolver for immutable new-content bytes."""
+
+    def resolve_current(
+        self,
+        content: ContentObject,
+        *,
+        evaluated_at: datetime,
+    ) -> ContentObjectObservation | None: ...
+
+
+class MutationIdempotencyLedger(Protocol):
+    """Trusted atomic lookup/reserve boundary for mutation idempotency."""
+
+    def reserve_current(
+        self,
+        plan: MutationPlan,
+        observation: WorkspaceObservation,
+        *,
+        workspace_observation_sha256: HashDigest,
+        service_identity: OpaqueId,
+        evaluated_at: datetime,
+    ) -> IdempotencyReservation | None: ...
 
 
 class ManagedMutationExecutorPort(Protocol):
@@ -125,9 +181,11 @@ def _validate_reference(reference: ArtifactReference, label: str) -> None:
 def require_trusted_workspace(
     observation: WorkspaceObservation,
     *,
-    expected_workspace_id: OpaqueId | None = None,
+    expected_workspace_id: OpaqueId,
     expected_revision_id: OpaqueId,
     expected_manifest_sha256: str,
+    expected_revision: WorkspaceRevision,
+    expected_revision_sha256: HashDigest,
     capability: str,
 ) -> None:
     """Shared generation/publish/mutation gate for observed workspace trust."""
@@ -137,6 +195,8 @@ def require_trusted_workspace(
         expected_workspace_id=expected_workspace_id,
         expected_revision_id=expected_revision_id,
         expected_manifest_sha256=expected_manifest_sha256,
+        expected_revision=expected_revision,
+        expected_revision_sha256=expected_revision_sha256,
     )
     if blockers:
         _reject(blockers[0], f"{capability} workspace trust check failed: {blockers[0]}")
@@ -195,9 +255,16 @@ def validate_break_glass_authorization(
     *,
     service_identity: OpaqueId,
     evaluated_at: datetime,
+    current_context: GateContext,
     policy: BreakGlassPolicy,
     authenticator: HumanApprovalAuthenticator,
-) -> None:
+    evidence_verifier: BreakGlassEvidenceVerifier,
+) -> tuple[
+    HashDigest,
+    HashDigest,
+    tuple[ArtifactReference, ...],
+    tuple[ArtifactReference, ...],
+]:
     """Validate human-created R4 evidence without creating or inferring it."""
 
     if not isinstance(authorization, BreakGlassAuthorization):
@@ -295,8 +362,15 @@ def validate_break_glass_authorization(
             "mutation.break_glass.operation_scope",
             "break-glass operation scope does not equal the plan scope",
         )
+    request_sha256 = break_glass_request_sha256(authorization)
     _validate_approval_reference_set(authorization.approvals)
+    human_verifications: list[ArtifactReference] = []
     for approval in authorization.approvals:
+        if approval.break_glass_request_sha256 != request_sha256:
+            _reject(
+                "mutation.break_glass.approval_binding",
+                "human approval is bound to another break-glass request",
+            )
         try:
             approved_at = parse_rfc3339_datetime(approval.approved_at)
         except ValueError:
@@ -309,20 +383,36 @@ def validate_break_glass_authorization(
                 "mutation.break_glass.future_approval",
                 "human approval is later than authority issuance or evaluation",
             )
-        if not authenticator.verify_current_human_approval(
+        verification = authenticator.verify_current_human_approval(
             approval,
+            authorization,
+            expected_request_sha256=request_sha256,
+            current_context=current_context,
             evaluated_at=evaluated_at,
-        ):
+        )
+        if verification is None:
             _reject(
                 "mutation.break_glass.human_authentication",
-                "a break-glass approver is not authenticated as a human",
+                "a human approval is not current, granted, and authenticated",
             )
+        _validate_reference(verification, "human_approval_verification")
+        human_verifications.append(verification)
+    human_verification_keys = {
+        (str(item.path), str(item.sha256), str(item.artifact_version))
+        for item in human_verifications
+    }
+    if len(human_verification_keys) != 2:
+        _reject(
+            "mutation.break_glass.human_verification_distinctness",
+            "human approval verification records must be distinct",
+        )
     _validate_reference(authorization.pre_change_snapshot, "pre_change_snapshot")
     if authorization.pre_change_snapshot.sha256 != observation.manifest_sha256:
         _reject(
             "mutation.break_glass.snapshot_mismatch",
             "pre-change snapshot does not bind the current manifest",
         )
+    _validate_reference(authorization.incident_record, "incident_record")
     _validate_reference(authorization.audit_record, "audit_record")
     for label, value in (
         ("authorization_id", authorization.authorization_id),
@@ -334,6 +424,46 @@ def validate_break_glass_authorization(
                 "mutation.break_glass.identifier",
                 f"{label} is invalid",
             )
+    evidence = evidence_verifier.verify_current_evidence(
+        authorization,
+        plan,
+        expected_request_sha256=request_sha256,
+        current_context=current_context,
+        evaluated_at=evaluated_at,
+    )
+    if (
+        not isinstance(evidence, BreakGlassEvidenceVerification)
+        or evidence.break_glass_request_sha256 != request_sha256
+    ):
+        _reject(
+            "mutation.break_glass.evidence_unverified",
+            "snapshot, incident, and audit evidence is not currently verified",
+        )
+    evidence_verifications = (
+        evidence.snapshot_verification,
+        evidence.incident_verification,
+        evidence.audit_verification,
+    )
+    for index, reference in enumerate(evidence_verifications):
+        _validate_reference(reference, f"break_glass_evidence_verifications[{index}]")
+    evidence_keys = {
+        (str(item.path), str(item.sha256), str(item.artifact_version))
+        for item in evidence_verifications
+    }
+    if len(evidence_keys) != 3:
+        _reject(
+            "mutation.break_glass.evidence_verification_distinctness",
+            "snapshot, incident, and audit verifications must be distinct",
+        )
+    authorization_sha256 = canonical_sha256(
+        break_glass_authorization_to_mapping(authorization)
+    )
+    return (
+        authorization_sha256,
+        request_sha256,
+        tuple(human_verifications),
+        evidence_verifications,
+    )
 
 
 class MutationPreSideEffectGuard:
@@ -344,15 +474,18 @@ class MutationPreSideEffectGuard:
         plan: MutationPlan,
         observation: WorkspaceObservation,
         *,
+        expected_revision: WorkspaceRevision,
         service_identity: OpaqueId,
         current_context: GateContext,
         evaluated_at: datetime,
         kill_switch_engaged: bool = False,
-        idempotency_record: IdempotencyRecord | None = None,
         authority_verifier: MutationAuthorityVerifier | None = None,
         break_glass: BreakGlassAuthorization | None = None,
         break_glass_policy: BreakGlassPolicy | None = None,
         human_authenticator: HumanApprovalAuthenticator | None = None,
+        break_glass_evidence_verifier: BreakGlassEvidenceVerifier | None = None,
+        content_resolver: MutationContentResolver | None = None,
+        idempotency_ledger: MutationIdempotencyLedger | None = None,
     ) -> MutationExecutionAuthorization:
         try:
             validate_mutation_plan(plan)
@@ -402,6 +535,8 @@ class MutationPreSideEffectGuard:
             expected_workspace_id=plan.workspace_id,
             expected_revision_id=plan.before_revision_id,
             expected_manifest_sha256=str(plan.before_manifest_sha256),
+            expected_revision=expected_revision,
+            expected_revision_sha256=plan.before_workspace_revision_sha256,
             capability="managed mutation",
         )
         if observation.workspace_id != plan.workspace_id:
@@ -477,99 +612,184 @@ class MutationPreSideEffectGuard:
                         f"{operation.destination_path}",
                     )
 
-        if idempotency_record is not None:
-            if idempotency_record.idempotency_key != plan.idempotency_key:
+        content_observations: list[ContentObjectObservation] = []
+        for operation in plan.operations:
+            if operation.new_content is None:
+                continue
+            if content_resolver is None:
                 _reject(
-                    "mutation.idempotency.record_key_mismatch",
-                    "idempotency record is bound to another key",
+                    "mutation.content.resolver_missing",
+                    "create/replace requires a trusted current content resolver",
                 )
-            if idempotency_record.plan_sha256 != plan.plan_sha256:
-                _reject(
-                    "mutation.idempotency.conflict",
-                    "the idempotency key is already bound to another plan digest",
-                )
-            _reject(
-                "mutation.idempotency.replay",
-                "the exact plan already has an idempotency record; resume or return its receipt",
-            )
-
-        authority_decision: ArtifactReference | None = None
-        if plan.risk_tier in {MutationRiskTier.R2, MutationRiskTier.R3}:
-            if authority_verifier is None:
-                _reject(
-                    "mutation.authority.verifier_missing",
-                    "R2/R3 mutation requires a trusted authority verifier",
-                )
-            authority_decision = authority_verifier.verify(
-                plan,
-                observation,
-                current_context=normalized_context,
+            content_observation = content_resolver.resolve_current(
+                operation.new_content,
                 evaluated_at=evaluated_at,
             )
-            if authority_decision is None:
+            if not isinstance(content_observation, ContentObjectObservation):
                 _reject(
-                    "mutation.authority.denied",
-                    "mutation authority was not granted",
+                    "mutation.content.unresolved",
+                    "planned content could not be resolved to current bytes",
                 )
-            _validate_reference(authority_decision, "authority_decision")
+            if (
+                content_observation.object_id != operation.new_content.object_id
+                or content_observation.exact_sha256
+                != operation.new_content.exact_sha256
+                or content_observation.byte_length != operation.new_content.byte_length
+            ):
+                _reject(
+                    "mutation.content.mismatch",
+                    "current content bytes do not match the exact planned object",
+                )
+            _validate_reference(
+                content_observation.resolver_evidence,
+                "content_resolver_evidence",
+            )
+            content_observations.append(content_observation)
+        content_identity = [
+            {
+                "object_id": str(item.object_id),
+                "exact_sha256": str(item.exact_sha256),
+                "byte_length": item.byte_length,
+                "resolver_evidence": {
+                    "path": str(item.resolver_evidence.path),
+                    "sha256": str(item.resolver_evidence.sha256),
+                    "artifact_version": str(item.resolver_evidence.artifact_version),
+                },
+            }
+            for item in sorted(
+                content_observations,
+                key=lambda value: (
+                    str(value.object_id),
+                    str(value.exact_sha256),
+                    value.byte_length,
+                ),
+            )
+        ]
+        content_observation_digest = canonical_sha256(content_identity)
+        content_verifications = tuple(
+            item.resolver_evidence for item in content_observations
+        )
+
+        if authority_verifier is None:
+            _reject(
+                "mutation.authority.verifier_missing",
+                "every mutation requires a trusted authority verifier",
+            )
+        authority_decision = authority_verifier.verify(
+            plan,
+            observation,
+            current_context=normalized_context,
+            evaluated_at=evaluated_at,
+        )
+        if authority_decision is None:
+            _reject(
+                "mutation.authority.denied",
+                "mutation authority was not granted",
+            )
+        _validate_reference(authority_decision, "authority_decision")
 
         break_glass_id: OpaqueId | None = None
+        break_glass_authorization_sha256: HashDigest | None = None
+        bound_break_glass_request_sha256: HashDigest | None = None
+        human_verifications: tuple[ArtifactReference, ...] = ()
+        evidence_verifications: tuple[ArtifactReference, ...] = ()
         if plan.risk_tier is MutationRiskTier.R4:
             if (
                 break_glass is None
                 or break_glass_policy is None
                 or human_authenticator is None
+                or break_glass_evidence_verifier is None
             ):
                 _reject(
                     "mutation.break_glass.missing",
                     "R4 mutation requires evidence, policy, and human authentication",
                 )
-            validate_break_glass_authorization(
+            (
+                break_glass_authorization_sha256,
+                bound_break_glass_request_sha256,
+                human_verifications,
+                evidence_verifications,
+            ) = validate_break_glass_authorization(
                 break_glass,
                 plan,
                 observation,
                 service_identity=service_identity,
                 evaluated_at=evaluated_at,
+                current_context=normalized_context,
                 policy=break_glass_policy,
                 authenticator=human_authenticator,
+                evidence_verifier=break_glass_evidence_verifier,
             )
             break_glass_id = break_glass.authorization_id
 
-        identity = {
-            "plan_id": str(plan.plan_id),
-            "plan_sha256": str(plan.plan_sha256),
-            "workspace_id": str(plan.workspace_id),
-            "revision_id": str(observation.revision_id),
-            "manifest_sha256": str(observation.manifest_sha256),
-            "idempotency_key": str(plan.idempotency_key),
-            "service_identity": str(service_identity),
-            "evaluated_at": evaluated_at.isoformat(),
-            "gate_context_sha256": str(gate_context_sha256(normalized_context)),
-            "authority_decision": (
-                {
-                    "path": str(authority_decision.path),
-                    "sha256": str(authority_decision.sha256),
-                    "artifact_version": str(authority_decision.artifact_version),
-                }
-                if authority_decision is not None
-                else None
-            ),
-            "break_glass_authorization_id": (
-                str(break_glass_id) if break_glass_id is not None else None
-            ),
-        }
-        digest = canonical_sha256(identity)
-        return MutationExecutionAuthorization(
-            authorization_id=OpaqueId(f"mutation-auth-{str(digest)[:20]}"),
+        current_observation_digest = workspace_observation_sha256(observation)
+        if idempotency_ledger is None:
+            _reject(
+                "mutation.idempotency.ledger_missing",
+                "managed mutation requires a trusted atomic idempotency ledger",
+            )
+        reservation = idempotency_ledger.reserve_current(
+            plan,
+            observation,
+            workspace_observation_sha256=current_observation_digest,
+            service_identity=service_identity,
+            evaluated_at=evaluated_at,
+        )
+        if not isinstance(reservation, IdempotencyReservation):
+            _reject(
+                "mutation.idempotency.reservation_missing",
+                "idempotency key could not be atomically reserved",
+            )
+        if reservation.idempotency_key != plan.idempotency_key:
+            _reject(
+                "mutation.idempotency.record_key_mismatch",
+                "idempotency reservation is bound to another key",
+            )
+        if reservation.plan_sha256 != plan.plan_sha256:
+            _reject(
+                "mutation.idempotency.conflict",
+                "the idempotency key is already bound to another plan digest",
+            )
+        if reservation.workspace_observation_sha256 != current_observation_digest:
+            _reject(
+                "mutation.idempotency.observation_mismatch",
+                "idempotency reservation is bound to another workspace observation",
+            )
+        _validate_reference(reservation.reservation_record, "idempotency_reservation")
+        if not reservation.newly_reserved or reservation.existing_receipt_id is not None:
+            _reject(
+                "mutation.idempotency.replay",
+                "the exact plan already has a reservation or receipt",
+            )
+
+        provisional = MutationExecutionAuthorization(
+            authorization_id=OpaqueId("mutation-auth-pending"),
             plan_id=plan.plan_id,
             plan_sha256=plan.plan_sha256,
             workspace_id=plan.workspace_id,
             revision_id=observation.revision_id,
+            workspace_revision_sha256=plan.before_workspace_revision_sha256,
             manifest_sha256=observation.manifest_sha256,
+            workspace_observation_sha256=current_observation_digest,
             idempotency_key=plan.idempotency_key,
+            idempotency_reservation=reservation.reservation_record,
+            content_observation_sha256=content_observation_digest,
+            content_verifications=content_verifications,
             service_identity=service_identity,
             evaluated_at=evaluated_at.isoformat(),
             gate_context_sha256=gate_context_sha256(normalized_context),
             authority_decision=authority_decision,
             break_glass_authorization_id=break_glass_id,
+            break_glass_authorization_sha256=break_glass_authorization_sha256,
+            break_glass_request_sha256=bound_break_glass_request_sha256,
+            human_approval_verifications=human_verifications,
+            break_glass_evidence_verifications=evidence_verifications,
         )
+        authorization = replace(
+            provisional,
+            authorization_id=mutation_execution_authorization_id(provisional),
+        )
+        try:
+            return validate_mutation_execution_authorization(authorization)
+        except MutationPlanError as error:
+            _reject(error.reason_code, str(error))

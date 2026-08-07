@@ -5,10 +5,13 @@
   "type": "object",
   "required": [
     "artifact_version", "receipt_id", "plan_id", "plan_sha256",
-    "workspace_id", "idempotency_key", "executor_identity", "started_at",
+    "workspace_id", "idempotency_key", "executor_identity",
+    "execution_authorization_id", "execution_authorization_sha256",
+    "before_workspace_observation_sha256", "after_workspace_observation_sha256",
+    "idempotency_reservation", "journal_record", "started_at",
     "completed_at", "status", "before_manifest_sha256",
     "after_manifest_sha256", "operation_results",
-    "rollback_or_reconciliation_required"
+    "rollback_or_reconciliation_required", "rollback_or_reconciliation_plan"
   ],
   "properties": {
     "artifact_version": { "const": "mutation-receipt/1.0" },
@@ -18,11 +21,17 @@
     "workspace_id": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" },
     "idempotency_key": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" },
     "executor_identity": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" },
+    "execution_authorization_id": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" },
+    "execution_authorization_sha256": { "$ref": "artifact-common.schema.json#/$defs/sha256" },
+    "before_workspace_observation_sha256": { "$ref": "artifact-common.schema.json#/$defs/sha256" },
+    "after_workspace_observation_sha256": { "$ref": "artifact-common.schema.json#/$defs/sha256" },
+    "idempotency_reservation": { "$ref": "artifact-common.schema.json#/$defs/boundArtifact" },
+    "journal_record": { "$ref": "artifact-common.schema.json#/$defs/boundArtifact" },
     "started_at": { "type": "string", "format": "date-time" },
     "completed_at": { "type": "string", "format": "date-time" },
     "status": {
       "type": "string",
-      "enum": ["SUCCEEDED", "PARTIALLY_APPLIED", "REJECTED", "FAILED"]
+      "enum": ["SUCCEEDED", "PARTIALLY_APPLIED", "REJECTED", "FAILED", "UNCERTAIN", "RECONCILED"]
     },
     "before_manifest_sha256": { "$ref": "artifact-common.schema.json#/$defs/sha256" },
     "after_manifest_sha256": { "$ref": "artifact-common.schema.json#/$defs/sha256" },
@@ -58,7 +67,13 @@
         "additionalProperties": false
       }
     },
-    "rollback_or_reconciliation_required": { "type": "boolean" }
+    "rollback_or_reconciliation_required": { "type": "boolean" },
+    "rollback_or_reconciliation_plan": {
+      "oneOf": [
+        { "type": "null" },
+        { "$ref": "artifact-common.schema.json#/$defs/boundArtifact" }
+      ]
+    }
   },
   "allOf": [
     {
@@ -66,11 +81,40 @@
       "then": {
         "properties": {
           "after_manifest_sha256": { "$ref": "artifact-common.schema.json#/$defs/sha256" },
-          "rollback_or_reconciliation_required": { "const": false }
+          "rollback_or_reconciliation_required": { "const": false },
+          "rollback_or_reconciliation_plan": { "type": "null" }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "status": { "const": "REJECTED" } } },
+      "then": {
+        "properties": {
+          "rollback_or_reconciliation_required": { "const": false },
+          "rollback_or_reconciliation_plan": { "type": "null" }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": { "enum": ["PARTIALLY_APPLIED", "FAILED", "UNCERTAIN"] }
         }
       },
-      "else": {
-        "properties": { "rollback_or_reconciliation_required": { "const": true } }
+      "then": {
+        "properties": {
+          "rollback_or_reconciliation_required": { "const": true },
+          "rollback_or_reconciliation_plan": { "$ref": "artifact-common.schema.json#/$defs/boundArtifact" }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "status": { "const": "RECONCILED" } } },
+      "then": {
+        "properties": {
+          "rollback_or_reconciliation_required": { "const": false },
+          "rollback_or_reconciliation_plan": { "$ref": "artifact-common.schema.json#/$defs/boundArtifact" }
+        }
       }
     }
   ],

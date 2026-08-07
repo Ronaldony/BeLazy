@@ -11,6 +11,7 @@ from .contracts import (
     DriftKind,
     DriftReport,
     MutationKind,
+    MutationExecutionAuthorization,
     MutationPlan,
     MutationReceipt,
     MutationReceiptStatus,
@@ -19,13 +20,28 @@ from .contracts import (
     RevisionEntry,
     WorkspaceObservation,
     WorkspaceRevision,
+    WorkspaceRevisionOrigin,
     WorkspaceTrustState,
 )
-from .paths import MutationPathError, observation_index, require_managed_path
+from .paths import (
+    MutationPathError,
+    observation_index,
+    require_managed_path,
+    require_no_link_or_reparse_ancestor,
+)
 from .planner import (
     MutationPlanError,
     validate_mutation_plan,
+    validate_mutation_execution_authorization,
     validate_mutation_receipt,
+    validate_workspace_revision,
+    mutation_execution_authorization_sha256,
+    workspace_revision_to_mapping,
+)
+from .trust import (
+    WorkspaceTrustError,
+    workspace_observation_mapping,
+    workspace_observation_sha256,
 )
 
 
@@ -61,14 +77,30 @@ def derive_workspace_revision(
     previous: WorkspaceRevision,
     plan: MutationPlan,
     receipt: MutationReceipt,
+    authorization: MutationExecutionAuthorization,
+    after_observation: WorkspaceObservation,
 ) -> WorkspaceRevision:
-    """Apply a successful receipt as immutable entries and logical tombstones."""
+    """Promote only an exactly authorized and byte-verified successful receipt."""
 
     try:
         validate_mutation_plan(plan)
         validate_mutation_receipt(receipt)
+        validate_workspace_revision(previous)
+        validate_mutation_execution_authorization(authorization)
     except MutationPlanError as error:
         raise WorkspaceRevisionError(error.reason_code, str(error)) from error
+    try:
+        workspace_observation_mapping(after_observation)
+    except WorkspaceTrustError as error:
+        raise WorkspaceRevisionError(error.reason_code, str(error)) from error
+    if (
+        canonical_sha256(workspace_revision_to_mapping(previous))
+        != plan.before_workspace_revision_sha256
+    ):
+        raise WorkspaceRevisionError(
+            "mutation.revision.parent_digest_mismatch",
+            "plan is bound to another complete parent revision",
+        )
     if previous.trust_state is not WorkspaceTrustState.TRUSTED:
         raise WorkspaceRevisionError(
             "mutation.revision.untrusted_parent",
@@ -99,6 +131,53 @@ def derive_workspace_revision(
             "mutation.revision.receipt_binding",
             "receipt is not bound to the exact plan and before manifest",
         )
+    if (
+        authorization.plan_id != plan.plan_id
+        or authorization.plan_sha256 != plan.plan_sha256
+        or authorization.workspace_id != plan.workspace_id
+        or authorization.revision_id != plan.before_revision_id
+        or authorization.workspace_revision_sha256
+        != plan.before_workspace_revision_sha256
+        or authorization.manifest_sha256 != plan.before_manifest_sha256
+        or authorization.idempotency_key != plan.idempotency_key
+    ):
+        raise WorkspaceRevisionError(
+            "mutation.revision.authorization_binding",
+            "execution authorization is not bound to the exact plan and parent state",
+        )
+    if (
+        receipt.execution_authorization_id != authorization.authorization_id
+        or receipt.execution_authorization_sha256
+        != mutation_execution_authorization_sha256(authorization)
+        or receipt.before_workspace_observation_sha256
+        != authorization.workspace_observation_sha256
+        or receipt.idempotency_reservation
+        != authorization.idempotency_reservation
+        or receipt.executor_identity != authorization.service_identity
+    ):
+        raise WorkspaceRevisionError(
+            "mutation.revision.receipt_authorization_binding",
+            "receipt does not preserve the exact execution authorization evidence",
+        )
+    if (
+        workspace_observation_sha256(after_observation)
+        != receipt.after_workspace_observation_sha256
+    ):
+        raise WorkspaceRevisionError(
+            "mutation.revision.after_observation_digest",
+            "receipt is bound to another after-workspace observation",
+        )
+    if (
+        after_observation.workspace_id != plan.workspace_id
+        or after_observation.revision_id != plan.before_revision_id
+        or after_observation.manifest_sha256 != receipt.after_manifest_sha256
+        or after_observation.trust_state is not WorkspaceTrustState.TRUSTED
+        or after_observation.complete is not True
+    ):
+        raise WorkspaceRevisionError(
+            "mutation.revision.after_observation_binding",
+            "after-workspace observation is incomplete, untrusted, or bound elsewhere",
+        )
     if receipt.status is not MutationReceiptStatus.SUCCEEDED:
         raise WorkspaceRevisionError(
             "mutation.revision.incomplete_receipt",
@@ -115,17 +194,23 @@ def derive_workspace_revision(
             "successful receipt must bind an after-manifest digest",
         )
     try:
-        parse_rfc3339_datetime(receipt.started_at)
+        started = parse_rfc3339_datetime(receipt.started_at)
         completed = parse_rfc3339_datetime(receipt.completed_at)
+        authorized_at = parse_rfc3339_datetime(authorization.evaluated_at)
     except ValueError as error:
         raise WorkspaceRevisionError(
             "mutation.revision.datetime",
             "receipt times must be RFC 3339 date-times",
         ) from error
-    if completed < parse_rfc3339_datetime(receipt.started_at):
+    if completed < started:
         raise WorkspaceRevisionError(
             "mutation.revision.time_order",
             "receipt completion precedes its start",
+        )
+    if authorized_at != started:
+        raise WorkspaceRevisionError(
+            "mutation.revision.authorization_time",
+            "receipt must start at the immediate authorization evaluation time",
         )
 
     result_by_id = {str(item.operation_id): item for item in receipt.operation_results}
@@ -237,6 +322,44 @@ def derive_workspace_revision(
                 operation_id=operation.operation_id,
             )
 
+    observed_files = {
+        str(item.path): item
+        for item in after_observation.entries
+        if item.node_kind is PathNodeKind.FILE
+    }
+    expected_active = {
+        path: entry for path, entry in latest.items() if not entry.tombstone
+    }
+    if set(observed_files) != set(expected_active):
+        raise WorkspaceRevisionError(
+            "mutation.revision.after_content_set",
+            "after-workspace files do not match the derived active revision",
+        )
+    for path, entry in expected_active.items():
+        observed = observed_files[path]
+        if (
+            observed.exact_sha256 != entry.content_sha256
+            or observed.byte_length != entry.byte_length
+        ):
+            raise WorkspaceRevisionError(
+                "mutation.revision.after_content_mismatch",
+                f"after-workspace bytes do not match the derived entry: {path}",
+            )
+    if any(
+        item.node_kind in {PathNodeKind.SYMLINK, PathNodeKind.REPARSE}
+        for item in after_observation.entries
+    ):
+        raise WorkspaceRevisionError(
+            "mutation.revision.after_link_or_reparse",
+            "after-workspace observation contains a link or reparse point",
+        )
+    try:
+        after_index = observation_index(after_observation.entries)
+        for path in expected_active:
+            require_no_link_or_reparse_ancestor(path, after_index)
+    except MutationPathError as error:
+        raise WorkspaceRevisionError(error.reason_code, str(error)) from error
+
     identity = {
         "workspace_id": str(plan.workspace_id),
         "parent_revision_id": str(previous.revision_id),
@@ -245,10 +368,12 @@ def derive_workspace_revision(
         "manifest_sha256": str(receipt.after_manifest_sha256),
     }
     revision_id = OpaqueId(f"revision-{str(canonical_sha256(identity))[:24]}")
-    return WorkspaceRevision(
+    revision = WorkspaceRevision(
         revision_id=revision_id,
         workspace_id=plan.workspace_id,
+        origin=WorkspaceRevisionOrigin.MANAGED_MUTATION,
         parent_revision_id=previous.revision_id,
+        reconciliation_evidence=None,
         manifest_sha256=receipt.after_manifest_sha256,
         created_at=receipt.completed_at,
         plan_id=plan.plan_id,
@@ -256,6 +381,10 @@ def derive_workspace_revision(
         trust_state=WorkspaceTrustState.TRUSTED,
         entries=tuple(previous.entries) + tuple(appended),
     )
+    try:
+        return validate_workspace_revision(revision)
+    except MutationPlanError as error:
+        raise WorkspaceRevisionError(error.reason_code, str(error)) from error
 
 
 def detect_workspace_drift(

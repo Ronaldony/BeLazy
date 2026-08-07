@@ -95,19 +95,39 @@ contracts, pure planner, guard, and runtime Protocol only; it contains no
 filesystem executor or approval issuer.
 
 - Create requires observed absence. Replace/delete/move require the exact
-  current source digest; move also requires destination absence.
+  current source digest; move also requires destination absence. The versioned
+  risk policy computes a non-downgradable effective tier: caller input may
+  raise risk but cannot lower it. Every tier requires a trusted authority
+  decision; R4 additionally requires break-glass evidence.
 - Every plan binds the workspace revision, before-manifest digest, serialized
   base revision digest, policy digest, request digest, and idempotency key.
 - Managed paths are canonical relative POSIX NFC strings and reject absolute,
   traversal, backslash, ADS/reserved-name, trailing-dot/space, case/Unicode
-  collision, symlink, and reparse aliases.
+  collision, symlink, reparse, missing ancestor, and non-directory ancestor
+  aliases, including Windows superscript-digit device names.
+- Create/replace authorization resolves the current immutable content object
+  and rechecks object ID, byte length, and digest. An atomic trusted
+  idempotency ledger reserves the exact key + plan + workspace observation;
+  missing reservations, conflicts, and replays fail closed.
 - Out-of-band drift produces `drift-report/1.0`, sets trust to `UNTRUSTED`, and
   invalidates dependent plans, authority, and QC while blocking generation and
-  publish until reconciliation.
+  publish until reconciliation. Production consumers require the exact
+  workspace ID, canonical `WorkspaceRevision` digest, manifest, and complete
+  file observation; a caller's `TRUSTED` label alone has no authority.
 - R4 break-glass is input evidence only: exact plan/workspace/revision/manifest
-  scope, two distinct currently authenticated human principals, bounded
-  validity, pre-change snapshot, incident/session/audit references, and required
-  post-change validation/reconciliation. Core never creates that evidence.
+  scope, two distinct currently authenticated human principals whose ledger
+  records bind the canonical break-glass request preimage, bounded validity,
+  and trusted snapshot/incident/audit verification. Core never creates that
+  evidence.
+- `MutationReceipt` binds the complete execution-authorization digest,
+  pre/post workspace-observation digests, atomic idempotency reservation,
+  durable journal record, executor identity, and an explicit recovery plan for
+  partial/failed/uncertain outcomes. Trusted revision promotion also receives
+  the exact authorization and post-execution observation and compares every
+  active file byte digest/length before creating immutable entries/tombstones.
+- Revision origin is explicit: a genesis `reconciled_baseline` has no parent
+  and requires immutable reconciliation evidence; a `managed_mutation`
+  revision requires a parent and cannot masquerade as a baseline.
 
 ### Breaking change (core 0.x — allowed under plan-only directive)
 

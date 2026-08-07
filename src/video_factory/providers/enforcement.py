@@ -15,12 +15,13 @@ from video_factory.approvals import (
     validate_evidence_binding,
 )
 from video_factory.config.canonical import canonical_sha256
-from video_factory.domain import CapabilityId
+from video_factory.domain import CapabilityId, OpaqueId
 from video_factory.engine.contracts import ExecutionMode
 from video_factory.engine.mode import mode_is_within_limit
 from video_factory.json_boundary import parse_rfc3339_datetime
 from video_factory.mutation import (
     WorkspaceObservation,
+    WorkspaceRevision,
     workspace_observation_sha256,
     workspace_trust_blockers,
 )
@@ -53,6 +54,8 @@ class OrchestrationAuthorization:
     evaluated_at: str | None = None
     valid_until: str | None = None
     workspace_revision_id: str | None = None
+    workspace_id: str | None = None
+    workspace_revision_sha256: str | None = None
     workspace_observation_sha256: str | None = None
 
 
@@ -135,7 +138,10 @@ class OrchestrationGuard:
         current_context: GateContext | None = None,
         evaluated_at: datetime | None = None,
         workspace_observation: WorkspaceObservation | None = None,
+        expected_workspace_id: str | None = None,
         expected_workspace_revision_id: str | None = None,
+        expected_workspace_revision: WorkspaceRevision | None = None,
+        expected_workspace_revision_sha256: str | None = None,
     ) -> OrchestrationAuthorization:
         if request.capability_id != policy.capability_id:
             _reject("request capability does not match orchestration policy")
@@ -182,8 +188,15 @@ class OrchestrationGuard:
                 _reject("timezone-aware evaluation time is required for authorization")
             workspace_blockers = workspace_trust_blockers(
                 workspace_observation,
+                expected_workspace_id=(
+                    OpaqueId(expected_workspace_id)
+                    if expected_workspace_id is not None
+                    else None
+                ),
                 expected_revision_id=expected_workspace_revision_id,
                 expected_manifest_sha256=normalized_context.current_manifest_sha256,
+                expected_revision=expected_workspace_revision,
+                expected_revision_sha256=expected_workspace_revision_sha256,
             )
             if workspace_blockers:
                 _reject(
@@ -229,6 +242,16 @@ class OrchestrationGuard:
                 and request.effective_execution_mode is not ExecutionMode.PREVIEW_ONLY
                 else None
             ),
+            workspace_id=(
+                expected_workspace_id
+                if request.effective_execution_mode is not ExecutionMode.PREVIEW_ONLY
+                else None
+            ),
+            workspace_revision_sha256=(
+                expected_workspace_revision_sha256
+                if request.effective_execution_mode is not ExecutionMode.PREVIEW_ONLY
+                else None
+            ),
             workspace_observation_sha256=normalized_workspace_sha256,
         )
 
@@ -242,7 +265,10 @@ def enforce_adapter_dispatch(
     current_context: GateContext | None = None,
     evaluated_at: datetime | None = None,
     workspace_observation: WorkspaceObservation | None = None,
+    expected_workspace_id: str | None = None,
     expected_workspace_revision_id: str | None = None,
+    expected_workspace_revision: WorkspaceRevision | None = None,
+    expected_workspace_revision_sha256: str | None = None,
 ) -> None:
     """ADR-004 point 4: recheck immediately before an external process."""
 
@@ -288,8 +314,15 @@ def enforce_adapter_dispatch(
         _reject("executor authorization is bound to another gate context")
     workspace_blockers = workspace_trust_blockers(
         workspace_observation,
+        expected_workspace_id=(
+            OpaqueId(expected_workspace_id)
+            if expected_workspace_id is not None
+            else None
+        ),
         expected_revision_id=expected_workspace_revision_id,
         expected_manifest_sha256=normalized_context.current_manifest_sha256,
+        expected_revision=expected_workspace_revision,
+        expected_revision_sha256=expected_workspace_revision_sha256,
     )
     if workspace_blockers:
         _reject(
@@ -297,8 +330,12 @@ def enforce_adapter_dispatch(
             + ", ".join(workspace_blockers)
         )
     assert workspace_observation is not None
+    if authorization.workspace_id != expected_workspace_id:
+        _reject("executor authorization is bound to another workspace")
     if authorization.workspace_revision_id != str(workspace_observation.revision_id):
         _reject("executor authorization is bound to another workspace revision")
+    if authorization.workspace_revision_sha256 != expected_workspace_revision_sha256:
+        _reject("executor authorization is bound to another workspace revision digest")
     if authorization.workspace_observation_sha256 != str(
         workspace_observation_sha256(workspace_observation)
     ):

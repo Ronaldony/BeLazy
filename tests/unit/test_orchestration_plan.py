@@ -10,7 +10,14 @@ import pytest
 
 from video_factory.artifacts import validate_artifact
 from video_factory.approvals import GateContext, gate_context_to_mapping
-from video_factory.domain import HashDigest, OpaqueId
+from video_factory.config import canonical_sha256
+from video_factory.domain import (
+    ArtifactReference,
+    ArtifactVersion,
+    HashDigest,
+    OpaqueId,
+    RelativeArtifactPath,
+)
 from video_factory.engine import (
     ArtifactSnapshot,
     OrchestrationPlanError,
@@ -21,7 +28,15 @@ from video_factory.engine import (
     observe_episode_state,
     plan_next_step as _plan_next_step,
 )
-from video_factory.mutation import WorkspaceObservation, WorkspaceTrustState
+from video_factory.mutation import (
+    WorkspaceObservation,
+    PathNodeKind,
+    PathObservation,
+    WorkspaceRevision,
+    WorkspaceRevisionOrigin,
+    WorkspaceTrustState,
+    workspace_revision_to_mapping,
+)
 
 
 RULES = "rules-test"
@@ -60,6 +75,30 @@ def _workspace_observation() -> WorkspaceObservation:
     )
 
 
+def _workspace_revision() -> WorkspaceRevision:
+    return WorkspaceRevision(
+        revision_id=OpaqueId("revision-a"),
+        workspace_id=OpaqueId("workspace-a"),
+        origin=WorkspaceRevisionOrigin.RECONCILED_BASELINE,
+        parent_revision_id=None,
+        reconciliation_evidence=ArtifactReference(
+            RelativeArtifactPath("reconciliation/baseline.json"),
+            HashDigest("9" * 64),
+            ArtifactVersion("workspace-reconciliation/1.0"),
+        ),
+        manifest_sha256=HashDigest("4" * 64),
+        created_at="2026-07-21T00:00:00Z",
+        plan_id=OpaqueId("baseline-plan"),
+        receipt_id=OpaqueId("baseline-receipt"),
+        trust_state=WorkspaceTrustState.TRUSTED,
+        entries=(),
+    )
+
+
+def _workspace_revision_sha256() -> str:
+    return str(canonical_sha256(workspace_revision_to_mapping(_workspace_revision())))
+
+
 def plan_next_step(observation, workflow_mode):
     """W00-compatible, non-authorizing planning overload."""
 
@@ -79,7 +118,10 @@ def _strict_plan_next_step(observation, workflow_mode):
         current_context=GATE_CONTEXT,
         evaluated_at=EVALUATED_AT,
         workspace_observation=_workspace_observation(),
+        expected_workspace_id="workspace-a",
         expected_workspace_revision_id="revision-a",
+        expected_workspace_revision=_workspace_revision(),
+        expected_workspace_revision_sha256=_workspace_revision_sha256(),
     )
 
 
@@ -90,7 +132,10 @@ def _strict_build_generation_readiness(observation, workflow_mode):
         current_context=GATE_CONTEXT,
         evaluated_at=EVALUATED_AT,
         workspace_observation=_workspace_observation(),
+        expected_workspace_id="workspace-a",
         expected_workspace_revision_id="revision-a",
+        expected_workspace_revision=_workspace_revision(),
+        expected_workspace_revision_sha256=_workspace_revision_sha256(),
     )
 
 
@@ -675,6 +720,48 @@ def test_generation_and_publish_planning_fail_closed_without_trusted_workspace()
     assert untrusted_plan.action_type == "reconcile_workspace"
     assert "mutation.workspace.untrusted" in untrusted_plan.blockers
 
+    drifted = replace(
+        _workspace_observation(),
+        entries=(
+            PathObservation(
+                RelativeArtifactPath("unplanned.txt"),
+                PathNodeKind.FILE,
+                HashDigest("a" * 64),
+                1,
+            ),
+        ),
+    )
+    drifted_readiness = _build_generation_readiness(
+        observation,
+        "standard",
+        current_context=GATE_CONTEXT,
+        evaluated_at=EVALUATED_AT,
+        workspace_observation=drifted,
+        expected_workspace_id="workspace-a",
+        expected_workspace_revision_id="revision-a",
+        expected_workspace_revision=_workspace_revision(),
+        expected_workspace_revision_sha256=_workspace_revision_sha256(),
+    )
+    assert drifted_readiness.authorization_ready is False
+    assert "mutation.workspace.content_drift" in drifted_readiness.blockers
+
+    foreign = replace(
+        _workspace_observation(), workspace_id=OpaqueId("workspace-foreign")
+    )
+    foreign_plan = _plan_next_step(
+        observation,
+        "standard",
+        current_context=GATE_CONTEXT,
+        evaluated_at=EVALUATED_AT,
+        workspace_observation=foreign,
+        expected_workspace_id="workspace-a",
+        expected_workspace_revision_id="revision-a",
+        expected_workspace_revision=_workspace_revision(),
+        expected_workspace_revision_sha256=_workspace_revision_sha256(),
+    )
+    assert foreign_plan.action_type == "reconcile_workspace"
+    assert "mutation.workspace.workspace_mismatch" in foreign_plan.blockers
+
 
 def test_generation_readiness_accepts_packet_2_1_end_to_end() -> None:
     snapshots = _generation_gate_snapshots(
@@ -1051,6 +1138,30 @@ def test_full_lineage_stops_at_ready_for_human_publish() -> None:
     assert plan.action_type == "ready_for_human_publish"
     assert plan.auto_execution is False
     assert "publish" in plan.prohibited_actions
+
+    drifted_publish = _plan_next_step(
+        observation,
+        "standard",
+        current_context=GATE_CONTEXT,
+        evaluated_at=EVALUATED_AT,
+        workspace_observation=replace(
+            _workspace_observation(),
+            entries=(
+                PathObservation(
+                    RelativeArtifactPath("unplanned.txt"),
+                    PathNodeKind.FILE,
+                    HashDigest("a" * 64),
+                    1,
+                ),
+            ),
+        ),
+        expected_workspace_id="workspace-a",
+        expected_workspace_revision_id="revision-a",
+        expected_workspace_revision=_workspace_revision(),
+        expected_workspace_revision_sha256=_workspace_revision_sha256(),
+    )
+    assert drifted_publish.action_type == "reconcile_workspace"
+    assert "mutation.workspace.content_drift" in drifted_publish.blockers
 
     lineage_without_publish = [
         *snapshots,

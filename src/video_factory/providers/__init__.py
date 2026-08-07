@@ -45,10 +45,13 @@ from .enforcement import (
 )
 from .registry import AdapterBinding, InMemoryCapabilityRegistry, RegistryError
 from .mutation import (
+    BreakGlassEvidenceVerifier,
     BreakGlassPolicy,
     HumanApprovalAuthenticator,
     ManagedMutationExecutorPort,
     MutationAuthorityVerifier,
+    MutationContentResolver,
+    MutationIdempotencyLedger,
     MutationPreSideEffectGuard,
     MutationRuntimeError,
     require_trusted_workspace,
@@ -73,9 +76,12 @@ __all__ = [
     "InMemoryCapabilityRegistry",
     "ModeEnforcementError",
     "BreakGlassPolicy",
+    "BreakGlassEvidenceVerifier",
     "HumanApprovalAuthenticator",
     "ManagedMutationExecutorPort",
     "MutationAuthorityVerifier",
+    "MutationContentResolver",
+    "MutationIdempotencyLedger",
     "MutationPreSideEffectGuard",
     "MutationRuntimeError",
     "NormalizedEvent",

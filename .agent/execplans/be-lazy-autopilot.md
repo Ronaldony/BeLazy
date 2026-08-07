@@ -26,7 +26,7 @@ evidence and no external side effects.
 | W00 Bootstrap/Baseline | passed | BOOT-001..005 | `d00856550f7f66618e3d365725e6b2d9054380c1` |
 | W01 Trust Boundary | passed | P0-PKG-001, P0-JSON-001, P0-AUTH-001 | `47d968d3cf8014573b349ad858d6a04bdf724f94` |
 | W02 Managed Mutation | passed | MUT-001..004 | `17107e815996e18032132a739140aeeae0b2716e` |
-| W03 Director/Blueprint | reviewing | BP-001, DIR-001, DIR-002, BP-002 | pending evidence checkpoint |
+| W03 Director/Blueprint | passed | BP-001, DIR-001, DIR-002, BP-002 | this checkpoint commit; exact hash recorded by recovery seal |
 | W04 Workflow/Authority | pending | WF-001, AUTH-001, AUTH-002, WF-002 | pending |
 | W05 Automation/Quality/Release | pending | SEL-001, QA-001, REL-001 | pending |
 | W06 Runtime/Migration | pending | RUN-001, RUN-002, MIG-001, REL-002 | pending |

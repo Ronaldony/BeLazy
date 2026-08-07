@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from decimal import Decimal
 
-from video_factory.artifacts import validate_artifact
+from video_factory.artifacts import validate_artifact_mapping
 from video_factory.domain import OpaqueId, RoleId
 from video_factory.engine.artifact_graph import (
     ArtifactSnapshot,
@@ -94,7 +94,7 @@ def evaluate_generation_feasibility(
     """Evaluate generic feasibility facts without calling a media provider."""
 
     for label, snapshot in (("packet", packet), ("storyboard", storyboard)):
-        validation = validate_artifact(snapshot.document)
+        validation = validate_artifact_mapping(snapshot.document)
         if not validation.ok:
             raise GenerationFeasibilityError(
                 f"{label} schema validation failed: "

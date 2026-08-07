@@ -9,8 +9,16 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from datetime import datetime
 from enum import StrEnum
 
+from video_factory.approvals import (
+    ApprovalRequirementError,
+    GateContext,
+    gate_context_from_mapping,
+    gate_context_sha256,
+    gate_context_to_mapping,
+)
 from video_factory.artifacts import ArtifactSchemaRegistry
 from video_factory.config import canonical_sha256
 from video_factory.continuity import (
@@ -18,6 +26,7 @@ from video_factory.continuity import (
     rejudge_continuity_qc,
 )
 from video_factory.domain import ArtifactReference, OpaqueId
+from video_factory.json_boundary import parse_rfc3339_datetime
 from video_factory.policy import (
     STAGE_FINAL_VIDEO,
     STAGE_GENERATION_PLAN,
@@ -117,6 +126,7 @@ class GenerationReadinessPlan:
     feasibility_review: ArtifactReference | None
     approval_evidence: ArtifactReference | None
     blockers: tuple[str, ...]
+    gate_context_sha256: str | None = None
 
     @property
     def packet_sha256(self) -> str | None:
@@ -142,6 +152,7 @@ class NextStepPlan:
     target_paths: tuple[str, ...]
     prohibited_actions: tuple[str, ...]
     observation: EpisodeStateObservation
+    gate_context_sha256: str | None = None
     transition_applied: bool = False
 
 
@@ -312,6 +323,70 @@ def _reference_identity(reference: ArtifactReference) -> tuple[str, str, str]:
     )
 
 
+def _approval_context_blockers(
+    document: Mapping[str, object],
+    *,
+    family: str,
+    current_context: GateContext | None,
+    evaluated_at: datetime | None,
+) -> tuple[str, ...]:
+    blockers: list[str] = []
+    if current_context is None:
+        return (f"{family} current gate context is missing",)
+    try:
+        current = gate_context_from_mapping(
+            gate_context_to_mapping(current_context)
+        )
+    except ApprovalRequirementError:
+        return (f"{family} current gate context is invalid",)
+
+    raw_context = document.get("gate_context")
+    if not isinstance(raw_context, Mapping):
+        blockers.append(f"{family} bound gate context is missing")
+    else:
+        try:
+            bound = gate_context_from_mapping(raw_context)
+        except ApprovalRequirementError:
+            blockers.append(f"{family} bound gate context is invalid")
+        else:
+            if bound != current:
+                blockers.append(f"{family} is bound to another material context")
+            if bound.effective_config_sha256 != current.effective_config_sha256:
+                blockers.append(f"{family} nested effective config does not match")
+
+    if document.get("effective_config_sha256") != str(
+        current.effective_config_sha256
+    ):
+        blockers.append(f"{family} effective config does not match current context")
+
+    if (
+        evaluated_at is None
+        or evaluated_at.tzinfo is None
+        or evaluated_at.utcoffset() is None
+    ):
+        blockers.append(f"{family} evaluation time is missing or timezone-naive")
+        return tuple(dict.fromkeys(blockers))
+
+    approved_raw = document.get("approved_at")
+    expires_raw = document.get("expires_at")
+    if not isinstance(approved_raw, str) or not isinstance(expires_raw, str):
+        blockers.append(f"{family} validity window is incomplete")
+        return tuple(dict.fromkeys(blockers))
+    try:
+        approved = parse_rfc3339_datetime(approved_raw)
+        expires = parse_rfc3339_datetime(expires_raw)
+    except ValueError:
+        blockers.append(f"{family} validity window is invalid")
+        return tuple(dict.fromkeys(blockers))
+    if approved >= expires:
+        blockers.append(f"{family} expiry is not after approval time")
+    if approved > evaluated_at:
+        blockers.append(f"{family} approval is not yet valid")
+    if evaluated_at >= expires:
+        blockers.append(f"{family} approval has expired")
+    return tuple(dict.fromkeys(blockers))
+
+
 def _approval_blockers(
     observation: EpisodeStateObservation,
     *,
@@ -319,6 +394,8 @@ def _approval_blockers(
     expected_version: str,
     expected_capability: str,
     required_artifacts: Sequence[ArtifactSnapshot],
+    current_context: GateContext | None,
+    evaluated_at: datetime | None,
 ) -> tuple[tuple[str, ...], ArtifactSnapshot | None]:
     approvals = observation.graph.family(family)
     if len(approvals) != 1:
@@ -342,7 +419,7 @@ def _approval_blockers(
         blockers.append(f"{family} capability_id does not match the gate")
 
     bound = doc.get("bound_artifacts")
-    actual: set[tuple[str, str, str]] = set()
+    actual_items: list[tuple[str, str, str]] = []
     if isinstance(bound, Sequence) and not isinstance(
         bound, (str, bytes, bytearray)
     ):
@@ -354,10 +431,21 @@ def _approval_blockers(
                     item.get("artifact_version"),
                 )
                 if all(isinstance(value, str) for value in identity):
-                    actual.add(identity)  # type: ignore[arg-type]
+                    actual_items.append(identity)  # type: ignore[arg-type]
     required = {_reference_identity(item.reference) for item in required_artifacts}
+    actual = set(actual_items)
+    if len(actual_items) != len(actual):
+        blockers.append(f"{family} bound_artifacts contain duplicate identities")
     if actual != required:
         blockers.append(f"{family} bound_artifacts do not exactly match current inputs")
+    blockers.extend(
+        _approval_context_blockers(
+            doc,
+            family=family,
+            current_context=current_context,
+            evaluated_at=evaluated_at,
+        )
+    )
     return tuple(blockers), approval
 
 
@@ -520,6 +608,9 @@ def _packet_contract_blockers(
 def build_generation_readiness(
     observation: EpisodeStateObservation,
     workflow_mode: str | WorkflowMode | None,
+    *,
+    current_context: GateContext | None = None,
+    evaluated_at: datetime | None = None,
 ) -> GenerationReadinessPlan:
     """Evaluate all generation gates without executing or approving anything."""
 
@@ -556,6 +647,8 @@ def build_generation_readiness(
                 expected_version="storyboard-approval/2.0",
                 expected_capability="storyboard_approval",
                 required_artifacts=(storyboard, *storyboard_reviews),
+                current_context=current_context,
+                evaluated_at=evaluated_at,
             )
             blockers.extend(approval_blockers)
     if storyboard is not None and packet is not None:
@@ -588,6 +681,8 @@ def build_generation_readiness(
                 expected_version="packet-approval/2.0",
                 expected_capability="generation_approval",
                 required_artifacts=required,
+                current_context=current_context,
+                evaluated_at=evaluated_at,
             )
             blockers.extend(approval_blockers)
     if policy.mode is WorkflowMode.RAPID:
@@ -606,6 +701,11 @@ def build_generation_readiness(
             feasibility.reference if feasibility is not None else None
         ),
         approval_evidence=approval.reference if approval is not None else None,
+        gate_context_sha256=(
+            str(gate_context_sha256(current_context))
+            if current_context is not None
+            else None
+        ),
         blockers=unique,
     )
 
@@ -615,6 +715,7 @@ def _plan_id(
     mode: WorkflowMode,
     action_type: str,
     blockers: Sequence[str],
+    current_context: GateContext | None,
 ) -> OpaqueId:
     identity = {
         "mode": mode.value,
@@ -630,12 +731,17 @@ def _plan_id(
             for item in observation.artifacts
         ],
     }
+    if current_context is not None:
+        identity["gate_context"] = gate_context_to_mapping(current_context)
     return OpaqueId(f"next-{str(canonical_sha256(identity))[:20]}")
 
 
 def plan_next_step(
     observation: EpisodeStateObservation,
     workflow_mode: str | WorkflowMode | None,
+    *,
+    current_context: GateContext | None = None,
+    evaluated_at: datetime | None = None,
 ) -> NextStepPlan:
     """Derive one safe next action from validated evidence."""
 
@@ -666,7 +772,9 @@ def plan_next_step(
         target_paths: tuple[str, ...] = (),
     ) -> NextStepPlan:
         return NextStepPlan(
-            next_step_id=_plan_id(observation, mode, action_type, blockers),
+            next_step_id=_plan_id(
+                observation, mode, action_type, blockers, current_context
+            ),
             workflow_mode=mode,
             action_type=action_type,
             instructions=instructions,
@@ -681,6 +789,11 @@ def plan_next_step(
             target_paths=target_paths,
             prohibited_actions=prohibited,
             observation=observation,
+            gate_context_sha256=(
+                str(gate_context_sha256(current_context))
+                if current_context is not None
+                else None
+            ),
             transition_applied=False,
         )
 
@@ -758,6 +871,8 @@ def plan_next_step(
             expected_version="storyboard-approval/2.0",
             expected_capability="storyboard_approval",
             required_artifacts=(storyboard, *storyboard_reviews),
+            current_context=current_context,
+            evaluated_at=evaluated_at,
         )
         if approval_blockers:
             return make_plan(
@@ -862,6 +977,8 @@ def plan_next_step(
             expected_version="packet-approval/2.0",
             expected_capability="generation_approval",
             required_artifacts=(packet, *packet_reviews, feasibility),
+            current_context=current_context,
+            evaluated_at=evaluated_at,
         )
         if approval_blockers:
             return make_plan(
@@ -1090,6 +1207,8 @@ def plan_next_step(
             expected_version="publish-approval/1.0",
             expected_capability="publish_approval",
             required_artifacts=(delivery, *final_reviews, metadata),
+            current_context=current_context,
+            evaluated_at=evaluated_at,
         )
         if publish_blockers:
             return make_plan(
@@ -1649,6 +1768,14 @@ def next_step_to_mapping(
             }
         },
     }
+    if plan.gate_context_sha256 is not None:
+        extension = document["extensions"]
+        assert isinstance(extension, dict)
+        orchestration = extension["video_factory.orchestration"]
+        assert isinstance(orchestration, dict)
+        payload = orchestration["payload"]
+        assert isinstance(payload, dict)
+        payload["gate_context_sha256"] = plan.gate_context_sha256
     if plan.next_phase is not None:
         document["next_phase"] = plan.next_phase
     if plan.next_procedure is not None:

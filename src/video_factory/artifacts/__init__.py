@@ -6,6 +6,7 @@ from .registry import (
     SchemaEntry,
     clear_default_registry,
     default_schemas_dir,
+    default_schemas_resource,
     get_default_registry,
 )
 from .validation import (
@@ -15,7 +16,10 @@ from .validation import (
     FieldError,
     FileValidationResult,
     validate_artifact,
+    validate_artifact_bytes,
     validate_artifact_directory,
+    validate_artifact_mapping,
+    validate_artifact_path,
 )
 
 __all__ = [
@@ -29,7 +33,11 @@ __all__ = [
     "SchemaEntry",
     "clear_default_registry",
     "default_schemas_dir",
+    "default_schemas_resource",
     "get_default_registry",
     "validate_artifact",
+    "validate_artifact_bytes",
     "validate_artifact_directory",
+    "validate_artifact_mapping",
+    "validate_artifact_path",
 ]

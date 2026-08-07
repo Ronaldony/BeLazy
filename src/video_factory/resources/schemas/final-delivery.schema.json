@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.video-factory.invalid/artifact/final-delivery.schema.json",
+  "title": "Hash-bound final delivery candidate",
+  "type": "object",
+  "required": [
+    "artifact_version",
+    "rules_version",
+    "episode_id",
+    "created_by",
+    "created_at",
+    "selected_output",
+    "lineage_refs",
+    "technical_qc_ref",
+    "technical_verdict"
+  ],
+  "properties": {
+    "artifact_version": {
+      "const": "final-delivery/1.0"
+    },
+    "rules_version": {
+      "$ref": "artifact-common.schema.json#/$defs/rulesVersion"
+    },
+    "episode_id": {
+      "$ref": "artifact-common.schema.json#/$defs/opaqueId"
+    },
+    "created_by": {
+      "$ref": "artifact-common.schema.json#/$defs/roleId"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "selected_output": {
+      "$ref": "artifact-common.schema.json#/$defs/boundArtifact"
+    },
+    "lineage_refs": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "artifact-common.schema.json#/$defs/boundArtifact"
+      }
+    },
+    "technical_qc_ref": {
+      "$ref": "artifact-common.schema.json#/$defs/boundArtifact"
+    },
+    "technical_verdict": {
+      "type": "string",
+      "enum": [
+        "pass",
+        "warn"
+      ]
+    },
+    "extensions": {
+      "$ref": "artifact-common.schema.json#/$defs/extensions"
+    }
+  },
+  "additionalProperties": false
+}

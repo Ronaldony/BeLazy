@@ -8,6 +8,12 @@ import json
 import re
 from typing import Iterable
 
+from video_factory.json_boundary import (
+    JsonInputError,
+    parse_json_bytes,
+    require_json_object,
+)
+
 from .models import BrandEntity, CharacterData, FixedSentence, LocationData
 
 
@@ -269,11 +275,13 @@ def rendered_snapshot(rendered: bytes) -> ProjectionSnapshot:
         if metadata_end < 0:
             raise ProjectionFormatError("unterminated projection block metadata")
         try:
-            metadata = json.loads(rendered[metadata_start:metadata_end].decode("utf-8"))
-        except (UnicodeDecodeError, json.JSONDecodeError) as error:
-            raise ProjectionFormatError("invalid projection block metadata") from error
-        if not isinstance(metadata, dict):
-            raise ProjectionFormatError("projection block metadata must be an object")
+            metadata = require_json_object(
+                parse_json_bytes(rendered[metadata_start:metadata_end])
+            )
+        except JsonInputError as error:
+            raise ProjectionFormatError(
+                f"invalid projection block metadata [{error.code.value}]"
+            ) from error
         payload_open = metadata_end + len(_BLOCK_SUFFIX)
         opener_end = rendered.find(b"\n", payload_open)
         if opener_end < 0:

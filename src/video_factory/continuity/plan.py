@@ -6,7 +6,7 @@ from collections.abc import Mapping, Sequence
 from decimal import Decimal, InvalidOperation
 import math
 
-from video_factory.artifacts import validate_artifact
+from video_factory.artifacts import validate_artifact_mapping
 from video_factory.config import canonical_sha256
 from video_factory.domain import (
     ArtifactReference,
@@ -680,7 +680,7 @@ def rejudge_continuity_qc(
 ) -> ContinuityQCJudgment:
     """Recompute a QC verdict from the serialized document alone."""
 
-    validation = validate_artifact(document)
+    validation = validate_artifact_mapping(document)
     if not validation.ok:
         raise ContinuityPlanError(
             "continuity QC schema validation failed: "

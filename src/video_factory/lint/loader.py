@@ -2,9 +2,14 @@
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import Mapping
+
+from video_factory.json_boundary import (
+    JsonInputError,
+    parse_json_path,
+    require_json_object,
+)
 
 from .rules import LintRuleSet, rules_from_mapping
 
@@ -23,11 +28,6 @@ def load_lint_rules_file(path: Path | str) -> LintRuleSet:
     """
 
     source = Path(path)
-    try:
-        text = source.read_text(encoding="utf-8")
-    except OSError as error:
-        raise LintRuleLoadError(f"cannot read lint rules: {source}") from error
-
     suffix = source.suffix.lower()
     if suffix not in {".json", ".yaml", ".yml"}:
         raise LintRuleLoadError(
@@ -35,17 +35,16 @@ def load_lint_rules_file(path: Path | str) -> LintRuleSet:
         )
 
     try:
-        data = json.loads(text)
-    except json.JSONDecodeError as error:
+        data = require_json_object(parse_json_path(source), source=str(source))
+    except JsonInputError as error:
         if suffix in {".yaml", ".yml"}:
             raise LintRuleLoadError(
                 f"YAML lint rules must be JSON-compatible (stdlib-only core); "
-                f"convert to JSON before load: {source}: {error}"
+                f"convert to JSON before load: {source}: {error.code.value}: {error.detail}"
             ) from error
-        raise LintRuleLoadError(f"invalid lint rules JSON: {source}: {error}") from error
-
-    if not isinstance(data, Mapping):
-        raise LintRuleLoadError("lint rule file root must be a JSON object")
+        raise LintRuleLoadError(
+            f"lint rules JSON rejected [{error.code.value}]: {source}: {error.detail}"
+        ) from error
 
     try:
         return rules_from_mapping(data)

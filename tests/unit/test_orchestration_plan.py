@@ -3,19 +3,22 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from datetime import datetime, timezone
 
 import pytest
 
 from video_factory.artifacts import validate_artifact
+from video_factory.approvals import GateContext, gate_context_to_mapping
+from video_factory.domain import HashDigest
 from video_factory.engine import (
     ArtifactSnapshot,
     OrchestrationPlanError,
     artifact_reference_to_mapping,
-    build_generation_readiness,
+    build_generation_readiness as _build_generation_readiness,
     make_artifact_snapshot,
     next_step_to_mapping,
     observe_episode_state,
-    plan_next_step,
+    plan_next_step as _plan_next_step,
 )
 
 
@@ -23,6 +26,43 @@ RULES = "rules-test"
 EPISODE = "ep-synth"
 HASH_A = "a" * 64
 HASH_B = "b" * 64
+GATE_CONTEXT = GateContext(
+    workflow_definition_sha256=HashDigest("1" * 64),
+    policy_bundle_sha256=HashDigest("2" * 64),
+    rules_bundle_sha256=HashDigest("3" * 64),
+    effective_config_sha256=HashDigest(HASH_B),
+    current_manifest_sha256=HashDigest("4" * 64),
+    evidence_graph_sha256=HashDigest("5" * 64),
+    executable_plan_sha256=HashDigest("6" * 64),
+)
+EVALUATED_AT = datetime(2026, 7, 21, 4, 45, tzinfo=timezone.utc)
+CONTEXT_FIELDS = (
+    "workflow_definition_sha256",
+    "policy_bundle_sha256",
+    "rules_bundle_sha256",
+    "effective_config_sha256",
+    "current_manifest_sha256",
+    "evidence_graph_sha256",
+    "executable_plan_sha256",
+)
+
+
+def plan_next_step(observation, workflow_mode):
+    return _plan_next_step(
+        observation,
+        workflow_mode,
+        current_context=GATE_CONTEXT,
+        evaluated_at=EVALUATED_AT,
+    )
+
+
+def build_generation_readiness(observation, workflow_mode):
+    return _build_generation_readiness(
+        observation,
+        workflow_mode,
+        current_context=GATE_CONTEXT,
+        evaluated_at=EVALUATED_AT,
+    )
 
 
 def _snapshot(path: str, document: dict[str, object]) -> ArtifactSnapshot:
@@ -122,6 +162,8 @@ def _approval(
                 artifact_reference_to_mapping(item.reference) for item in bound
             ],
             "effective_config_sha256": HASH_B,
+            "gate_context": gate_context_to_mapping(GATE_CONTEXT),
+            "expires_at": "2026-07-21T06:00:00Z",
         },
     )
 
@@ -282,6 +324,25 @@ def _generation_gate_snapshots(
             )
         )
     return snapshots
+
+
+def _mutate_approval_context(
+    snapshots: list[ArtifactSnapshot],
+    family: str,
+    field: str,
+    value: str = "e" * 64,
+) -> list[ArtifactSnapshot]:
+    changed = list(snapshots)
+    approval = next(item for item in changed if item.family == family)
+    document = deepcopy(dict(approval.document))
+    context = document.get("gate_context")
+    assert isinstance(context, dict)
+    context[field] = value
+    if field == "effective_config_sha256":
+        document["effective_config_sha256"] = value
+    replacement = _snapshot(str(approval.path), document)
+    changed[changed.index(approval)] = replacement
+    return changed
 
 
 def _two_shot_generation_gate_snapshots() -> list[ArtifactSnapshot]:
@@ -565,6 +626,96 @@ def test_generation_readiness_accepts_packet_2_1_end_to_end() -> None:
     )
 
 
+@pytest.mark.parametrize("field", CONTEXT_FIELDS)
+@pytest.mark.parametrize(
+    ("family", "expected_action"),
+    [
+        ("storyboard-approval", "approve_storyboard"),
+        ("packet-approval", "approve_generation"),
+    ],
+)
+def test_storyboard_and_generation_reject_every_context_digest_mismatch(
+    field: str,
+    family: str,
+    expected_action: str,
+) -> None:
+    snapshots = _mutate_approval_context(
+        _generation_gate_snapshots(), family, field
+    )
+    observation = observe_episode_state(snapshots)
+    plan = _plan_next_step(
+        observation,
+        "standard",
+        current_context=GATE_CONTEXT,
+        evaluated_at=EVALUATED_AT,
+    )
+    assert plan.action_type == expected_action
+    assert any("context" in blocker for blocker in plan.blockers)
+
+
+def test_missing_expired_and_duplicate_approval_contexts_fail_closed() -> None:
+    snapshots = _generation_gate_snapshots()
+    packet_approval = next(
+        item for item in snapshots if item.family == "packet-approval"
+    )
+
+    missing_context = _plan_next_step(
+        observe_episode_state(snapshots),
+        "standard",
+        current_context=None,
+        evaluated_at=EVALUATED_AT,
+    )
+    assert missing_context.action_type == "approve_storyboard"
+
+    expired_document = deepcopy(dict(packet_approval.document))
+    expired_document["expires_at"] = "2026-07-21T02:00:00Z"
+    expired = _snapshot(str(packet_approval.path), expired_document)
+    expired_snapshots = list(snapshots)
+    expired_snapshots[expired_snapshots.index(packet_approval)] = expired
+    expired_plan = plan_next_step(
+        observe_episode_state(expired_snapshots), "standard"
+    )
+    assert expired_plan.action_type == "approve_generation"
+    assert any("expired" in blocker for blocker in expired_plan.blockers)
+
+    duplicate_document = deepcopy(dict(packet_approval.document))
+    bound = duplicate_document["bound_artifacts"]
+    assert isinstance(bound, list)
+    bound.append(deepcopy(bound[0]))
+    duplicate = _snapshot(str(packet_approval.path), duplicate_document)
+    duplicate_snapshots = list(snapshots)
+    duplicate_snapshots[duplicate_snapshots.index(packet_approval)] = duplicate
+    duplicate_plan = plan_next_step(
+        observe_episode_state(duplicate_snapshots), "standard"
+    )
+    assert duplicate_plan.action_type == "approve_generation"
+    assert any("duplicate" in blocker for blocker in duplicate_plan.blockers)
+
+
+def test_plan_identity_changes_when_material_context_changes() -> None:
+    observation = observe_episode_state([_brief()])
+    first = _plan_next_step(
+        observation,
+        "standard",
+        current_context=GATE_CONTEXT,
+        evaluated_at=EVALUATED_AT,
+    )
+    changed = GateContext(
+        **{
+            **gate_context_to_mapping(GATE_CONTEXT),
+            "executable_plan_sha256": HashDigest("e" * 64),
+        }
+    )
+    second = _plan_next_step(
+        observation,
+        "standard",
+        current_context=changed,
+        evaluated_at=EVALUATED_AT,
+    )
+    assert first.next_step_id != second.next_step_id
+    assert first.gate_context_sha256 != second.gate_context_sha256
+
+
 def test_multishot_pipeline_requires_current_continuity_qc() -> None:
     snapshots = _two_shot_generation_gate_snapshots()
     shot_qcs = _two_shot_qcs()
@@ -800,6 +951,8 @@ def test_full_lineage_stops_at_ready_for_human_publish() -> None:
                 for item in (delivery, final_review, metadata)
             ],
             "effective_config_sha256": HASH_B,
+            "gate_context": gate_context_to_mapping(GATE_CONTEXT),
+            "expires_at": "2026-07-21T05:00:00Z",
         },
     )
     observation = observe_episode_state(
@@ -821,6 +974,32 @@ def test_full_lineage_stops_at_ready_for_human_publish() -> None:
     assert plan.action_type == "ready_for_human_publish"
     assert plan.auto_execution is False
     assert "publish" in plan.prohibited_actions
+
+    lineage_without_publish = [
+        *snapshots,
+        shot_qc,
+        ranking,
+        edit_manifest,
+        rough_cut,
+        final_qc,
+        delivery,
+        final_review,
+        metadata,
+    ]
+    for field in CONTEXT_FIELDS:
+        stale_document = deepcopy(dict(publish_approval.document))
+        context = stale_document.get("gate_context")
+        assert isinstance(context, dict)
+        context[field] = "e" * 64
+        if field == "effective_config_sha256":
+            stale_document["effective_config_sha256"] = "e" * 64
+        stale_publish = _snapshot(str(publish_approval.path), stale_document)
+        stale_plan = plan_next_step(
+            observe_episode_state([*lineage_without_publish, stale_publish]),
+            "standard",
+        )
+        assert stale_plan.action_type == "approve_publish"
+        assert any("context" in blocker for blocker in stale_plan.blockers)
 
 
 def test_stale_storyboard_approval_does_not_grant_current_storyboard() -> None:

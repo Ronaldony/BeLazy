@@ -1,0 +1,164 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.video-factory.invalid/contract/encode-request.schema.json",
+  "title": "Encode request (plan only — never executed by core)",
+  "description": "Contract schema for EncodeRequest. Not a production artifact family; no artifact_version const, so the artifact registry does not auto-register this file.",
+  "type": "object",
+  "required": [
+    "profile_id",
+    "inputs",
+    "output_path"
+  ],
+  "properties": {
+    "profile_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Opaque profile id (e.g. rough_cut, final, or channel override)"
+    },
+    "inputs": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "path",
+          "sha256",
+          "role"
+        ],
+        "properties": {
+          "path": {
+            "$ref": "artifact-common.schema.json#/$defs/relativePath"
+          },
+          "sha256": {
+            "$ref": "artifact-common.schema.json#/$defs/sha256"
+          },
+          "duration_sec": {
+            "type": "number",
+            "exclusiveMinimum": 0
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "video",
+              "audio",
+              "subtitle",
+              "overlay"
+            ]
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "output_path": {
+      "$ref": "artifact-common.schema.json#/$defs/relativePath"
+    },
+    "output_spec": {
+      "type": "object",
+      "required": [
+        "width",
+        "height"
+      ],
+      "properties": {
+        "width": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "height": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "fps": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "video_codec": {
+          "type": "string",
+          "minLength": 1
+        },
+        "audio_codec": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "audio_bitrate": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "audio_sample_rate": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "audio_channels": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "pixel_format": {
+          "type": "string",
+          "minLength": 1
+        },
+        "video_preset": {
+          "type": "string",
+          "minLength": 1
+        },
+        "video_crf": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "container": {
+          "type": "string",
+          "minLength": 1
+        },
+        "movflags_faststart": {
+          "type": "boolean"
+        },
+        "include_audio": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "binary": {
+      "type": "string",
+      "minLength": 1
+    },
+    "overwrite_policy": {
+      "type": "string",
+      "enum": [
+        "refuse",
+        "allow_version_suffix"
+      ]
+    },
+    "output_exists": {
+      "type": "boolean",
+      "description": "Caller reports whether output path already exists; builder never stats the filesystem by itself"
+    },
+    "version_suffix": {
+      "type": "string"
+    },
+    "filter_extra": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "audio_filter_extra": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "shortest": {
+      "type": "boolean"
+    }
+  },
+  "additionalProperties": false
+}

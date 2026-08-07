@@ -7,7 +7,7 @@ import hashlib
 import json
 from typing import Any
 
-from video_factory.artifacts import validate_artifact
+from video_factory.artifacts import validate_artifact_mapping
 from video_factory.config import CanonicalizationError, canonical_json_bytes
 from video_factory.engine.orchestration import GenerationReadinessPlan
 
@@ -58,7 +58,7 @@ def render_generation_sheet(
         raise GenerationSheetError(
             f"unsupported artifact_version for generation sheet: {artifact_version!r}"
         )
-    validation = validate_artifact(packet_doc)
+    validation = validate_artifact_mapping(packet_doc)
     if not validation.ok:
         raise GenerationSheetError(
             "generation packet schema validation failed: "

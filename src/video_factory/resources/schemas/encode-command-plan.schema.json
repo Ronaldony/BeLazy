@@ -1,0 +1,110 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.video-factory.invalid/contract/encode-command-plan.schema.json",
+  "title": "Encode command plan (never executed by core)",
+  "description": "Contract schema for EncodeCommandPlan. executed is always false. Not a production artifact family.",
+  "type": "object",
+  "required": [
+    "status",
+    "profile_id",
+    "argv",
+    "command_string",
+    "output_path",
+    "executed"
+  ],
+  "properties": {
+    "status": {
+      "type": "string",
+      "enum": [
+        "planned",
+        "rejected_output_exists",
+        "rejected_invalid"
+      ]
+    },
+    "profile_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "argv": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "command_string": {
+      "type": "string"
+    },
+    "output_path": {
+      "$ref": "artifact-common.schema.json#/$defs/relativePath"
+    },
+    "executed": {
+      "const": false,
+      "description": "Core never executes encode plans; this field is locked false"
+    },
+    "rejection_reason": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "profile_kind": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "concat",
+        "single_reencode",
+        "mux_reencode",
+        null
+      ]
+    },
+    "post_encode_checks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "check_id",
+          "measurement_id",
+          "comparison",
+          "operands",
+          "severity"
+        ],
+        "properties": {
+          "check_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "measurement_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "comparison": {
+            "type": "string",
+            "minLength": 1
+          },
+          "operands": {
+            "type": "array"
+          },
+          "severity": {
+            "type": "string",
+            "enum": [
+              "info",
+              "warning",
+              "error"
+            ]
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "fallback_profile_ids": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    }
+  },
+  "additionalProperties": false
+}

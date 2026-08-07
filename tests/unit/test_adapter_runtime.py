@@ -1,12 +1,20 @@
 from __future__ import annotations
 
 import ast
+from dataclasses import replace
+from datetime import datetime, timezone
 from decimal import Decimal
 from pathlib import Path
 
 import pytest
 
 from video_factory import CORE_CONTRACT_VERSION, __version__
+from video_factory.approvals import (
+    ApprovalEvidence,
+    ApprovalState,
+    GateContext,
+    build_approval_requirement,
+)
 from video_factory.config import (
     CONFIG_CONTRACT_VERSION,
     ConfigLayer,
@@ -69,6 +77,37 @@ INPUT_VERSION = ArtifactVersion("input/1.0")
 OUTPUT_VERSION = ArtifactVersion("output/1.0")
 MEDIA_CAPABILITY = CapabilityId("media.video.generate")
 TASK_CAPABILITY = CapabilityId("artifact.review")
+
+
+def _gate_context() -> GateContext:
+    return GateContext(
+        workflow_definition_sha256=HashDigest("1" * 64),
+        policy_bundle_sha256=HashDigest("2" * 64),
+        rules_bundle_sha256=HashDigest("3" * 64),
+        effective_config_sha256=HashDigest("b" * 64),
+        current_manifest_sha256=HashDigest("4" * 64),
+        evidence_graph_sha256=HashDigest("5" * 64),
+        executable_plan_sha256=HashDigest("6" * 64),
+    )
+
+
+def _approval_evidence(context: GateContext, *, expires_at: str = "2026-07-21T02:00:00Z") -> ApprovalEvidence:
+    requirement = build_approval_requirement(
+        str(MEDIA_CAPABILITY),
+        [_artifact()],
+        "b" * 64,
+        capability_id=str(MEDIA_CAPABILITY),
+        gate_context=context,
+    )
+    return ApprovalEvidence(
+        evidence_id=OpaqueId("evidence-adapter"),
+        requirement=requirement,
+        state=ApprovalState.GRANTED,
+        approver_role=RoleId("human-operator"),
+        created_at="2026-07-21T00:00:00Z",
+        record_sha256=HashDigest("c" * 64),
+        expires_at=expires_at,
+    )
 
 
 def _artifact(path: str = "artifacts/input.json") -> ArtifactReference:
@@ -335,6 +374,90 @@ def test_orchestrator_is_mode_enforcement_point_two_before_evidence_or_selection
     )
     with pytest.raises(ModeEnforcementError, match="evidence"):
         OrchestrationGuard().authorize(human_request, human_policy)
+
+
+def test_orchestration_guard_binds_evidence_to_current_context_and_expiry() -> None:
+    request = _request(MEDIA_CAPABILITY, ExecutionMode.HUMAN_ONLY, key="human-bound")
+    policy = OrchestrationPolicy(
+        MEDIA_CAPABILITY,
+        AdapterKind.PROVIDER,
+        ExecutionMode.HUMAN_ONLY,
+        True,
+    )
+    context = _gate_context()
+    evaluation = datetime(2026, 7, 21, 1, 0, tzinfo=timezone.utc)
+    authorization = OrchestrationGuard().authorize(
+        request,
+        policy,
+        _approval_evidence(context),
+        current_context=context,
+        evaluated_at=evaluation,
+    )
+    assert authorization.human_evidence_id == "evidence-adapter"
+    assert authorization.gate_context_sha256 is not None
+
+    with pytest.raises(ModeEnforcementError, match="expired"):
+        OrchestrationGuard().authorize(
+            request,
+            policy,
+            _approval_evidence(context, expires_at="2026-07-21T01:00:00Z"),
+            current_context=context,
+            evaluated_at=evaluation,
+        )
+
+
+@pytest.mark.parametrize(
+    "field",
+    [
+        "workflow_definition_sha256",
+        "policy_bundle_sha256",
+        "rules_bundle_sha256",
+        "effective_config_sha256",
+        "current_manifest_sha256",
+        "evidence_graph_sha256",
+        "executable_plan_sha256",
+    ],
+)
+def test_orchestration_guard_rejects_every_stale_context_digest(field: str) -> None:
+    request = _request(MEDIA_CAPABILITY, ExecutionMode.HUMAN_ONLY, key=f"stale-{field}")
+    policy = OrchestrationPolicy(
+        MEDIA_CAPABILITY,
+        AdapterKind.PROVIDER,
+        ExecutionMode.HUMAN_ONLY,
+        True,
+    )
+    current = _gate_context()
+    stale = replace(current, **{field: HashDigest("e" * 64)})
+    evidence_context = stale
+    if field == "effective_config_sha256":
+        # Keep the evidence requirement internally consistent while the current
+        # request remains bound to the real effective config.
+        requirement = build_approval_requirement(
+            str(MEDIA_CAPABILITY),
+            [_artifact()],
+            "e" * 64,
+            capability_id=str(MEDIA_CAPABILITY),
+            gate_context=stale,
+        )
+        evidence = ApprovalEvidence(
+            evidence_id=OpaqueId("evidence-stale-config"),
+            requirement=requirement,
+            state=ApprovalState.GRANTED,
+            approver_role=RoleId("human-operator"),
+            created_at="2026-07-21T00:00:00Z",
+            record_sha256=HashDigest("c" * 64),
+            expires_at="2026-07-21T02:00:00Z",
+        )
+    else:
+        evidence = _approval_evidence(evidence_context)
+    with pytest.raises(ModeEnforcementError):
+        OrchestrationGuard().authorize(
+            request,
+            policy,
+            evidence,
+            current_context=current,
+            evaluated_at=datetime(2026, 7, 21, 1, 0, tzinfo=timezone.utc),
+        )
 
 
 def test_registry_is_mode_enforcement_point_three_for_capability_and_kind() -> None:

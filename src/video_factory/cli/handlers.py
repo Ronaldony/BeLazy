@@ -7,8 +7,8 @@ external generation or publish actions.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
-import json
 import platform
 import shutil
 from typing import Mapping, Sequence
@@ -17,16 +17,19 @@ import video_factory
 from video_factory.approvals import (
     ApprovalEvidence,
     ApprovalRequirementError,
+    GateContext,
     build_approval_requirement,
     requirement_to_mapping,
     validate_evidence_binding,
 )
 from video_factory.artifacts import (
     ArtifactValidationResult,
-    validate_artifact,
+    validate_artifact_bytes,
     validate_artifact_directory,
+    validate_artifact_mapping,
+    validate_artifact_path,
 )
-from video_factory.artifacts.registry import default_schemas_dir
+from video_factory.artifacts.registry import get_default_registry
 from video_factory.config import (
     CONFIG_CONTRACT_VERSION,
     ConfigDraftError,
@@ -46,6 +49,11 @@ from video_factory.domain import (
     OpaqueId,
     RelativeArtifactPath,
     RoleId,
+)
+from video_factory.json_boundary import (
+    JsonInputError,
+    parse_json_path,
+    require_json_object,
 )
 from video_factory.engine import (
     ArtifactSnapshot,
@@ -132,10 +140,10 @@ class DoctorReport:
 
 
 def _observe_schema_registry() -> dict[str, object]:
-    """Load schema files in-process; report counts and failures without aborting doctor."""
+    """Load the manifest-verified package registry without checkout assumptions."""
 
     try:
-        schemas_dir = default_schemas_dir()
+        registry = get_default_registry()
     except Exception as error:  # noqa: BLE001 — observation must not raise to callers
         return {
             "available": False,
@@ -146,45 +154,20 @@ def _observe_schema_registry() -> dict[str, object]:
             "load_failures": [f"schemas directory unavailable: {error}"],
         }
 
-    load_failures: list[str] = []
-    registered: list[str] = []
-    schema_files = 0
-    for path in sorted(schemas_dir.glob("*.schema.json")):
-        schema_files += 1
-        try:
-            raw = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError) as error:
-            load_failures.append(f"{path.name}: {error}")
-            continue
-        if not isinstance(raw, dict):
-            load_failures.append(f"{path.name}: top-level is not an object")
-            continue
-        properties = raw.get("properties")
-        if not isinstance(properties, Mapping):
-            continue
-        version_node = properties.get("artifact_version")
-        if not isinstance(version_node, Mapping):
-            continue
-        const = version_node.get("const")
-        if isinstance(const, str) and "/" in const:
-            registered.append(const)
-
-    # Detect duplicate version consts across files (integrity, not hard fail).
-    seen: dict[str, int] = {}
-    for version in registered:
-        seen[version] = seen.get(version, 0) + 1
-    for version, count in sorted(seen.items()):
-        if count > 1:
-            load_failures.append(f"duplicate artifact_version const {version!r} ({count} files)")
-
-    unique_versions = sorted(seen)
+    unique_versions = list(registry.list_versions())
     return {
         "available": True,
-        "schemas_dir": str(schemas_dir),
-        "schema_files": schema_files,
+        "schemas_dir": (
+            str(registry.schemas_dir)
+            if registry.schemas_dir is not None
+            else f"package-resource:{registry.resource_root}"
+        ),
+        "schema_files": len(registry.all_schemas()),
         "registered_count": len(unique_versions),
         "registered_versions": unique_versions,
-        "load_failures": load_failures,
+        "manifest_validated": registry.manifest_validated,
+        "manifest_sha256": registry.manifest_sha256,
+        "load_failures": [],
     }
 
 
@@ -317,9 +300,19 @@ def run_validate_artifact(
     """Validate one production artifact document via the schema registry."""
 
     if path is not None:
-        target: Mapping[str, object] | bytes | str | Path = Path(path)
-    elif document is not None:
-        target = document
+        outcome = validate_artifact_path(path, artifact_version=artifact_version)
+    elif isinstance(document, Mapping):
+        outcome = validate_artifact_mapping(
+            document, artifact_version=artifact_version
+        )
+    elif isinstance(document, bytes):
+        outcome = validate_artifact_bytes(
+            document, artifact_version=artifact_version
+        )
+    elif isinstance(document, str):
+        outcome = validate_artifact_bytes(
+            document.encode("utf-8"), artifact_version=artifact_version
+        )
     else:
         return ValidateReport(
             ok=False,
@@ -327,7 +320,6 @@ def run_validate_artifact(
             errors=("validate artifact requires a document mapping, bytes, or path",),
             kind="artifact",
         )
-    outcome = validate_artifact(target, artifact_version=artifact_version)
     return _artifact_result_to_report(outcome)
 
 
@@ -402,8 +394,10 @@ def run_validate(
             )
 
         if path is not None:
-            payload = Path(path).read_bytes()
-            parsed = parse_config_document(payload, resolved_layer)
+            mapping = require_json_object(
+                parse_json_path(path, decimal_numbers=True), source=str(path)
+            )
+            parsed = config_document_from_mapping(mapping, resolved_layer)
         elif isinstance(document, (bytes, bytearray)):
             parsed = parse_config_document(bytes(document), resolved_layer)
         elif isinstance(document, str):
@@ -421,7 +415,7 @@ def run_validate(
             artifact_version=str(parsed.artifact_version),
             kind="config",
         )
-    except ConfigValidationError as error:
+    except (ConfigValidationError, JsonInputError) as error:
         return ValidateReport(
             ok=False,
             layer=str(layer),
@@ -941,6 +935,8 @@ def handle_approve(
     evidence: ApprovalEvidence | None = None,
     episode_id: str | None = None,
     rules_version: str | None = None,
+    gate_context: GateContext | Mapping[str, object] | None = None,
+    evaluated_at: datetime | str | None = None,
 ) -> CommandResult:
     """Build an ApprovalRequirement; optionally validate evidence (never create it)."""
 
@@ -955,6 +951,7 @@ def handle_approve(
             effective_config_sha256,
             requirement_id=requirement_id,
             capability_id=capability_id,
+            gate_context=gate_context,
         )
     except ApprovalRequirementError as error:
         return CommandResult(
@@ -988,11 +985,17 @@ def handle_approve(
     }
 
     if evidence is not None:
-        binding = validate_evidence_binding(requirement, evidence)
+        binding = validate_evidence_binding(
+            requirement,
+            evidence,
+            current_context=gate_context,
+            evaluated_at=evaluated_at,
+        )
         payload["evidence_binding"] = {
             "ok": binding.ok,
             "message": binding.message,
             "evidence_id": binding.evidence_id,
+            "reason_code": binding.reason_code,
         }
         if not binding.ok:
             return CommandResult(
@@ -1069,6 +1072,8 @@ def handle_run(
     mode: str | None,
     *,
     artifact_docs: Sequence[ArtifactSnapshot | Mapping[str, object]] = (),
+    current_context: GateContext | None = None,
+    evaluated_at: datetime | None = None,
 ) -> CommandResult:
     """Return next-step plan only (never transitions or executes stages)."""
 
@@ -1078,7 +1083,12 @@ def handle_run(
 
     try:
         observation = observe_episode_state(artifact_docs)
-        plan = plan_next_step(observation, mode)
+        plan = plan_next_step(
+            observation,
+            mode,
+            current_context=current_context,
+            evaluated_at=evaluated_at,
+        )
         document = next_step_to_mapping(plan)
     except OrchestrationPlanError as error:
         return CommandResult(

@@ -10,17 +10,24 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 import hashlib
-import json
 import re
 from typing import Any
 
-from video_factory.artifacts import ArtifactSchemaRegistry, validate_artifact
+from video_factory.artifacts import (
+    ArtifactSchemaRegistry,
+    validate_artifact_mapping,
+)
 from video_factory.config import canonical_sha256
 from video_factory.domain import (
     ArtifactReference,
     ArtifactVersion,
     HashDigest,
     RelativeArtifactPath,
+)
+from video_factory.json_boundary import (
+    JsonInputError,
+    parse_json_bytes,
+    require_json_object,
 )
 
 
@@ -184,11 +191,9 @@ def make_artifact_snapshot_from_json_bytes(
             "artifact snapshot bytes do not match expected_sha256"
         )
     try:
-        document = json.loads(data.decode("utf-8"))
-    except (UnicodeDecodeError, json.JSONDecodeError) as error:
-        raise ArtifactGraphError(f"artifact snapshot is not valid UTF-8 JSON: {error}") from error
-    if not isinstance(document, Mapping):
-        raise ArtifactGraphError("artifact snapshot JSON top-level must be an object")
+        document = require_json_object(parse_json_bytes(data))
+    except JsonInputError as error:
+        raise ArtifactGraphError(f"artifact snapshot JSON rejected: {error}") from error
     return make_artifact_snapshot(
         path,
         document,
@@ -280,7 +285,7 @@ def build_artifact_graph(
     findings: list[ArtifactGraphFinding] = []
 
     for snapshot in snapshots:
-        outcome = validate_artifact(snapshot.document, registry=registry)
+        outcome = validate_artifact_mapping(snapshot.document, registry=registry)
         if not outcome.ok:
             detail = "; ".join(outcome.error_texts)
             findings.append(

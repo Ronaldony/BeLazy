@@ -24,6 +24,12 @@ package-dir = { "" = "src" }
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+"video_factory.resources.schemas" = [
+    "*.schema.json",
+    "schema-manifest.json",
+]
+
 [tool.pytest.ini_options]
 # Default runs every registered tier. Filter with -m when needed, e.g.
 #   -m unit

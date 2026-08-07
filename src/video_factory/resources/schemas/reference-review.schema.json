@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.video-factory.invalid/artifact/reference-review.schema.json",
+  "title": "Reference asset visual review",
+  "type": "object",
+  "required": [
+    "artifact_version",
+    "rules_version",
+    "episode_id",
+    "asset_creator_role",
+    "reviewer_role",
+    "reviewed_at",
+    "assets"
+  ],
+  "properties": {
+    "artifact_version": { "const": "reference-review/1.0" },
+    "rules_version": { "$ref": "artifact-common.schema.json#/$defs/rulesVersion" },
+    "episode_id": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" },
+    "asset_creator_role": { "$ref": "artifact-common.schema.json#/$defs/roleId" },
+    "reviewer_role": { "$ref": "artifact-common.schema.json#/$defs/roleId" },
+    "reviewed_at": { "type": "string", "minLength": 1 },
+    "assets": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["path", "sha256", "verdict", "reasons"],
+        "properties": {
+          "path": { "$ref": "artifact-common.schema.json#/$defs/relativePath" },
+          "sha256": { "$ref": "artifact-common.schema.json#/$defs/sha256" },
+          "verdict": { "$ref": "artifact-common.schema.json#/$defs/reviewVerdict" },
+          "selected_for_draft": { "type": "boolean" },
+          "reasons": {
+            "type": "array",
+            "minItems": 1,
+            "items": { "type": "string", "minLength": 1 }
+          },
+          "notes": { "type": "string" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "extensions": { "$ref": "artifact-common.schema.json#/$defs/extensions" }
+  },
+  "additionalProperties": false,
+  "x-artifact-migration": {
+    "id_pattern": "^reference-review/[1-9][0-9]*-to-[1-9][0-9]*/[1-9][0-9]*$",
+    "single_major_step": true,
+    "in_place": false,
+    "automatic_downgrade": false
+  }
+}

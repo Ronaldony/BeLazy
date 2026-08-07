@@ -1,0 +1,100 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.video-factory.invalid/artifact/shot-qc.schema.json",
+  "title": "Shot technical QC report (policy-injected expectations)",
+  "type": "object",
+  "required": [
+    "artifact_version",
+    "rules_version",
+    "episode_id",
+    "checked_at",
+    "subject",
+    "measurements",
+    "constraints",
+    "findings",
+    "verdict"
+  ],
+  "properties": {
+    "artifact_version": {
+      "const": "shot-qc/1.0"
+    },
+    "rules_version": {
+      "$ref": "artifact-common.schema.json#/$defs/rulesVersion"
+    },
+    "episode_id": {
+      "$ref": "artifact-common.schema.json#/$defs/opaqueId"
+    },
+    "extensions": {
+      "$ref": "artifact-common.schema.json#/$defs/extensions"
+    },
+    "checked_at": {
+      "type": "string",
+      "minLength": 1
+    },
+    "subject": {
+      "$ref": "artifact-common.schema.json#/$defs/boundArtifact"
+    },
+    "adapter_id": {
+      "$ref": "artifact-common.schema.json#/$defs/opaqueId"
+    },
+    "bound_inputs": {
+      "type": "array",
+      "items": {
+        "$ref": "artifact-common.schema.json#/$defs/boundArtifact"
+      }
+    },
+    "measured_cost": {
+      "$ref": "artifact-common.schema.json#/$defs/measuredCost"
+    },
+    "expectations_source": {
+      "type": "object",
+      "description": "Where expected technical values came from (config pointer), not literal channel values",
+      "properties": {
+        "config_pointer": {
+          "type": "string",
+          "minLength": 1
+        },
+        "effective_config_sha256": {
+          "$ref": "artifact-common.schema.json#/$defs/sha256"
+        }
+      },
+      "additionalProperties": false
+    },
+    "measurements": {
+      "type": "array",
+      "items": {
+        "$ref": "artifact-common.schema.json#/$defs/measurement"
+      }
+    },
+    "constraints": {
+      "type": "array",
+      "items": {
+        "$ref": "artifact-common.schema.json#/$defs/qcConstraint"
+      }
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "$ref": "artifact-common.schema.json#/$defs/qcFinding"
+      }
+    },
+    "verdict": {
+      "type": "string",
+      "enum": [
+        "pass",
+        "warn",
+        "fail"
+      ]
+    },
+    "notes": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "x-artifact-migration": {
+    "id_pattern": "^shot-qc/[1-9][0-9]*-to-[1-9][0-9]*/[1-9][0-9]*$",
+    "single_major_step": true,
+    "in_place": false,
+    "automatic_downgrade": false
+  }
+}

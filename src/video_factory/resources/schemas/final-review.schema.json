@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.video-factory.invalid/artifact/final-review.schema.json",
+  "title": "Final delivery cross-review result",
+  "type": "object",
+  "required": [
+    "artifact_version",
+    "rules_version",
+    "episode_id",
+    "subject",
+    "creator_role",
+    "reviewer_role",
+    "reviewed_at",
+    "verdict",
+    "findings"
+  ],
+  "properties": {
+    "artifact_version": {
+      "const": "final-review/1.0"
+    },
+    "rules_version": {
+      "$ref": "artifact-common.schema.json#/$defs/rulesVersion"
+    },
+    "episode_id": {
+      "$ref": "artifact-common.schema.json#/$defs/opaqueId"
+    },
+    "subject": {
+      "$ref": "artifact-common.schema.json#/$defs/boundArtifact"
+    },
+    "creator_role": {
+      "$ref": "artifact-common.schema.json#/$defs/roleId"
+    },
+    "reviewer_role": {
+      "$ref": "artifact-common.schema.json#/$defs/roleId"
+    },
+    "reviewed_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "verdict": {
+      "$ref": "artifact-common.schema.json#/$defs/reviewVerdict"
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "$ref": "artifact-common.schema.json#/$defs/finding"
+      }
+    },
+    "extensions": {
+      "$ref": "artifact-common.schema.json#/$defs/extensions"
+    }
+  },
+  "additionalProperties": false
+}

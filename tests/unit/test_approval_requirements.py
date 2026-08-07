@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+from datetime import datetime, timezone
+
 import pytest
 
 from video_factory.approvals import (
@@ -9,8 +12,10 @@ from video_factory.approvals import (
     ApprovalRequirement,
     ApprovalRequirementError,
     ApprovalState,
+    GateContext,
     approval_evidence_to_mapping,
     build_approval_requirement,
+    gate_context_to_mapping,
     requirement_from_mapping,
     requirement_to_mapping,
     validate_evidence_binding,
@@ -29,6 +34,35 @@ _HASH_A = "a" * 64
 _HASH_B = "b" * 64
 _CONFIG = "c" * 64
 _CONFIG_OTHER = "d" * 64
+
+
+def _context(config: str = _CONFIG) -> GateContext:
+    return GateContext(
+        workflow_definition_sha256=HashDigest("1" * 64),
+        policy_bundle_sha256=HashDigest("2" * 64),
+        rules_bundle_sha256=HashDigest("3" * 64),
+        effective_config_sha256=HashDigest(config),
+        current_manifest_sha256=HashDigest("4" * 64),
+        evidence_graph_sha256=HashDigest("5" * 64),
+        executable_plan_sha256=HashDigest("6" * 64),
+    )
+
+
+def _evidence(
+    requirement: ApprovalRequirement,
+    *,
+    created_at: str = "2026-07-21T00:00:00Z",
+    expires_at: str | None = "2026-07-21T02:00:00Z",
+) -> ApprovalEvidence:
+    return ApprovalEvidence(
+        evidence_id=OpaqueId("evidence-context"),
+        requirement=requirement,
+        state=ApprovalState.GRANTED,
+        approver_role=RoleId("human-operator"),
+        created_at=created_at,
+        record_sha256=HashDigest(_HASH_B),
+        expires_at=expires_at,
+    )
 
 
 def _artifact(path: str = "packets/gen.json", digest: str = _HASH_A) -> ArtifactReference:
@@ -183,3 +217,173 @@ def test_granted_evidence_serializes_as_schema_valid_evidence() -> None:
     assert document["artifact_version"] == "packet-approval/2.0"
     assert document["state"] == "granted"
     assert validate_artifact(document).ok is True
+
+
+def test_context_bound_requirement_roundtrip_and_schema_mapping() -> None:
+    context = _context()
+    requirement = build_approval_requirement(
+        "packet",
+        [_artifact()],
+        _CONFIG,
+        gate_context=context,
+    )
+    mapping = requirement_to_mapping(
+        requirement,
+        kind="packet-approval",
+        episode_id="ep-1",
+        rules_version="rules-test",
+    )
+    assert mapping["gate_context"] == gate_context_to_mapping(context)
+    restored = requirement_from_mapping(mapping)
+    assert restored == requirement
+    assert validate_artifact(mapping).ok is True
+
+    evidence = _evidence(requirement)
+    evidence_mapping = approval_evidence_to_mapping(
+        evidence,
+        kind="packet",
+        episode_id="ep-1",
+        rules_version="rules-test",
+    )
+    assert evidence_mapping["gate_context"] == gate_context_to_mapping(context)
+    assert evidence_mapping["expires_at"] == evidence.expires_at
+    assert validate_artifact(evidence_mapping).ok is True
+
+
+def test_current_context_and_validity_window_are_required_for_authorization() -> None:
+    context = _context()
+    requirement = build_approval_requirement(
+        "packet", [_artifact()], _CONFIG, gate_context=context
+    )
+    evidence = _evidence(requirement)
+    evaluation = datetime(2026, 7, 21, 1, 0, tzinfo=timezone.utc)
+    accepted = validate_evidence_binding(
+        requirement,
+        evidence,
+        current_context=context,
+        evaluated_at=evaluation,
+    )
+    assert accepted.ok is True
+    assert accepted.reason_code == "approval.binding_match"
+
+    no_context = validate_evidence_binding(
+        requirement, evidence, evaluated_at=evaluation
+    )
+    assert no_context.reason_code == "approval.current_context_missing"
+
+    no_time = validate_evidence_binding(
+        requirement, evidence, current_context=context
+    )
+    assert no_time.reason_code == "approval.evaluation_time_missing"
+
+
+@pytest.mark.parametrize(
+    "field",
+    [
+        "workflow_definition_sha256",
+        "policy_bundle_sha256",
+        "rules_bundle_sha256",
+        "effective_config_sha256",
+        "current_manifest_sha256",
+        "evidence_graph_sha256",
+        "executable_plan_sha256",
+    ],
+)
+def test_every_material_context_digest_mismatch_fails_closed(field: str) -> None:
+    current = _context()
+    expected = build_approval_requirement(
+        "packet", [_artifact()], _CONFIG, gate_context=current
+    )
+    bad_context = replace(current, **{field: HashDigest("e" * 64)})
+    bad_config = (
+        str(bad_context.effective_config_sha256)
+        if field == "effective_config_sha256"
+        else _CONFIG
+    )
+    bound = ApprovalRequirement(
+        requirement_id=expected.requirement_id,
+        capability_id=expected.capability_id,
+        bound_artifacts=expected.bound_artifacts,
+        effective_config_sha256=HashDigest(bad_config),
+        gate_context=bad_context,
+    )
+    result = validate_evidence_binding(
+        expected,
+        _evidence(bound),
+        current_context=current,
+        evaluated_at="2026-07-21T01:00:00Z",
+    )
+    assert result.ok is False
+    assert result.reason_code in {
+        "approval.effective_config_mismatch",
+        "approval.context_mismatch",
+    }
+
+
+@pytest.mark.parametrize(
+    ("created_at", "expires_at", "evaluated_at", "reason"),
+    [
+        ("2026-07-21T00:00:00Z", None, "2026-07-21T01:00:00Z", "approval.expiry_missing"),
+        ("2026-07-21T00:00:00Z", "2026-07-21T01:00:00Z", "2026-07-21T01:00:00Z", "approval.expired"),
+        ("2026-07-21T02:00:00Z", "2026-07-21T03:00:00Z", "2026-07-21T01:00:00Z", "approval.not_yet_valid"),
+        ("not-a-date", "2026-07-21T03:00:00Z", "2026-07-21T01:00:00Z", "approval.validity_window_invalid"),
+    ],
+)
+def test_expired_future_or_incomplete_evidence_fails_closed(
+    created_at: str,
+    expires_at: str | None,
+    evaluated_at: str,
+    reason: str,
+) -> None:
+    context = _context()
+    requirement = build_approval_requirement(
+        "packet", [_artifact()], _CONFIG, gate_context=context
+    )
+    result = validate_evidence_binding(
+        requirement,
+        _evidence(requirement, created_at=created_at, expires_at=expires_at),
+        current_context=context,
+        evaluated_at=evaluated_at,
+    )
+    assert result.ok is False
+    assert result.reason_code == reason
+
+
+def test_duplicate_bound_artifacts_cannot_collapse_to_a_set() -> None:
+    context = _context()
+    requirement = build_approval_requirement(
+        "packet", [_artifact()], _CONFIG, gate_context=context
+    )
+    duplicated = ApprovalRequirement(
+        requirement_id=requirement.requirement_id,
+        capability_id=requirement.capability_id,
+        bound_artifacts=(requirement.bound_artifacts[0], requirement.bound_artifacts[0]),
+        effective_config_sha256=requirement.effective_config_sha256,
+        gate_context=context,
+    )
+    result = validate_evidence_binding(
+        requirement,
+        _evidence(duplicated),
+        current_context=context,
+        evaluated_at="2026-07-21T01:00:00Z",
+    )
+    assert result.ok is False
+    assert result.reason_code == "approval.artifact_duplicate"
+
+    with pytest.raises(ApprovalRequirementError, match="duplicates"):
+        build_approval_requirement(
+            "packet", [_artifact(), _artifact()], _CONFIG, gate_context=context
+        )
+
+
+def test_requirement_identity_changes_with_material_context() -> None:
+    one = build_approval_requirement(
+        "packet", [_artifact()], _CONFIG, gate_context=_context()
+    )
+    changed = replace(
+        _context(), workflow_definition_sha256=HashDigest("e" * 64)
+    )
+    two = build_approval_requirement(
+        "packet", [_artifact()], _CONFIG, gate_context=changed
+    )
+    assert one.requirement_id != two.requirement_id

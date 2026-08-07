@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.video-factory.invalid/config/workspace-config.schema.json",
+  "title": "Workspace configuration",
+  "type": "object",
+  "required": ["artifact_version", "config_contract", "workspace_id"],
+  "properties": {
+    "artifact_version": {"const": "workspace-config/1.0"},
+    "config_contract": {"const": "1.0"},
+    "workspace_id": {"$ref": "config-layer.schema.json#/$defs/opaqueId"},
+    "settings": {"$ref": "config-layer.schema.json#/$defs/settings"},
+    "extensions": {"$ref": "config-layer.schema.json#/$defs/extensions"}
+  },
+  "additionalProperties": false,
+  "x-artifact-migration": {
+    "id_pattern": "^workspace-config/[1-9][0-9]*-to-[1-9][0-9]*/[1-9][0-9]*$",
+    "single_major_step": true,
+    "in_place": false,
+    "automatic_downgrade": false
+  }
+}

@@ -7,9 +7,14 @@ repository-specific path names; it only normalizes paths and tests membership.
 from __future__ import annotations
 
 from dataclasses import dataclass
-import json
 from pathlib import Path
 from typing import Iterable, Mapping, Sequence
+
+from video_factory.json_boundary import (
+    JsonInputError,
+    parse_json_path,
+    require_json_object,
+)
 
 
 class FrozenIndexError(ValueError):
@@ -124,11 +129,6 @@ def load_frozen_index(path: str | Path) -> FrozenIndex:
     """
 
     source = Path(path)
-    try:
-        text = source.read_text(encoding="utf-8")
-    except OSError as error:
-        raise FrozenIndexError(f"cannot read frozen index: {source}") from error
-
     suffix = source.suffix.lower()
     if suffix in {".yaml", ".yml"}:
         raise FrozenIndexError(
@@ -137,12 +137,11 @@ def load_frozen_index(path: str | Path) -> FrozenIndex:
         )
 
     try:
-        data = json.loads(text)
-    except json.JSONDecodeError as error:
-        raise FrozenIndexError(f"invalid frozen index JSON: {source}: {error}") from error
-
-    if not isinstance(data, dict):
-        raise FrozenIndexError("frozen index root must be a JSON object")
+        data = require_json_object(parse_json_path(source), source=str(source))
+    except JsonInputError as error:
+        raise FrozenIndexError(
+            f"frozen index JSON rejected [{error.code.value}]: {source}: {error.detail}"
+        ) from error
 
     raw_entries = data.get("entries")
     if raw_entries is None:

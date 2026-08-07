@@ -6,12 +6,16 @@ from collections.abc import Mapping, Sequence
 from copy import deepcopy
 from dataclasses import dataclass, field
 from decimal import Decimal
-import json
 import math
 import re
 from typing import TypeAlias
 
 from video_factory.domain import ArtifactVersion, OpaqueId, RelativeArtifactPath
+from video_factory.json_boundary import (
+    JsonInputError,
+    parse_json_bytes,
+    require_json_object,
+)
 
 from .canonical import canonical_json_bytes, canonical_sha256
 from .contracts import ConfigLayer, ConfigSource, ExtensionPayload
@@ -337,25 +341,17 @@ def config_document_from_mapping(
     )
 
 
-def _unique_object(pairs: list[tuple[str, object]]) -> dict[str, object]:
-    result: dict[str, object] = {}
-    for key, value in pairs:
-        if key in result:
-            raise _fail(f"duplicate key in one configuration layer: {key}")
-        result[key] = value
-    return result
+def _parse_config_mapping(payload: bytes) -> Mapping[str, object]:
+    try:
+        return require_json_object(
+            parse_json_bytes(payload, decimal_numbers=True)
+        )
+    except JsonInputError as error:
+        raise _fail(f"configuration JSON rejected [{error.code.value}]: {error.detail}") from error
 
 
 def parse_config_document(payload: bytes, layer: ConfigLayer) -> LayerConfig:
-    try:
-        data = json.loads(
-            payload.decode("utf-8"),
-            parse_float=Decimal,
-            parse_constant=lambda value: (_ for _ in ()).throw(_fail(f"invalid number: {value}")),
-            object_pairs_hook=_unique_object,
-        )
-    except (UnicodeDecodeError, json.JSONDecodeError) as error:
-        raise _fail(f"configuration is not valid UTF-8 JSON: {error}") from error
+    data = _parse_config_mapping(payload)
     return config_document_from_mapping(_expect_mapping(data, "/"), layer)
 
 
@@ -374,12 +370,8 @@ def config_source_from_document_bytes(
 ) -> ConfigSource:
     """Build a source whose digest is independent of JSON key order and formatting."""
 
-    document = parse_config_document(payload, layer)
-    parsed_mapping = json.loads(
-        payload.decode("utf-8"),
-        parse_float=Decimal,
-        object_pairs_hook=_unique_object,
-    )
+    parsed_mapping = _parse_config_mapping(payload)
+    document = config_document_from_mapping(parsed_mapping, layer)
     _, id_key, _ = _DOCUMENT_SPECS[layer]
     return ConfigSource(
         layer=layer,

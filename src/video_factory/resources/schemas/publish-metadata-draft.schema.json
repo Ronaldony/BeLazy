@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.video-factory.invalid/artifact/publish-metadata-draft.schema.json",
+  "title": "Publish metadata draft (human review required; no publish action fields)",
+  "type": "object",
+  "required": [
+    "artifact_version",
+    "rules_version",
+    "episode_id",
+    "drafted_at",
+    "source_brief_ref",
+    "title",
+    "description",
+    "tags",
+    "human_review_required"
+  ],
+  "properties": {
+    "artifact_version": {
+      "const": "publish-metadata-draft/1.0"
+    },
+    "rules_version": {
+      "$ref": "artifact-common.schema.json#/$defs/rulesVersion"
+    },
+    "episode_id": {
+      "$ref": "artifact-common.schema.json#/$defs/opaqueId"
+    },
+    "extensions": {
+      "$ref": "artifact-common.schema.json#/$defs/extensions"
+    },
+    "drafted_at": {
+      "type": "string",
+      "minLength": 1
+    },
+    "source_brief_ref": {
+      "$ref": "artifact-common.schema.json#/$defs/boundArtifact"
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1
+    },
+    "description": {
+      "type": "string",
+      "minLength": 1
+    },
+    "tags": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "uniqueItems": true
+    },
+    "ai_disclosure_draft": {
+      "type": "string",
+      "minLength": 1
+    },
+    "human_review_required": {
+      "const": true
+    },
+    "target_platforms": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "uniqueItems": true
+    },
+    "notes": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "x-artifact-migration": {
+    "id_pattern": "^publish-metadata-draft/[1-9][0-9]*-to-[1-9][0-9]*/[1-9][0-9]*$",
+    "single_major_step": true,
+    "in_place": false,
+    "automatic_downgrade": false
+  }
+}

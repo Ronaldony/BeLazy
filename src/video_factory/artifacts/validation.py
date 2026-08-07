@@ -7,13 +7,23 @@ local ``referencing`` registry so ``$ref`` never touches the network.
 from __future__ import annotations
 
 from dataclasses import dataclass
-import json
 from pathlib import Path
 from typing import Any, Mapping, Sequence
+from urllib.parse import urljoin
 
-from jsonschema import Draft202012Validator
+from jsonschema import Draft202012Validator, FormatChecker
 from jsonschema.exceptions import SchemaError
 from referencing import Registry, Resource
+
+from video_factory.json_boundary import (
+    JsonErrorCode,
+    JsonInputError,
+    is_rfc3339_datetime,
+    parse_json_bytes,
+    parse_json_path,
+    require_json_object,
+    validate_json_mapping,
+)
 
 from .registry import (
     ArtifactSchemaError,
@@ -33,6 +43,7 @@ class FieldError:
     path: str
     validator: str
     message: str
+    reason_code: str | None = None
 
     def as_text(self) -> str:
         return f"{self.path}: validator={self.validator}; {self.message}"
@@ -84,12 +95,23 @@ def _json_pointer(path: Sequence[Any]) -> str:
 def _build_referencing_registry(
     schemas: Mapping[str, Mapping[str, Any]],
 ) -> Registry:
-    resources: list[tuple[str, Resource]] = []
-    for schema in schemas.values():
+    by_uri: dict[str, Resource] = {}
+    bases = {
+        schema_id.rsplit("/", 1)[0] + "/"
+        for schema in schemas.values()
+        if isinstance((schema_id := schema.get("$id")), str) and schema_id
+    }
+    for filename, schema in schemas.items():
         schema_id = schema.get("$id")
         if isinstance(schema_id, str) and schema_id:
-            resources.append((schema_id, Resource.from_contents(dict(schema))))
-    return Registry().with_resources(resources)
+            resource = Resource.from_contents(dict(schema))
+            by_uri[schema_id] = resource
+            # Existing schemas use filename-relative refs from more than one
+            # $id directory. Register deterministic local aliases so resolution
+            # remains offline and never falls through to network retrieval.
+            for base in bases:
+                by_uri.setdefault(urljoin(base, filename), resource)
+    return Registry().with_resources(sorted(by_uri.items()))
 
 
 def _validator_for(
@@ -103,76 +125,78 @@ def _validator_for(
             f"schema document is not a valid JSON Schema: {error.message}"
         ) from error
     registry = _build_referencing_registry(all_schemas)
-    return Draft202012Validator(dict(entry_schema), registry=registry)
+    return Draft202012Validator(
+        dict(entry_schema),
+        registry=registry,
+        format_checker=_FORMAT_CHECKER,
+    )
+
+
+_FORMAT_CHECKER = FormatChecker()
+_FORMAT_CHECKER.checks("date-time")(is_rfc3339_datetime)
 
 
 def _coerce_mapping(
     document: Mapping[str, object] | bytes | str | Path,
 ) -> tuple[Mapping[str, object], str | None]:
-    source: str | None = None
+    """Compatibility facade; internal callers use the explicit public APIs."""
+
     if isinstance(document, Path):
         source = str(document)
-        try:
-            raw = document.read_text(encoding="utf-8")
-        except OSError as error:
-            raise ArtifactValidationError(f"cannot read artifact file: {document}") from error
-        try:
-            parsed = json.loads(raw)
-        except json.JSONDecodeError as error:
-            raise ArtifactValidationError(f"invalid JSON in {document}: {error}") from error
-    elif isinstance(document, (bytes, bytearray)):
-        try:
-            parsed = json.loads(document.decode("utf-8"))
-        except (UnicodeDecodeError, json.JSONDecodeError) as error:
-            raise ArtifactValidationError(f"invalid JSON bytes: {error}") from error
+        parsed = require_json_object(parse_json_path(document), source=source)
+        return parsed, source
+    if isinstance(document, bytes):
+        parsed = require_json_object(parse_json_bytes(document))
+        return parsed, None
     elif isinstance(document, str):
-        # Ambiguous: treat as path if it exists, else JSON text.
+        # Deprecated legacy behavior only. New code must call the explicit path
+        # or bytes API and never infer an input kind from filesystem existence.
         as_path = Path(document)
         if as_path.is_file():
             return _coerce_mapping(as_path)
-        try:
-            parsed = json.loads(document)
-        except json.JSONDecodeError as error:
-            raise ArtifactValidationError(f"invalid JSON text: {error}") from error
+        parsed = require_json_object(
+            parse_json_bytes(document.encode("utf-8"), source="<legacy-json-text>"),
+            source="<legacy-json-text>",
+        )
+        return parsed, "<legacy-json-text>"
     elif isinstance(document, Mapping):
-        parsed = document
+        return validate_json_mapping(document), None
     else:
-        raise ArtifactValidationError(
-            "document must be a mapping, JSON bytes/text, or filesystem path"
+        raise JsonInputError(
+            code=JsonErrorCode.UNSUPPORTED_VALUE,
+            detail="document must be a mapping, bytes, string, or pathlib.Path",
         )
 
-    if not isinstance(parsed, Mapping) or not all(isinstance(key, str) for key in parsed):
-        raise ArtifactValidationError("artifact document top-level must be a JSON object")
-    return parsed, source
 
-
-def validate_artifact(
-    document: Mapping[str, object] | bytes | str | Path,
+def _input_failure(
+    error: JsonInputError,
     *,
-    artifact_version: str | None = None,
-    registry: ArtifactSchemaRegistry | None = None,
+    artifact_version: str | None,
+    source: str | None,
 ) -> ArtifactValidationResult:
-    """Validate one artifact document against its registered schema.
-
-    Resolution order for the schema key:
-    1. Explicit ``artifact_version`` argument when provided.
-    2. Document field ``artifact_version``.
-
-    An unregistered version fails closed with a clear error (never silent pass).
-    """
-
-    reg = registry or get_default_registry()
-    try:
-        payload, source = _coerce_mapping(document)
-    except ArtifactValidationError as error:
-        return ArtifactValidationResult(
-            ok=False,
-            artifact_version=artifact_version,
-            errors=(
-                FieldError(path="$", validator="engine", message=str(error)),
+    return ArtifactValidationResult(
+        ok=False,
+        artifact_version=artifact_version,
+        errors=(
+            FieldError(
+                path=error.path,
+                validator="json-boundary",
+                message=error.detail,
+                reason_code=error.code.value,
             ),
-            source=source if isinstance(document, Path) else None,
-        )
+        ),
+        source=source or error.source,
+    )
+
+
+def _validate_mapping_document(
+    payload: Mapping[str, object],
+    *,
+    source: str | None,
+    artifact_version: str | None,
+    registry: ArtifactSchemaRegistry | None,
+) -> ArtifactValidationResult:
+    reg = registry or get_default_registry()
 
     version = artifact_version
     if version is None:
@@ -237,6 +261,104 @@ def validate_artifact(
     )
 
 
+def validate_artifact_mapping(
+    document: Mapping[str, object],
+    *,
+    artifact_version: str | None = None,
+    registry: ArtifactSchemaRegistry | None = None,
+) -> ArtifactValidationResult:
+    """Validate an explicit, already-decoded JSON object mapping."""
+
+    try:
+        payload = validate_json_mapping(document)
+    except JsonInputError as error:
+        return _input_failure(
+            error, artifact_version=artifact_version, source=None
+        )
+    return _validate_mapping_document(
+        payload,
+        source=None,
+        artifact_version=artifact_version,
+        registry=registry,
+    )
+
+
+def validate_artifact_bytes(
+    document: bytes,
+    *,
+    artifact_version: str | None = None,
+    registry: ArtifactSchemaRegistry | None = None,
+) -> ArtifactValidationResult:
+    """Validate explicit exact UTF-8 JSON bytes."""
+
+    try:
+        payload = require_json_object(parse_json_bytes(document))
+    except JsonInputError as error:
+        return _input_failure(
+            error, artifact_version=artifact_version, source=None
+        )
+    return _validate_mapping_document(
+        payload,
+        source=None,
+        artifact_version=artifact_version,
+        registry=registry,
+    )
+
+
+def validate_artifact_path(
+    document: str | Path,
+    *,
+    artifact_version: str | None = None,
+    registry: ArtifactSchemaRegistry | None = None,
+) -> ArtifactValidationResult:
+    """Validate one explicit filesystem path with stable boundary errors."""
+
+    source = str(document)
+    try:
+        payload = require_json_object(parse_json_path(document), source=source)
+    except JsonInputError as error:
+        return _input_failure(
+            error, artifact_version=artifact_version, source=source
+        )
+    return _validate_mapping_document(
+        payload,
+        source=source,
+        artifact_version=artifact_version,
+        registry=registry,
+    )
+
+
+def validate_artifact(
+    document: Mapping[str, object] | bytes | str | Path,
+    *,
+    artifact_version: str | None = None,
+    registry: ArtifactSchemaRegistry | None = None,
+) -> ArtifactValidationResult:
+    """Validate one artifact document against its registered schema.
+
+    Resolution order for the schema key:
+    1. Explicit ``artifact_version`` argument when provided.
+    2. Document field ``artifact_version``.
+
+    An unregistered version fails closed with a clear error (never silent pass).
+    """
+
+    try:
+        payload, source = _coerce_mapping(document)
+    except JsonInputError as error:
+        return _input_failure(
+            error,
+            artifact_version=artifact_version,
+            source=str(document) if isinstance(document, Path) else None,
+        )
+    return _validate_mapping_document(
+        payload,
+        source=source,
+        artifact_version=artifact_version,
+        registry=registry,
+    )
+
+
 def validate_artifact_directory(
     directory: str | Path,
     *,
@@ -261,9 +383,8 @@ def validate_artifact_directory(
         if not path.is_file():
             continue
         try:
-            text = path.read_text(encoding="utf-8")
-            payload = json.loads(text)
-        except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
+            payload = require_json_object(parse_json_path(path), source=str(path))
+        except JsonInputError as error:
             failed += 1
             results.append(
                 FileValidationResult(
@@ -273,30 +394,10 @@ def validate_artifact_directory(
                         artifact_version=None,
                         errors=(
                             FieldError(
-                                path="$",
-                                validator="engine",
-                                message=f"unreadable or invalid JSON: {error}",
-                            ),
-                        ),
-                        source=str(path),
-                    ),
-                )
-            )
-            continue
-
-        if not isinstance(payload, Mapping):
-            failed += 1
-            results.append(
-                FileValidationResult(
-                    path=str(path),
-                    result=ArtifactValidationResult(
-                        ok=False,
-                        artifact_version=None,
-                        errors=(
-                            FieldError(
-                                path="$",
-                                validator="type",
-                                message="top-level value must be a JSON object",
+                                path=error.path,
+                                validator="json-boundary",
+                                message=error.detail,
+                                reason_code=error.code.value,
                             ),
                         ),
                         source=str(path),
@@ -326,7 +427,12 @@ def validate_artifact_directory(
             )
             continue
 
-        outcome = validate_artifact(payload, registry=reg)
+        outcome = _validate_mapping_document(
+            payload,
+            source=str(path),
+            artifact_version=None,
+            registry=reg,
+        )
         if outcome.ok:
             passed += 1
         else:

@@ -2,8 +2,16 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+from datetime import datetime, timezone
 from pathlib import Path
 
+from video_factory.approvals import (
+    ApprovalEvidence,
+    ApprovalState,
+    GateContext,
+    build_approval_requirement,
+)
 from video_factory.cli import (
     ImplementationStatus,
     handle_approve,
@@ -17,6 +25,7 @@ from video_factory.cli import (
     list_commands,
 )
 from video_factory.engine import make_artifact_snapshot
+from video_factory.domain import HashDigest, OpaqueId, RoleId
 
 
 def _snapshot(root: Path) -> dict[str, tuple[int, str]]:
@@ -29,6 +38,18 @@ def _snapshot(root: Path) -> dict[str, tuple[int, str]]:
             stat = path.stat()
             out[rel] = (stat.st_size, f"{stat.st_mtime_ns}")
     return out
+
+
+def _gate_context() -> GateContext:
+    return GateContext(
+        workflow_definition_sha256=HashDigest("1" * 64),
+        policy_bundle_sha256=HashDigest("2" * 64),
+        rules_bundle_sha256=HashDigest("3" * 64),
+        effective_config_sha256=HashDigest("b" * 64),
+        current_manifest_sha256=HashDigest("4" * 64),
+        evidence_graph_sha256=HashDigest("5" * 64),
+        executable_plan_sha256=HashDigest("6" * 64),
+    )
 
 
 def test_registry_statuses_after_phase20() -> None:
@@ -166,6 +187,66 @@ def test_promoted_handlers_return_plans_without_filesystem_change(
     after = _snapshot(marker)
     assert after == before
     assert sample.read_text(encoding="utf-8") == "unchanged\n"
+
+
+def test_approve_handler_requires_current_context_for_evidence_binding() -> None:
+    artifact = {
+        "path": "packets/p.json",
+        "sha256": "a" * 64,
+        "artifact_version": "generation-packet/1.0",
+    }
+    context = _gate_context()
+    requirement = build_approval_requirement(
+        "packet",
+        [artifact],
+        "b" * 64,
+        gate_context=context,
+    )
+    evidence = ApprovalEvidence(
+        evidence_id=OpaqueId("evidence-cli"),
+        requirement=requirement,
+        state=ApprovalState.GRANTED,
+        approver_role=RoleId("human-operator"),
+        created_at="2026-07-21T00:00:00Z",
+        record_sha256=HashDigest("c" * 64),
+        expires_at="2026-07-21T02:00:00Z",
+    )
+    accepted = handle_approve(
+        "standard",
+        kind="packet",
+        artifacts=[artifact],
+        effective_config_sha256="b" * 64,
+        evidence=evidence,
+        gate_context=context,
+        evaluated_at=datetime(2026, 7, 21, 1, 0, tzinfo=timezone.utc),
+    )
+    assert accepted.status == "ok"
+
+    missing = handle_approve(
+        "standard",
+        kind="packet",
+        artifacts=[artifact],
+        effective_config_sha256="b" * 64,
+        evidence=evidence,
+    )
+    assert missing.status == "evidence_rejected"
+    assert missing.payload["evidence_binding"]["reason_code"] == (
+        "approval.current_context_missing"
+    )
+
+    stale = replace(
+        context, workflow_definition_sha256=HashDigest("e" * 64)
+    )
+    rejected = handle_approve(
+        "standard",
+        kind="packet",
+        artifacts=[artifact],
+        effective_config_sha256="b" * 64,
+        evidence=evidence,
+        gate_context=stale,
+        evaluated_at="2026-07-21T01:00:00Z",
+    )
+    assert rejected.status == "evidence_rejected"
 
 
 def test_mode_required_for_promoted_commands() -> None:

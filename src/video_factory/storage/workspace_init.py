@@ -14,11 +14,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import StrEnum
 import hashlib
-import json
 from pathlib import Path
 from typing import Mapping
 
 from video_factory.config import ConfigLayer, ConfigValidationError, parse_config_document
+from video_factory.json_boundary import JsonInputError, parse_json_bytes
 from video_factory.storage.frozen_index import (
     FrozenIndex,
     FrozenIndexViolation,
@@ -108,13 +108,11 @@ def detect_config_layer(payload: bytes) -> ConfigLayer | None:
     """
 
     try:
-        text = payload.decode("utf-8")
-    except UnicodeDecodeError:
-        return None
-    try:
-        data = json.loads(text)
-    except json.JSONDecodeError:
-        return None
+        data = parse_json_bytes(payload)
+    except JsonInputError as error:
+        raise WorkspaceInitError(
+            f"template JSON rejected [{error.code.value}]: {error.detail}"
+        ) from error
     if not isinstance(data, dict):
         return None
     artifact_version = data.get("artifact_version")

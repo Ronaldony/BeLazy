@@ -8,6 +8,7 @@ human gate responsibility.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 import re
 from typing import Mapping, Sequence
 
@@ -19,11 +20,26 @@ from video_factory.domain import (
     OpaqueId,
     RelativeArtifactPath,
 )
+from video_factory.json_boundary import parse_rfc3339_datetime
 
-from .contracts import ApprovalEvidence, ApprovalRequirement, ApprovalState
+from .contracts import (
+    ApprovalEvidence,
+    ApprovalRequirement,
+    ApprovalState,
+    GateContext,
+)
 
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 _OPAQUE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
+_GATE_CONTEXT_FIELDS = (
+    "workflow_definition_sha256",
+    "policy_bundle_sha256",
+    "rules_bundle_sha256",
+    "effective_config_sha256",
+    "current_manifest_sha256",
+    "evidence_graph_sha256",
+    "executable_plan_sha256",
+)
 
 # kind → capability_id default + schema artifact_version for document mapping
 _KIND_CAPABILITY: Mapping[str, str] = {
@@ -63,6 +79,7 @@ class EvidenceBindingResult:
     message: str
     requirement_id: str
     evidence_id: str | None
+    reason_code: str = "approval.binding_unknown"
 
 
 def _opaque(value: object, label: str) -> OpaqueId:
@@ -75,6 +92,47 @@ def _sha256(value: object, label: str) -> HashDigest:
     if not isinstance(value, str) or _SHA256.fullmatch(value) is None:
         raise ApprovalRequirementError(f"{label} must be a 64-char lowercase hex sha256")
     return HashDigest(value)
+
+
+def gate_context_from_mapping(data: Mapping[str, object]) -> GateContext:
+    """Parse exactly seven required material digests; unknown fields fail closed."""
+
+    if not isinstance(data, Mapping):
+        raise ApprovalRequirementError("gate_context must be an object")
+    missing = sorted(set(_GATE_CONTEXT_FIELDS) - set(data))
+    extra = sorted(set(data) - set(_GATE_CONTEXT_FIELDS))
+    if missing or extra:
+        raise ApprovalRequirementError(
+            f"gate_context fields mismatch; missing={missing}, extra={extra}"
+        )
+    values = {
+        field: _sha256(data[field], f"gate_context.{field}")
+        for field in _GATE_CONTEXT_FIELDS
+    }
+    return GateContext(**values)
+
+
+def gate_context_to_mapping(context: GateContext) -> dict[str, str]:
+    if not isinstance(context, GateContext):
+        raise ApprovalRequirementError("gate_context must be GateContext")
+    return {
+        field: str(getattr(context, field))
+        for field in _GATE_CONTEXT_FIELDS
+    }
+
+
+def gate_context_sha256(context: GateContext) -> HashDigest:
+    return canonical_sha256(gate_context_to_mapping(context))
+
+
+def _gate_context(
+    value: GateContext | Mapping[str, object],
+) -> GateContext:
+    if isinstance(value, GateContext):
+        # Round-trip through the strict parser so manually-constructed values
+        # receive the same digest validation as document mappings.
+        return gate_context_from_mapping(gate_context_to_mapping(value))
+    return gate_context_from_mapping(value)
 
 
 def _artifact_ref(item: ArtifactReference | Mapping[str, object]) -> ArtifactReference:
@@ -110,6 +168,7 @@ def build_approval_requirement(
     *,
     requirement_id: str | OpaqueId | None = None,
     capability_id: str | OpaqueId | None = None,
+    gate_context: GateContext | Mapping[str, object] | None = None,
 ) -> ApprovalRequirement:
     """Build a hash-bound approval requirement (no evidence, no auto-approve).
 
@@ -133,6 +192,21 @@ def build_approval_requirement(
     bound = tuple(_artifact_ref(item) for item in artifacts)
     # Stable order for deterministic equality checks.
     bound = tuple(sorted(bound, key=lambda a: (str(a.path), str(a.sha256), str(a.artifact_version))))
+    identities = {
+        (str(item.path), str(item.sha256), str(item.artifact_version)) for item in bound
+    }
+    if len(identities) != len(bound):
+        raise ApprovalRequirementError("bound_artifacts must not contain duplicates")
+
+    config_hash = _sha256(str(effective_config_sha256), "effective_config_sha256")
+    parsed_context = _gate_context(gate_context) if gate_context is not None else None
+    if (
+        parsed_context is not None
+        and parsed_context.effective_config_sha256 != config_hash
+    ):
+        raise ApprovalRequirementError(
+            "gate_context effective config does not match effective_config_sha256"
+        )
 
     if capability_id is not None:
         cap = _opaque(str(capability_id), "capability_id")
@@ -158,16 +232,18 @@ def build_approval_requirement(
                 }
                 for item in bound
             ],
-            "effective_config_sha256": str(effective_config_sha256),
+            "effective_config_sha256": str(config_hash),
         }
+        if parsed_context is not None:
+            identity["gate_context"] = gate_context_to_mapping(parsed_context)
         req_id = OpaqueId(f"req-{str(canonical_sha256(identity))[:20]}")
 
-    config_hash = _sha256(str(effective_config_sha256), "effective_config_sha256")
     return ApprovalRequirement(
         requirement_id=req_id,
         capability_id=cap,
         bound_artifacts=bound,
         effective_config_sha256=config_hash,
+        gate_context=parsed_context,
     )
 
 
@@ -197,6 +273,10 @@ def requirement_to_mapping(
         "kind": kind,
         "creates_evidence": False,
     }
+    if requirement.gate_context is not None:
+        document["gate_context"] = gate_context_to_mapping(
+            requirement.gate_context
+        )
     if episode_id is not None:
         document["episode_id"] = episode_id
     if rules_version is not None:
@@ -242,7 +322,7 @@ def approval_evidence_to_mapping(
             "evidence capability does not match the requested approval kind"
         )
 
-    return {
+    document: dict[str, object] = {
         "artifact_version": artifact_version,
         "rules_version": rules_version,
         "episode_id": episode_id,
@@ -266,6 +346,13 @@ def approval_evidence_to_mapping(
             evidence.requirement.effective_config_sha256
         ),
     }
+    if evidence.requirement.gate_context is not None:
+        document["gate_context"] = gate_context_to_mapping(
+            evidence.requirement.gate_context
+        )
+    if evidence.expires_at is not None:
+        document["expires_at"] = evidence.expires_at
+    return document
 
 
 def requirement_from_mapping(data: Mapping[str, object]) -> ApprovalRequirement:
@@ -300,13 +387,43 @@ def requirement_from_mapping(data: Mapping[str, object]) -> ApprovalRequirement:
     ):
         raise ApprovalRequirementError("bound_artifacts must be an array")
 
+    bound = tuple(_artifact_ref(item) for item in raw_artifacts)  # type: ignore[arg-type]
+    identities = {
+        (str(item.path), str(item.sha256), str(item.artifact_version))
+        for item in bound
+    }
+    if len(identities) != len(bound):
+        raise ApprovalRequirementError("bound_artifacts must not contain duplicates")
+    bound = tuple(
+        sorted(
+            bound,
+            key=lambda item: (
+                str(item.path),
+                str(item.sha256),
+                str(item.artifact_version),
+            ),
+        )
+    )
+    config_hash = _sha256(
+        data["effective_config_sha256"], "effective_config_sha256"
+    )
+    raw_context = data.get("gate_context")
+    parsed_context = None
+    if raw_context is not None:
+        if not isinstance(raw_context, Mapping):
+            raise ApprovalRequirementError("gate_context must be an object")
+        parsed_context = gate_context_from_mapping(raw_context)
+        if parsed_context.effective_config_sha256 != config_hash:
+            raise ApprovalRequirementError(
+                "gate_context effective config does not match effective_config_sha256"
+            )
+
     return ApprovalRequirement(
         requirement_id=_opaque(str(req_id), "requirement_id"),
         capability_id=_opaque(str(cap_id), "capability_id"),
-        bound_artifacts=tuple(_artifact_ref(item) for item in raw_artifacts),  # type: ignore[arg-type]
-        effective_config_sha256=_sha256(
-            data["effective_config_sha256"], "effective_config_sha256"
-        ),
+        bound_artifacts=bound,
+        effective_config_sha256=config_hash,
+        gate_context=parsed_context,
     )
 
 
@@ -315,9 +432,60 @@ def _requirements_equal(left: ApprovalRequirement, right: ApprovalRequirement) -
         return False
     if left.effective_config_sha256 != right.effective_config_sha256:
         return False
-    if left.bound_artifacts != right.bound_artifacts:
+    if left.gate_context != right.gate_context:
+        return False
+    if _artifact_identities(left.bound_artifacts) != _artifact_identities(
+        right.bound_artifacts
+    ):
         return False
     return True
+
+
+def _binding_result(
+    requirement: ApprovalRequirement,
+    evidence: ApprovalEvidence | None,
+    *,
+    ok: bool,
+    message: str,
+    reason_code: str,
+) -> EvidenceBindingResult:
+    return EvidenceBindingResult(
+        ok=ok,
+        message=message,
+        requirement_id=str(requirement.requirement_id),
+        evidence_id=(str(evidence.evidence_id) if evidence is not None else None),
+        reason_code=reason_code,
+    )
+
+
+def _artifact_identities(
+    artifacts: Sequence[ArtifactReference],
+) -> tuple[tuple[str, str, str], ...]:
+    return tuple(
+        sorted(
+            (
+                str(item.path),
+                str(item.sha256),
+                str(item.artifact_version),
+            )
+            for item in artifacts
+        )
+    )
+
+
+def _evaluation_time(value: datetime | str | None) -> datetime | None:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        try:
+            return parse_rfc3339_datetime(value)
+        except ValueError as error:
+            raise ApprovalRequirementError(
+                "evaluated_at must be a timezone-aware RFC 3339 date-time"
+            ) from error
+    if not isinstance(value, datetime) or value.tzinfo is None or value.utcoffset() is None:
+        raise ApprovalRequirementError("evaluated_at must be timezone-aware")
+    return value
 
 
 def validate_evidence_binding(
@@ -325,60 +493,197 @@ def validate_evidence_binding(
     evidence: ApprovalEvidence | None,
     *,
     require_granted: bool = True,
+    current_context: GateContext | Mapping[str, object] | None = None,
+    evaluated_at: datetime | str | None = None,
 ) -> EvidenceBindingResult:
-    """Check that *evidence* is exactly bound to *requirement*.
+    """Compare caller-supplied evidence to a requirement and current context.
 
-    Aligns with PHASE 6 ``_validate_human_evidence`` checks:
-    capability match, effective_config_sha256 match, bound_artifacts match.
-    Does not create evidence. Returns a structured result (fail-closed).
+    Legacy context-free documents remain loadable. They can pass the historical
+    pairwise check only when no current context is requested; every production
+    authorization entry point supplies current context and evaluation time.
     """
 
-    req_id = str(requirement.requirement_id)
     if evidence is None:
-        return EvidenceBindingResult(
+        return _binding_result(
+            requirement,
+            evidence,
             ok=False,
             message="required human evidence is missing",
-            requirement_id=req_id,
-            evidence_id=None,
+            reason_code="approval.evidence_missing",
         )
     if require_granted and evidence.state is not ApprovalState.GRANTED:
-        return EvidenceBindingResult(
+        return _binding_result(
+            requirement,
+            evidence,
             ok=False,
             message="human evidence is not granted",
-            requirement_id=req_id,
-            evidence_id=str(evidence.evidence_id),
+            reason_code="approval.evidence_not_granted",
         )
     bound = evidence.requirement
     if bound.capability_id != requirement.capability_id:
-        return EvidenceBindingResult(
+        return _binding_result(
+            requirement,
+            evidence,
             ok=False,
             message="human evidence capability does not match the requirement",
-            requirement_id=req_id,
-            evidence_id=str(evidence.evidence_id),
+            reason_code="approval.capability_mismatch",
         )
     if bound.effective_config_sha256 != requirement.effective_config_sha256:
-        return EvidenceBindingResult(
+        return _binding_result(
+            requirement,
+            evidence,
             ok=False,
             message="human evidence is bound to another effective config",
-            requirement_id=req_id,
-            evidence_id=str(evidence.evidence_id),
+            reason_code="approval.effective_config_mismatch",
         )
-    if bound.bound_artifacts != requirement.bound_artifacts:
-        return EvidenceBindingResult(
+
+    required_identities = _artifact_identities(requirement.bound_artifacts)
+    evidence_identities = _artifact_identities(bound.bound_artifacts)
+    if len(set(required_identities)) != len(required_identities) or len(
+        set(evidence_identities)
+    ) != len(evidence_identities):
+        return _binding_result(
+            requirement,
+            evidence,
+            ok=False,
+            message="bound artifacts contain duplicate identities",
+            reason_code="approval.artifact_duplicate",
+        )
+    if evidence_identities != required_identities:
+        return _binding_result(
+            requirement,
+            evidence,
             ok=False,
             message="human evidence is bound to different input artifacts",
-            requirement_id=req_id,
-            evidence_id=str(evidence.evidence_id),
+            reason_code="approval.artifact_mismatch",
         )
-    # requirement_id on evidence may differ if re-issued; field equality above is authoritative.
-    if not _requirements_equal(bound, requirement) and bound.requirement_id != requirement.requirement_id:
-        # capability/config/artifacts already matched; id-only difference is acceptable.
-        pass
-    return EvidenceBindingResult(
+
+    enforce_context = (
+        current_context is not None
+        or evaluated_at is not None
+        or requirement.gate_context is not None
+        or bound.gate_context is not None
+        or evidence.expires_at is not None
+    )
+    if enforce_context:
+        if current_context is None:
+            return _binding_result(
+                requirement,
+                evidence,
+                ok=False,
+                message="current gate context is missing",
+                reason_code="approval.current_context_missing",
+            )
+        try:
+            current = _gate_context(current_context)
+        except ApprovalRequirementError as error:
+            return _binding_result(
+                requirement,
+                evidence,
+                ok=False,
+                message=str(error),
+                reason_code="approval.current_context_invalid",
+            )
+        if requirement.gate_context is None or bound.gate_context is None:
+            return _binding_result(
+                requirement,
+                evidence,
+                ok=False,
+                message="approval gate context is missing",
+                reason_code="approval.bound_context_missing",
+            )
+        if requirement.gate_context != current or bound.gate_context != current:
+            return _binding_result(
+                requirement,
+                evidence,
+                ok=False,
+                message="human evidence is bound to another material context",
+                reason_code="approval.context_mismatch",
+            )
+        if current.effective_config_sha256 != requirement.effective_config_sha256:
+            return _binding_result(
+                requirement,
+                evidence,
+                ok=False,
+                message="current context effective config is inconsistent",
+                reason_code="approval.context_config_inconsistent",
+            )
+        try:
+            evaluation = _evaluation_time(evaluated_at)
+        except ApprovalRequirementError as error:
+            return _binding_result(
+                requirement,
+                evidence,
+                ok=False,
+                message=str(error),
+                reason_code="approval.evaluation_time_invalid",
+            )
+        if evaluation is None:
+            return _binding_result(
+                requirement,
+                evidence,
+                ok=False,
+                message="approval evaluation time is missing",
+                reason_code="approval.evaluation_time_missing",
+            )
+        if evidence.expires_at is None:
+            return _binding_result(
+                requirement,
+                evidence,
+                ok=False,
+                message="human evidence expiry is missing",
+                reason_code="approval.expiry_missing",
+            )
+        try:
+            approved = parse_rfc3339_datetime(evidence.created_at)
+            expires = parse_rfc3339_datetime(evidence.expires_at)
+        except ValueError:
+            return _binding_result(
+                requirement,
+                evidence,
+                ok=False,
+                message="approval validity window is not valid RFC 3339",
+                reason_code="approval.validity_window_invalid",
+            )
+        if approved >= expires:
+            return _binding_result(
+                requirement,
+                evidence,
+                ok=False,
+                message="approval expiry must be after approval time",
+                reason_code="approval.validity_window_invalid",
+            )
+        if approved > evaluation:
+            return _binding_result(
+                requirement,
+                evidence,
+                ok=False,
+                message="approval was issued after the evaluation time",
+                reason_code="approval.not_yet_valid",
+            )
+        if evaluation >= expires:
+            return _binding_result(
+                requirement,
+                evidence,
+                ok=False,
+                message="human evidence has expired",
+                reason_code="approval.expired",
+            )
+
+    if not _requirements_equal(bound, requirement):
+        return _binding_result(
+            requirement,
+            evidence,
+            ok=False,
+            message="human evidence requirement fields do not match",
+            reason_code="approval.requirement_mismatch",
+        )
+    return _binding_result(
+        requirement,
+        evidence,
         ok=True,
-        message="evidence binding matches requirement",
-        requirement_id=req_id,
-        evidence_id=str(evidence.evidence_id),
+        message="evidence binding matches requirement and current context",
+        reason_code="approval.binding_match",
     )
 
 
@@ -387,11 +692,17 @@ def assert_evidence_binding(
     evidence: ApprovalEvidence | None,
     *,
     require_granted: bool = True,
+    current_context: GateContext | Mapping[str, object] | None = None,
+    evaluated_at: datetime | str | None = None,
 ) -> str:
     """Like ``validate_evidence_binding`` but raises on failure; returns evidence_id."""
 
     result = validate_evidence_binding(
-        requirement, evidence, require_granted=require_granted
+        requirement,
+        evidence,
+        require_granted=require_granted,
+        current_context=current_context,
+        evaluated_at=evaluated_at,
     )
     if not result.ok:
         raise ApprovalRequirementError(result.message)

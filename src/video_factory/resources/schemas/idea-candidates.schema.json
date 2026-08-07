@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.video-factory.invalid/artifact/idea-candidates.schema.json",
+  "title": "Idea candidates for human selection",
+  "type": "object",
+  "required": [
+    "artifact_version",
+    "rules_version",
+    "episode_id",
+    "generated_by",
+    "candidates"
+  ],
+  "properties": {
+    "artifact_version": { "const": "idea-candidates/1.0" },
+    "rules_version": { "$ref": "artifact-common.schema.json#/$defs/rulesVersion" },
+    "episode_id": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" },
+    "generated_by": { "$ref": "artifact-common.schema.json#/$defs/roleId" },
+    "candidates": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["candidate_id", "title_working", "premise"],
+        "properties": {
+          "candidate_id": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" },
+          "title_working": { "type": "string", "minLength": 1 },
+          "premise": { "type": "string", "minLength": 1 },
+          "concept_id": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" },
+          "marketing_reasons": {
+            "type": "array",
+            "items": { "$ref": "artifact-common.schema.json#/$defs/marketingReason" }
+          },
+          "notes": { "type": "string" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "extensions": { "$ref": "artifact-common.schema.json#/$defs/extensions" }
+  },
+  "additionalProperties": false,
+  "x-artifact-migration": {
+    "id_pattern": "^idea-candidates/[1-9][0-9]*-to-[1-9][0-9]*/[1-9][0-9]*$",
+    "single_major_step": true,
+    "in_place": false,
+    "automatic_downgrade": false
+  }
+}

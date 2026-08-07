@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.video-factory.invalid/artifact/reference-manifest.schema.json",
+  "title": "Human-selected reference asset manifest",
+  "type": "object",
+  "required": [
+    "artifact_version",
+    "rules_version",
+    "episode_id",
+    "selected_by_human",
+    "selected_by",
+    "selected_at",
+    "assets"
+  ],
+  "properties": {
+    "artifact_version": { "const": "reference-manifest/1.0" },
+    "rules_version": { "$ref": "artifact-common.schema.json#/$defs/rulesVersion" },
+    "episode_id": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" },
+    "selected_by_human": { "type": "boolean" },
+    "selected_by": { "$ref": "artifact-common.schema.json#/$defs/roleId" },
+    "selected_at": { "type": "string", "minLength": 1 },
+    "assets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["path", "sha256"],
+        "properties": {
+          "path": { "$ref": "artifact-common.schema.json#/$defs/relativePath" },
+          "sha256": { "$ref": "artifact-common.schema.json#/$defs/sha256" },
+          "role": { "type": "string", "minLength": 1 },
+          "notes": { "type": "string" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "notes": { "type": "string" },
+    "extensions": { "$ref": "artifact-common.schema.json#/$defs/extensions" }
+  },
+  "additionalProperties": false,
+  "x-artifact-migration": {
+    "id_pattern": "^reference-manifest/[1-9][0-9]*-to-[1-9][0-9]*/[1-9][0-9]*$",
+    "single_major_step": true,
+    "in_place": false,
+    "automatic_downgrade": false
+  }
+}

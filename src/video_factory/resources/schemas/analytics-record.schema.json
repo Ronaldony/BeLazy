@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.video-factory.invalid/artifact/analytics-record.schema.json",
+  "title": "Post-publish analytics metrics snapshot (injected data)",
+  "type": "object",
+  "required": [
+    "artifact_version",
+    "episode_id",
+    "collected_at",
+    "collector_role",
+    "checkpoint_window",
+    "metrics"
+  ],
+  "properties": {
+    "artifact_version": {
+      "const": "analytics-record/1.0"
+    },
+    "rules_version": {
+      "$ref": "artifact-common.schema.json#/$defs/rulesVersion"
+    },
+    "episode_id": {
+      "$ref": "artifact-common.schema.json#/$defs/opaqueId"
+    },
+    "extensions": {
+      "$ref": "artifact-common.schema.json#/$defs/extensions"
+    },
+    "collected_at": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Collection timestamp as opaque string (caller-supplied; not validated as calendar policy)"
+    },
+    "collector_role": {
+      "$ref": "artifact-common.schema.json#/$defs/roleId"
+    },
+    "publish_record_ref": {
+      "$ref": "artifact-common.schema.json#/$defs/boundArtifact",
+      "description": "Optional hash-bound reference to a publish or draft metadata record"
+    },
+    "checkpoint_window": {
+      "type": "object",
+      "required": [
+        "window_id",
+        "definition"
+      ],
+      "properties": {
+        "window_id": {
+          "$ref": "artifact-common.schema.json#/$defs/opaqueId",
+          "description": "Opaque checkpoint window id supplied by the channel policy pack"
+        },
+        "definition": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Free-text definition of the window (channel-owned wording)"
+        }
+      },
+      "additionalProperties": false
+    },
+    "metrics": {
+      "type": "object",
+      "description": "Opaque metric_key → number or null (null means not collected)",
+      "minProperties": 1,
+      "propertyNames": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "additionalProperties": {
+        "type": [
+          "number",
+          "null"
+        ]
+      }
+    }
+  },
+  "additionalProperties": false
+}

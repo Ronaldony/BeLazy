@@ -35,6 +35,24 @@ def _git_value(root: Path, *arguments: str) -> str:
     return completed.stdout.strip().lower()
 
 
+def _git_is_ancestor(root: Path, ancestor: str, descendant: str = "HEAD") -> bool:
+    completed = subprocess.run(
+        [
+            "git",
+            "-c",
+            f"safe.directory={root.as_posix()}",
+            "merge-base",
+            "--is-ancestor",
+            ancestor,
+            descendant,
+        ],
+        cwd=root,
+        check=False,
+        capture_output=True,
+    )
+    return completed.returncode == 0
+
+
 def _load_json(path: Path) -> dict[str, Any]:
     value = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(value, dict):
@@ -69,6 +87,8 @@ def validate_provenance(root: Path) -> list[str]:
                 errors.append("baseline_snapshot_commit_mismatch")
             if _git_value(root, "rev-parse", f"{commit}^{{tree}}") != tree:
                 errors.append("baseline_snapshot_tree_mismatch")
+            if not _git_is_ancestor(root, commit):
+                errors.append("baseline_snapshot_not_ancestor")
         except (OSError, subprocess.SubprocessError):
             errors.append("baseline_snapshot_git_lookup_failed")
 
@@ -91,6 +111,8 @@ def validate_provenance(root: Path) -> list[str]:
             try:
                 if _git_value(root, "rev-parse", f"{tested_commit}^{{tree}}") != tested_tree:
                     errors.append("tested_target_tree_mismatch")
+                if not _git_is_ancestor(root, tested_commit):
+                    errors.append("tested_target_not_ancestor")
             except (OSError, subprocess.SubprocessError):
                 errors.append("tested_target_git_lookup_failed")
 

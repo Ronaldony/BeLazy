@@ -100,15 +100,25 @@
           "const": "agent/autopilot-v4"
         },
         "initial_commit": {
-          "type": [
-            "string",
-            "null"
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[0-9a-f]{40}$"
+            },
+            {
+              "type": "null"
+            }
           ]
         },
         "current_head": {
-          "type": [
-            "string",
-            "null"
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[0-9a-f]{40}$"
+            },
+            {
+              "type": "null"
+            }
           ]
         },
         "working_tree_clean": {
@@ -160,21 +170,40 @@
             "uniqueItems": true
           },
           "checkpoint_commit": {
-            "type": [
-              "string",
-              "null"
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[0-9a-f]{40}$"
+              },
+              {
+                "type": "null"
+              }
             ]
           },
           "tests": {
             "type": "array",
             "items": {
-              "type": "object"
+              "type": "object",
+              "required": ["id", "status", "result"],
+              "properties": {
+                "id": {"type": "string", "minLength": 1},
+                "status": {"type": "string", "minLength": 1},
+                "result": {"type": "string", "minLength": 1}
+              }
             }
           },
           "reviews": {
             "type": "array",
             "items": {
-              "type": "object"
+              "type": "object",
+              "required": ["round", "role", "status"],
+              "properties": {
+                "round": {"type": "integer", "minimum": 1},
+                "role": {"type": "string", "minLength": 1},
+                "status": {"type": "string", "minLength": 1},
+                "critical": {"type": "integer", "minimum": 0},
+                "high": {"type": "integer", "minimum": 0}
+              }
             }
           },
           "unresolved_findings": {
@@ -183,8 +212,118 @@
               "type": "object"
             }
           }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {"status": {"const": "passed"}},
+              "required": ["status"]
+            },
+            "then": {
+              "properties": {
+                "attempts": {"minimum": 1},
+                "checkpoint_commit": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{40}$"
+                },
+                "tests": {"minItems": 1},
+                "reviews": {"minItems": 3},
+                "unresolved_findings": {"maxItems": 0}
+              }
+            }
+          }
+        ]
+      },
+      "allOf": [
+        {
+          "contains": {
+            "properties": {
+              "id": {"const": "W00-BOOTSTRAP-BASELINE"},
+              "task_ids": {"const": ["BOOT-001", "BOOT-002", "BOOT-003", "BOOT-004", "BOOT-005"]}
+            },
+            "required": ["id", "task_ids"]
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "properties": {
+              "id": {"const": "W01-TRUST-BOUNDARY"},
+              "task_ids": {"const": ["P0-PKG-001", "P0-JSON-001", "P0-AUTH-001"]}
+            },
+            "required": ["id", "task_ids"]
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "properties": {
+              "id": {"const": "W02-MANAGED-MUTATION"},
+              "task_ids": {"const": ["MUT-001", "MUT-002", "MUT-003", "MUT-004"]}
+            },
+            "required": ["id", "task_ids"]
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "properties": {
+              "id": {"const": "W03-DIRECTOR-BLUEPRINT"},
+              "task_ids": {"const": ["BP-001", "DIR-001", "DIR-002", "BP-002"]}
+            },
+            "required": ["id", "task_ids"]
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "properties": {
+              "id": {"const": "W04-WORKFLOW-AUTHORITY"},
+              "task_ids": {"const": ["WF-001", "AUTH-001", "AUTH-002", "WF-002"]}
+            },
+            "required": ["id", "task_ids"]
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "properties": {
+              "id": {"const": "W05-AUTOMATION-QUALITY-RELEASE"},
+              "task_ids": {"const": ["SEL-001", "QA-001", "REL-001"]}
+            },
+            "required": ["id", "task_ids"]
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "properties": {
+              "id": {"const": "W06-RUNTIME-MIGRATION"},
+              "task_ids": {"const": ["RUN-001", "RUN-002", "MIG-001", "REL-002"]}
+            },
+            "required": ["id", "task_ids"]
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "properties": {
+              "id": {"const": "W07-FINAL-AUDIT"},
+              "task_ids": {"const": ["AUDIT-001", "AUDIT-002", "AUDIT-003"]}
+            },
+            "required": ["id", "task_ids"]
+          },
+          "minContains": 1,
+          "maxContains": 1
         }
-      }
+      ]
     },
     "non_blocking_gaps": {
       "type": "array",

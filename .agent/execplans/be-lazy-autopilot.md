@@ -23,7 +23,7 @@ evidence and no external side effects.
 
 | Wave | Status | Tasks | Checkpoint |
 |---|---|---|---|
-| W00 Bootstrap/Baseline | in progress: implementation tested, reviews pending | BOOT-001..005 | pending |
+| W00 Bootstrap/Baseline | review round 2 passed; checkpoint sealing | BOOT-001..005 | pending post-review commit |
 | W01 Trust Boundary | pending | P0-PKG-001, P0-JSON-001, P0-AUTH-001 | pending |
 | W02 Managed Mutation | pending | MUT-001..004 | pending |
 | W03 Director/Blueprint | pending | BP-001, DIR-001, DIR-002, BP-002 | pending |
@@ -56,6 +56,12 @@ evidence and no external side effects.
    through `.git/info/exclude`, allowing it to record the current checkpoint
    after a commit without a self-referential commit hash. Immutable Wave
    receipts, provenance, reports, and this ExecPlan remain tracked.
+9. Tracked engineering evidence uses logical path roles and SHA-256 path
+   fingerprints. Exact host-local paths and W00 execution mappings remain only
+   in ignored local state.
+10. Separate target-boundary, provenance, and autopilot-state gates cover
+    reparse containment, Git/evidence binding, and recovery semantics that do
+    not belong to the product-neutrality scanner.
 
 ## W00 actual checks
 
@@ -65,8 +71,12 @@ evidence and no external side effects.
 - Initial target parity run: 327 passed, 2 failed due the documented control
   plane purity scope collision.
 - Focused repair tests: 15 passed; core purity PASS.
-- Final target full suite: 331 passed.
-- Target side-effect-free and repository-isolation checks: PASS.
+- Sealed target full suite: 343 passed in 19.42s on commit
+  `0b29525b93b8e203481fca2282b9f4393b2c4a7a` (tree
+  `ee2c38d36c1eddb6be2b1857b453bad9a0e79a6a`).
+- Target purity, side-effect-free, repository-isolation, target-boundary, and
+  W00 provenance checks: PASS.
+- Fresh review round 2: three independent reviewers, Critical 0, High 0.
 - Source and handoff post-check: exact digests unchanged.
 
 ## Open non-blocking gaps
@@ -79,7 +89,8 @@ evidence and no external side effects.
 
 ## Recovery
 
-W00 began from an unborn branch. Until the first local commit exists, recovery
-must reconstruct the target from the verified archive and handoff using the
-recorded import map. After W00 checkpointing, local state will record the exact
-current commit while tracked receipts retain the immutable Wave evidence.
+The initial import snapshot is immutable and Git-bound. After the W00
+checkpoint commit exists, ignored local state records its exact hash and a
+tracked recovery anchor records the checkpoint commit/tree plus a canonical
+semantic state digest. Recovery validates Git ancestry, input digests, state
+schema/semantics, and target containment before continuing.

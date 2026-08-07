@@ -12,8 +12,10 @@ BASELINE_TREE = "0f9f3cf065261a0b0f24faea72fa116687bb59d2"
 SOURCE_SHA256 = "954325b77028bcf7d36a88136d8e1ed0ec2348ad15014623710614cced94034a"
 TRACKED_LOCALITY_RECORDS = (
     ".agent/execplans/be-lazy-autopilot.md",
+    "docs/provenance/baseline-test-report.md",
     "docs/provenance/source-baseline.json",
     "reports/autopilot/input-verification.json",
+    "reports/autopilot/waves/W00/test-receipt.json",
 )
 
 
@@ -42,9 +44,25 @@ def test_w00_provenance_binds_baseline_snapshot_and_test_evidence() -> None:
         item = evidence[evidence_id]
         assert item["sha256"] == _sha256(item["path"])
 
+    receipt = json.loads(
+        (ROOT / evidence["w00_test_receipt"]["path"]).read_text(encoding="utf-8")
+    )
+    tested_target = evidence["tested_target"]
+    assert re.fullmatch(r"[0-9a-f]{40}", tested_target["commit"])
+    assert re.fullmatch(r"[0-9a-f]{40}", tested_target["tree"])
+    assert receipt["subject"]["target"]["tested_commit"] == tested_target["commit"]
+    assert receipt["subject"]["target"]["tested_tree"] == tested_target["tree"]
+
     assert evidence["source_baseline"]["pytest"].startswith("329 passed")
-    assert evidence["target_baseline"]["pytest"].startswith("331 passed")
+    assert evidence["target_baseline"]["pytest"].startswith("343 passed")
     assert evidence["wheel_build"]["status"] == "ENVIRONMENT_BLOCKED"
+
+    receipt_text = json.dumps(receipt, sort_keys=True)
+    assert "<external-temp>" not in receipt_text
+    for command in receipt["commands"]:
+        assert command["cwd_role"]
+        assert command["invocation"]
+        assert command["argv"]
 
 
 def test_w00_tracked_evidence_omits_host_local_paths() -> None:

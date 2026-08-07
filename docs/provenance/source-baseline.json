@@ -97,25 +97,31 @@
     "source_git_metadata_imported": false
   },
   "test_evidence": {
+    "tested_target": {
+      "commit": "5e335507cf33b1f8d637a8a975f629c4243fb3af",
+      "tree": "d91e7affe3fc025c987d227f8e7f76973f89d509",
+      "relationship": "This is the clean substantive W00 repair snapshot tested before the evidence-only seal."
+    },
     "baseline_report": {
       "path": "docs/provenance/baseline-test-report.md",
-      "sha256": "c75b96ede23e509084efa930d19e9d427db2d25f719e0fdbd67e45f242901725"
+      "sha256": "cdde5ab59e0b052bfb2c59ae5c6d4265dd98eef1a0e207d8934e320df9c00f13"
     },
     "w00_test_receipt": {
       "path": "reports/autopilot/waves/W00/test-receipt.json",
-      "sha256": "144a5b979f7692793bbe807694816f9a88a6b56824c386456e356aec98829f96"
+      "sha256": "992216802c0d5e9d46ec82b42b8d325cf98dd78891ddc20734276f3a739f6d2d"
     },
     "source_baseline": {
-      "pytest": "329 passed in 18.20s",
+      "pytest": "329 passed in 15.41s",
       "core_purity": "PASS; scanned_files=180; violations=0",
       "side_effect_free": "PASS; scanned_files=78; violations=0",
       "repo_isolation": "PASS; scanned_files=125; violations=0"
     },
     "target_baseline": {
-      "pytest": "331 passed in 17.85s",
-      "core_purity": "PASS; scanned_files=186; violations=0",
+      "pytest": "343 passed in 16.90s",
+      "core_purity": "PASS; scanned_files=191; violations=0",
       "side_effect_free": "PASS; scanned_files=78; violations=0",
-      "repo_isolation": "PASS; scanned_files=126; violations=0"
+      "repo_isolation": "PASS; scanned_files=128; violations=0",
+      "target_boundary": "PASS; scanned_files=239; scanned_directories=55; violations=0"
     },
     "wheel_build": {
       "status": "ENVIRONMENT_BLOCKED",

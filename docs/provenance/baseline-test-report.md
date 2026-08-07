@@ -4,14 +4,17 @@
 
 The immutable archive was tested only through a verified temporary extraction.
 The source archive and handoff package remained byte-identical. Source behavior
-passed all 329 available tests. After one explicit target-only purity scope
-repair, the target passed the 329 imported tests plus two new regression tests.
+passed all 329 available tests. After the explicit target-only purity scope and
+W00 review repairs, target commit `5e335507cf33b1f8d637a8a975f629c4243fb3af`
+passed the 329 imported tests plus 14 target-specific regression tests.
 
 ## Environments
 
 - Supported runtime: Python 3.12.10
 - Default host Python packages: no pytest, jsonschema, setuptools, build, or wheel
 - Read-only local test tool environment: pytest 9.1.1 and jsonschema 4.26.0
+- Test runner: CPython 3.12.10 AMD64, executable SHA-256
+  `0b471133e110cfb53a061cad528ce8e517d7b9ac41a0a396c39ad795a487fc14`
 - Test cache: disabled
 - Bytecode writes: disabled
 - Basetemp: outside source, handoff, and target
@@ -24,7 +27,7 @@ runtime dependency.
 
 | Check | Actual result |
 |---|---|
-| Full pytest | 329 passed in 18.20s |
+| Full pytest | 329 passed in 15.41s |
 | Core purity | PASS, 180 scanned files, 0 violations |
 | Side-effect free | PASS, 78 scanned files, 0 violations |
 | Repository isolation | PASS, 125 scanned files, 0 violations |
@@ -42,17 +45,30 @@ identity violations. That run was recorded, not hidden:
 - Cause: scanner scope, not a legacy product behavior change.
 
 The scanner was narrowed only for explicit non-product control/provenance paths,
-and two regression tests prove that product paths remain scanned.
+and two regression tests prove that product paths remain scanned. Review repair
+also added provenance binding/locality tests and a separate no-follow repository
+boundary gate with synthetic negative cases.
 
 | Check | Actual result |
 |---|---|
-| Focused purity/doctor suite | 15 passed |
-| Full target pytest | 331 passed in 17.85s |
-| Core purity | PASS, 186 scanned files, 0 violations |
+| Full target pytest | 343 passed in 16.90s |
+| Core purity | PASS, 191 scanned files, 0 violations |
 | Side-effect free | PASS, 78 scanned files, 0 violations |
-| Repository isolation | PASS, 126 scanned files, 0 violations |
+| Repository isolation | PASS, 128 scanned files, 0 violations |
+| Target boundary | PASS, 239 files and 55 directories scanned, 0 violations |
 
-The target total is 329 imported tests plus two target-specific scope tests.
+The target total is 329 imported tests plus 14 target-specific tests: two purity
+scope tests, two provenance/locality tests, and ten target-boundary tests.
+
+## Evidence binding
+
+- Tested target commit: `5e335507cf33b1f8d637a8a975f629c4243fb3af`
+- Tested target tree: `d91e7affe3fc025c987d227f8e7f76973f89d509`
+- Exact environment-variable mapping, cwd roles, argv, results, source inventory,
+  handoff, import-map, and import-plan digests:
+  `reports/autopilot/waves/W00/test-receipt.json`
+- Exact host-local paths are deliberately retained only in ignored local state;
+  tracked evidence uses stable roles and path fingerprints.
 
 ## Packaging baseline
 

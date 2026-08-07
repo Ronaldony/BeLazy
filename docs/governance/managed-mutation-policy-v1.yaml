@@ -75,6 +75,9 @@ execution:
   every_risk_tier_requires_trusted_authority_decision: true
   requester_declared_risk_can_lower_effective_risk: false
   versioned_risk_classifier_required: true
+  w02_unclassified_mutation_floor: R4
+  lower_tier_activation_before_w04: DENIED
+  lower_tier_requires_exact_request_and_policy_bound_classifier: true
   create_replace_content_resolver_required: true
   before_manifest_digest_required: true
   after_manifest_digest_required: true
@@ -100,6 +103,8 @@ human_interfaces:
     - bypass_agent_with_shell_mutation
 
 risk:
+  w02_effective_tier: R4
+  lower_tier_semantics_status: DEFERRED_TO_W04_TRUSTED_CLASSIFIER
   bounded_reversible_agent_mutation: R1
   paid_or_external_mutation: R2
   public_release_or_material_brand_mutation: R3

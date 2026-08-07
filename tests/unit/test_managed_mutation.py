@@ -65,6 +65,8 @@ from video_factory.mutation import (
     require_collision_free,
     require_managed_path,
     require_no_link_or_reparse_ancestor,
+    validate_mutation_execution_authorization,
+    validate_mutation_execution_authorization_for_plan,
     validate_mutation_plan,
     workspace_observation_sha256,
     workspace_trust_blockers,
@@ -377,6 +379,10 @@ def _receipt(plan, *, authorization=None, after_observation=None) -> MutationRec
         "a/stream:name.txt",
         "a/trailing. ",
         "a/CON.txt",
+        "CONIN$",
+        "conout$.txt",
+        "a/CLOCK$",
+        "a/CONIN$/child.txt",
         "a/COM¹.txt",
         "a/LPT².txt",
         "a/control\x00.txt",
@@ -715,36 +721,78 @@ def test_risk_policy_cannot_be_downgraded_by_requester(
     assert no_break_glass.value.reason_code == "mutation.break_glass.missing"
 
 
-def test_risk_policy_protects_authority_paths_and_requires_authority_for_r1() -> None:
-    protected = _request(
+@pytest.mark.parametrize(
+    "path",
+    (
+        "artifacts/new.txt",
+        "generated/output.json",
+        "drafts/brief.json",
+        "docs/governance/rules.yaml",
+        "policies/rules.json",
+        ".github/workflows/release.yml",
+        "public/releases/video.json",
+    ),
+)
+@pytest.mark.parametrize(
+    "declared",
+    (MutationRiskTier.R1, MutationRiskTier.R2, MutationRiskTier.R3),
+)
+def test_w02_risk_policy_defaults_every_create_to_r4(
+    path: str,
+    declared: MutationRiskTier,
+) -> None:
+    request = _request(
         kind=MutationKind.CREATE,
-        path="policy.json",
+        path=path,
         expected=None,
-        risk=MutationRiskTier.R1,
-        key="protected-create",
+        risk=declared,
+        key=f"conservative-{declared.value}-{path.replace('/', '-')}",
     )
-    protected_plan = plan_mutation(
-        protected,
+    observed_entries = list(_observation().entries)
+    observed_paths = {str(item.path) for item in observed_entries}
+    parts = path.split("/")
+    for index in range(1, len(parts)):
+        ancestor = "/".join(parts[:index])
+        if ancestor not in observed_paths:
+            observed_entries.append(
+                PathObservation(
+                    RelativeArtifactPath(ancestor),
+                    PathNodeKind.DIRECTORY,
+                    None,
+                    None,
+                )
+            )
+            observed_paths.add(ancestor)
+    observation = _observation(entries=tuple(observed_entries))
+    plan = plan_mutation(
+        request,
         _revision(),
-        _observation(),
+        observation,
         policy_bundle_sha256=POLICY_SHA,
     )
-    assert protected_plan.risk_tier is MutationRiskTier.R4
-
-    bounded = _plan(kind=MutationKind.CREATE)
-    assert bounded.risk_tier is MutationRiskTier.R1
-    with pytest.raises(MutationRuntimeError) as missing_authority:
+    assert plan.risk_tier is MutationRiskTier.R4
+    with pytest.raises(MutationRuntimeError) as missing_break_glass:
         MutationPreSideEffectGuard().authorize(
-            bounded,
-            _observation(),
+            plan,
+            observation,
             service_identity=OpaqueId("mutation-service"),
-            current_context=_gate_context(bounded),
+            current_context=_gate_context(plan),
             evaluated_at=EVALUATED_AT,
+            authority_verifier=_TrustedAuthority(),
             **_runtime_dependencies(),
         )
-    assert missing_authority.value.reason_code == (
-        "mutation.authority.verifier_missing"
-    )
+    assert missing_break_glass.value.reason_code == "mutation.break_glass.missing"
+
+
+def test_w02_plan_contract_rejects_a_rebound_lower_risk_tier() -> None:
+    plan = _plan(kind=MutationKind.CREATE)
+    with pytest.raises(MutationPlanError) as lowered:
+        validate_mutation_plan(replace(plan, risk_tier=MutationRiskTier.R1))
+    assert lowered.value.reason_code == "mutation.plan.risk_downgrade"
+
+    mapping = mutation_plan_to_mapping(plan)
+    mapping["risk_tier"] = "R1"
+    assert not validate_artifact_mapping(mapping).ok
 
 
 def test_successful_receipt_creates_immutable_revision_and_tombstones() -> None:
@@ -923,6 +971,70 @@ def test_revision_promotion_rejects_forged_authorization_and_after_bytes() -> No
     )
 
 
+def test_plan_aware_authorization_rejects_rebound_missing_evidence() -> None:
+    plan = _plan()
+    authorization = _execution_authorization(plan)
+    stripped = replace(
+        authorization,
+        content_verifications=(),
+        break_glass_authorization_id=None,
+        break_glass_authorization_sha256=None,
+        break_glass_request_sha256=None,
+        human_approval_verifications=(),
+        break_glass_evidence_verifications=(),
+    )
+    stripped = replace(
+        stripped,
+        authorization_id=mutation_execution_authorization_id(stripped),
+    )
+    assert validate_mutation_execution_authorization(stripped) == stripped
+    with pytest.raises(MutationPlanError) as missing_content:
+        validate_mutation_execution_authorization_for_plan(stripped, plan)
+    assert missing_content.value.reason_code == (
+        "mutation.authorization.content_evidence_missing"
+    )
+
+    break_glass_stripped = replace(
+        authorization,
+        break_glass_authorization_id=None,
+        break_glass_authorization_sha256=None,
+        break_glass_request_sha256=None,
+        human_approval_verifications=(),
+        break_glass_evidence_verifications=(),
+    )
+    break_glass_stripped = replace(
+        break_glass_stripped,
+        authorization_id=mutation_execution_authorization_id(
+            break_glass_stripped
+        ),
+    )
+    with pytest.raises(MutationPlanError) as missing_r4:
+        validate_mutation_execution_authorization_for_plan(
+            break_glass_stripped,
+            plan,
+        )
+    assert missing_r4.value.reason_code == (
+        "mutation.authorization.r4_evidence_missing"
+    )
+
+    rebound_receipt = _receipt(
+        plan,
+        authorization=stripped,
+        after_observation=_after_observation(plan),
+    )
+    with pytest.raises(WorkspaceRevisionError) as promotion:
+        derive_workspace_revision(
+            _revision(),
+            plan,
+            rebound_receipt,
+            stripped,
+            _after_observation(plan),
+        )
+    assert promotion.value.reason_code == (
+        "mutation.authorization.content_evidence_missing"
+    )
+
+
 @pytest.mark.parametrize(
     ("status", "recovery_required"),
     [
@@ -1004,6 +1116,39 @@ def test_drift_ignores_structural_directories_but_keeps_path_safety_evidence() -
     ) is None
 
 
+def test_drift_validates_revision_and_compares_exact_byte_length() -> None:
+    wrong_length = replace(
+        _observation(),
+        entries=tuple(
+            replace(item, byte_length=11)
+            if item.node_kind is PathNodeKind.FILE
+            else item
+            for item in _observation().entries
+        ),
+    )
+    report = detect_workspace_drift(
+        _revision(),
+        wrong_length,
+        detected_at="2026-08-07T01:05:00Z",
+    )
+    assert report is not None
+    assert any(
+        finding.reason_code == "mutation.drift.modified"
+        for finding in report.findings
+    )
+
+    invalid_revision = replace(_revision(), reconciliation_evidence=None)
+    with pytest.raises(WorkspaceRevisionError) as invalid_expected:
+        detect_workspace_drift(
+            invalid_revision,
+            _observation(),
+            detected_at="2026-08-07T01:05:00Z",
+        )
+    assert invalid_expected.value.reason_code == (
+        "mutation.revision.baseline_provenance"
+    )
+
+
 def test_all_six_contracts_validate_and_round_trip_through_strict_bytes() -> None:
     request = _request()
     plan = _plan()
@@ -1083,8 +1228,10 @@ class _TrustedAuthority:
 class _TrustedContent:
     def __init__(self, *, digest: HashDigest | None = None) -> None:
         self.digest = digest
+        self.calls = 0
 
     def resolve_current(self, content, *, evaluated_at):
+        self.calls += 1
         return ContentObjectObservation(
             object_id=content.object_id,
             exact_sha256=self.digest or content.exact_sha256,
@@ -1108,6 +1255,7 @@ class _TrustedIdempotency:
         self.plan_sha256 = plan_sha256
         self.newly_reserved = newly_reserved
         self.existing_receipt_id = existing_receipt_id
+        self.calls = 0
 
     def reserve_current(
         self,
@@ -1118,6 +1266,7 @@ class _TrustedIdempotency:
         service_identity,
         evaluated_at,
     ):
+        self.calls += 1
         return IdempotencyReservation(
             idempotency_key=plan.idempotency_key,
             plan_sha256=self.plan_sha256 or plan.plan_sha256,
@@ -1259,10 +1408,15 @@ def _break_glass(plan) -> BreakGlassAuthorization:
     )
 
 
-def _execution_authorization(plan):
+def _authorization_dependencies(
+    plan,
+    *,
+    ledger: _TrustedIdempotency | None = None,
+    resolver: _TrustedContent | None = None,
+) -> dict[str, object]:
     options: dict[str, object] = {
         "authority_verifier": _TrustedAuthority(),
-        **_runtime_dependencies(),
+        **_runtime_dependencies(ledger=ledger, resolver=resolver),
     }
     if plan.risk_tier is MutationRiskTier.R4:
         options.update(
@@ -1279,13 +1433,17 @@ def _execution_authorization(plan):
                 ),
             }
         )
+    return options
+
+
+def _execution_authorization(plan):
     return MutationPreSideEffectGuard().authorize(
         plan,
         _observation(),
         service_identity=OpaqueId("mutation-service"),
         current_context=_gate_context(plan),
         evaluated_at=EVALUATED_AT,
-        **options,
+        **_authorization_dependencies(plan),
     )
 
 
@@ -1364,8 +1522,8 @@ def test_pre_side_effect_guard_rechecks_workspace_authority_and_idempotency() ->
             service_identity=OpaqueId("mutation-service"),
             current_context=_gate_context(idempotent_plan),
             evaluated_at=EVALUATED_AT,
-            authority_verifier=_TrustedAuthority(),
-            **_runtime_dependencies(
+            **_authorization_dependencies(
+                idempotent_plan,
                 ledger=_TrustedIdempotency(plan_sha256=SHA_C)
             ),
         )
@@ -1378,8 +1536,8 @@ def test_pre_side_effect_guard_rechecks_workspace_authority_and_idempotency() ->
             service_identity=OpaqueId("mutation-service"),
             current_context=_gate_context(idempotent_plan),
             evaluated_at=EVALUATED_AT,
-            authority_verifier=_TrustedAuthority(),
-            **_runtime_dependencies(
+            **_authorization_dependencies(
+                idempotent_plan,
                 ledger=_TrustedIdempotency(
                     newly_reserved=False,
                     existing_receipt_id=OpaqueId("receipt-a"),
@@ -1389,6 +1547,7 @@ def test_pre_side_effect_guard_rechecks_workspace_authority_and_idempotency() ->
     assert replay.value.reason_code == "mutation.idempotency.replay"
 
     elevated = _plan(risk=MutationRiskTier.R2, kind=MutationKind.CREATE)
+    assert elevated.risk_tier is MutationRiskTier.R4
     with pytest.raises(MutationRuntimeError) as missing:
         guard.authorize(
             elevated,
@@ -1397,18 +1556,19 @@ def test_pre_side_effect_guard_rechecks_workspace_authority_and_idempotency() ->
             current_context=_gate_context(elevated),
             evaluated_at=EVALUATED_AT,
             **_runtime_dependencies(),
-        )
-    assert missing.value.reason_code == "mutation.authority.verifier_missing"
-    authority = guard.authorize(
-        elevated,
-        _observation(),
-        service_identity=OpaqueId("mutation-service"),
-        current_context=_gate_context(elevated),
-        evaluated_at=EVALUATED_AT,
-        authority_verifier=_TrustedAuthority(),
-        **_runtime_dependencies(),
     )
-    assert authority.authority_decision is not None
+    assert missing.value.reason_code == "mutation.authority.verifier_missing"
+    with pytest.raises(MutationRuntimeError) as no_lower_tier_bypass:
+        guard.authorize(
+            elevated,
+            _observation(),
+            service_identity=OpaqueId("mutation-service"),
+            current_context=_gate_context(elevated),
+            evaluated_at=EVALUATED_AT,
+            authority_verifier=_TrustedAuthority(),
+            **_runtime_dependencies(),
+        )
+    assert no_lower_tier_bypass.value.reason_code == "mutation.break_glass.missing"
 
     with pytest.raises(MutationRuntimeError) as content_changed:
         guard.authorize(
@@ -1421,6 +1581,85 @@ def test_pre_side_effect_guard_rechecks_workspace_authority_and_idempotency() ->
             **_runtime_dependencies(resolver=_TrustedContent(digest=SHA_C)),
         )
     assert content_changed.value.reason_code == "mutation.content.mismatch"
+
+
+def test_guard_deduplicates_reused_content_before_idempotency_reservation() -> None:
+    first = _request(
+        kind=MutationKind.CREATE,
+        path="artifacts/one.txt",
+        expected=None,
+        key="shared-content",
+    )
+    second_operation = replace(
+        first.operations[0],
+        path=RelativeArtifactPath("artifacts/two.txt"),
+    )
+    request = replace(
+        first,
+        operations=(first.operations[0], second_operation),
+    )
+    plan = plan_mutation(
+        request,
+        _revision(),
+        _observation(),
+        policy_bundle_sha256=POLICY_SHA,
+    )
+    resolver = _TrustedContent()
+    ledger = _TrustedIdempotency()
+    authorization = MutationPreSideEffectGuard().authorize(
+        plan,
+        _observation(),
+        service_identity=OpaqueId("mutation-service"),
+        current_context=_gate_context(plan),
+        evaluated_at=EVALUATED_AT,
+        **_authorization_dependencies(
+            plan,
+            resolver=resolver,
+            ledger=ledger,
+        ),
+    )
+    assert len(plan.operations) == 2
+    assert resolver.calls == 1
+    assert ledger.calls == 1
+    assert len(authorization.content_verifications) == 1
+
+    conflicting_operation = replace(
+        second_operation,
+        new_content=ContentObject(OpaqueId("object-b"), SHA_C, 13),
+    )
+    with pytest.raises(MutationPlanError) as conflicting_identity:
+        plan_mutation(
+            replace(
+                request,
+                operations=(first.operations[0], conflicting_operation),
+            ),
+            _revision(),
+            _observation(),
+            policy_bundle_sha256=POLICY_SHA,
+        )
+    assert conflicting_identity.value.reason_code == (
+        "mutation.content.object_identity_conflict"
+    )
+
+    rebound_plan = replace(
+        plan,
+        operations=(
+            plan.operations[0],
+            replace(
+                plan.operations[1],
+                new_content=ContentObject(
+                    OpaqueId("object-b"),
+                    SHA_C,
+                    13,
+                ),
+            ),
+        ),
+    )
+    with pytest.raises(MutationPlanError) as rebound_identity:
+        validate_mutation_plan(rebound_plan)
+    assert rebound_identity.value.reason_code == (
+        "mutation.content.object_identity_conflict"
+    )
 
 
 def test_r4_break_glass_requires_two_current_distinct_authenticated_humans() -> None:

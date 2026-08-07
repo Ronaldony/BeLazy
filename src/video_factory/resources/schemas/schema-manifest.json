@@ -197,7 +197,7 @@
     },
     {
       "filename": "mutation-plan.schema.json",
-      "sha256": "906a4466d856e8929df58c00100f1fddada627b9a0e3c38df23575e31acd53d2",
+      "sha256": "51a86afcfbed312f2f2e29abd00d83b09dc85dced27706125869d106b11e9514",
       "schema_id": "https://schemas.video-factory.invalid/mutation/mutation-plan.schema.json",
       "artifact_version": "mutation-plan/1.0"
     },

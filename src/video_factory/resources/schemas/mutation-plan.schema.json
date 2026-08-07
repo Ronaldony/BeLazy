@@ -33,7 +33,7 @@
     "policy_bundle_sha256": { "$ref": "artifact-common.schema.json#/$defs/sha256" },
     "risk_policy_version": { "const": "managed-mutation-risk-policy/1.0" },
     "idempotency_key": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" },
-    "risk_tier": { "$ref": "artifact-common.schema.json#/$defs/mutationRiskTier" },
+    "risk_tier": { "const": "R4" },
     "operations": {
       "type": "array",
       "minItems": 1,

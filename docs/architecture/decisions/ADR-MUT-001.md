@@ -39,11 +39,15 @@ human-approval issuer. Those implementations remain W06/W04 responsibilities.
 - runtime revalidates manifest, bytes, authority, and idempotency immediately before mutation;
 - runtime revalidates the exact `GateContext`, plan digest, policy digest,
   workspace revision, observation digest, service identity, and kill switch;
-- request-declared risk is never authoritative: a versioned classifier computes
-  a minimum tier, every tier requires a trusted authority decision, and R4 adds
-  break-glass rather than replacing normal authority;
+- request-declared risk is never authoritative. W02 has no trusted semantic
+  classifier evidence, so every mutation (including every CREATE path) is
+  conservatively R4. R1/R2/R3 activation is disabled until W04 can bind a
+  current classifier decision to the exact request and policy digest. Normal
+  authority remains required and R4 break-glass is additive;
 - create/replace content is re-resolved by a trusted port and exact object ID,
-  digest, and byte length are bound into the execution authorization;
+  digest, and byte length are bound into the execution authorization; identical
+  objects reused across operations are resolved once and conflicting reuse of
+  one object ID is rejected before idempotency reservation;
 - idempotency is an atomic trusted reservation over key, exact plan, and exact
   workspace observation; a caller-supplied optional lookup cannot authorize;
 - out-of-band change sets workspace trust to `UNTRUSTED` and blocks generation/publish;
@@ -57,6 +61,10 @@ human-approval issuer. Those implementations remain W06/W04 responsibilities.
   workspace observations, idempotency reservation, journal, and service
   identity; immutable revision promotion independently rechecks the parent
   revision digest and every resulting active file.
+- canonical authorization IDs are integrity identifiers, not authority. Every
+  consuming boundary uses the plan-aware validator so removing content or R4
+  evidence and recomputing an ID cannot authorize execution or revision
+  promotion.
 - baseline and managed lineage cannot be conflated: genesis revisions require
   explicit reconciliation evidence, while managed revisions require a parent.
 

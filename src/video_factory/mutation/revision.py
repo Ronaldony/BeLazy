@@ -32,7 +32,7 @@ from .paths import (
 from .planner import (
     MutationPlanError,
     validate_mutation_plan,
-    validate_mutation_execution_authorization,
+    validate_mutation_execution_authorization_for_plan,
     validate_mutation_receipt,
     validate_workspace_revision,
     mutation_execution_authorization_sha256,
@@ -86,7 +86,7 @@ def derive_workspace_revision(
         validate_mutation_plan(plan)
         validate_mutation_receipt(receipt)
         validate_workspace_revision(previous)
-        validate_mutation_execution_authorization(authorization)
+        validate_mutation_execution_authorization_for_plan(authorization, plan)
     except MutationPlanError as error:
         raise WorkspaceRevisionError(error.reason_code, str(error)) from error
     try:
@@ -396,6 +396,14 @@ def detect_workspace_drift(
     """Compare immutable revision evidence to an observed manifest and files."""
 
     try:
+        validate_workspace_revision(expected)
+    except MutationPlanError as error:
+        raise WorkspaceRevisionError(error.reason_code, str(error)) from error
+    try:
+        workspace_observation_mapping(observed)
+    except WorkspaceTrustError as error:
+        raise WorkspaceRevisionError(error.reason_code, str(error)) from error
+    try:
         parse_rfc3339_datetime(detected_at)
     except ValueError as error:
         raise WorkspaceRevisionError(
@@ -467,7 +475,10 @@ def detect_workspace_drift(
                     "mutation.drift.type_changed",
                 )
             )
-        elif item.exact_sha256 != entry.content_sha256:
+        elif (
+            item.exact_sha256 != entry.content_sha256
+            or item.byte_length != entry.byte_length
+        ):
             findings.append(
                 DriftFinding(
                     item.path,

@@ -64,7 +64,6 @@ _RISK_RANK = {
     MutationRiskTier.R3: 3,
     MutationRiskTier.R4: 4,
 }
-_AUTHORITY_PATH_MARKERS = ("policy", "approval", "ledger", "authority")
 
 
 class MutationPlanError(ValueError):
@@ -300,21 +299,43 @@ def _require_nonoverlapping_paths(
                 )
 
 
+def _require_consistent_content_objects(
+    operations: Sequence[MutationOperationIntent],
+) -> None:
+    """Reject one immutable object ID being assigned conflicting bytes."""
+
+    observed: dict[str, tuple[HashDigest, int]] = {}
+    for operation in operations:
+        content = operation.new_content
+        if content is None:
+            continue
+        key = str(content.object_id)
+        identity = (content.exact_sha256, content.byte_length)
+        previous = observed.get(key)
+        if previous is not None and previous != identity:
+            raise MutationPlanError(
+                "mutation.content.object_identity_conflict",
+                f"content object ID is bound to conflicting bytes: {key}",
+            )
+        observed[key] = identity
+
+
 def _minimum_risk_tier(
     operations: Sequence[MutationOperationIntent],
 ) -> MutationRiskTier:
-    """Apply the non-downgradable managed-mutation risk policy v1."""
+    """Apply the conservative W02 risk floor.
 
-    for operation in operations:
-        if operation.kind is not MutationKind.CREATE:
-            return MutationRiskTier.R4
-        for path in (operation.path, operation.destination_path):
-            if path is None:
-                continue
-            folded = path_collision_key(path)
-            if any(marker in folded for marker in _AUTHORITY_PATH_MARKERS):
-                return MutationRiskTier.R4
-    return MutationRiskTier.R1
+    W02 has no trusted semantic risk-classification evidence contract yet. A
+    path name cannot prove that a CREATE is harmless, so every mutation is R4
+    until W04 supplies a current policy-bound classifier decision.
+    """
+
+    if not operations:
+        raise MutationPlanError(
+            "mutation.request.operations_empty",
+            "risk classification requires at least one operation",
+        )
+    return MutationRiskTier.R4
 
 
 def _effective_risk_tier(
@@ -417,6 +438,7 @@ def build_mutation_plan(
         for index, operation in enumerate(request.operations)
     )
     _require_nonoverlapping_paths(intents)
+    _require_consistent_content_objects(intents)
     canonical_intents = tuple(
         sorted(
             intents,
@@ -699,6 +721,7 @@ def validate_mutation_plan(plan: MutationPlan) -> MutationPlan:
         for index, operation in enumerate(plan.operations)
     )
     _require_nonoverlapping_paths(intents)
+    _require_consistent_content_objects(intents)
     expected_order = tuple(
         sorted(
             plan.operations,
@@ -1525,6 +1548,51 @@ def _execution_authorization_identity_mapping(
     }
 
 
+def mutation_content_observation_sha256(
+    plan: MutationPlan,
+    content_verifications: Sequence[ArtifactReference],
+) -> HashDigest:
+    """Bind planned immutable objects to the resolver evidence set."""
+
+    objects = {
+        (
+            str(operation.new_content.object_id),
+            str(operation.new_content.exact_sha256),
+            operation.new_content.byte_length,
+        )
+        for operation in plan.operations
+        if operation.new_content is not None
+    }
+    evidence = {
+        (
+            str(reference.path),
+            str(reference.sha256),
+            str(reference.artifact_version),
+        )
+        for reference in content_verifications
+    }
+    return canonical_sha256(
+        {
+            "content_objects": [
+                {
+                    "object_id": object_id,
+                    "exact_sha256": exact_sha256,
+                    "byte_length": byte_length,
+                }
+                for object_id, exact_sha256, byte_length in sorted(objects)
+            ],
+            "resolver_evidence": [
+                {
+                    "path": path,
+                    "sha256": sha256,
+                    "artifact_version": artifact_version,
+                }
+                for path, sha256, artifact_version in sorted(evidence)
+            ],
+        }
+    )
+
+
 def mutation_execution_authorization_id(
     authorization: MutationExecutionAuthorization,
 ) -> OpaqueId:
@@ -1535,7 +1603,7 @@ def mutation_execution_authorization_id(
 def validate_mutation_execution_authorization(
     authorization: MutationExecutionAuthorization,
 ) -> MutationExecutionAuthorization:
-    """Validate a guard result before it can be persisted or consumed."""
+    """Validate standalone shape and identity, without granting plan authority."""
 
     if not isinstance(authorization, MutationExecutionAuthorization):
         raise MutationPlanError(
@@ -1657,6 +1725,87 @@ def validate_mutation_execution_authorization(
         raise MutationPlanError(
             "mutation.authorization.identity",
             "authorization ID does not match its complete canonical content",
+        )
+    return authorization
+
+
+def validate_mutation_execution_authorization_for_plan(
+    authorization: MutationExecutionAuthorization,
+    plan: MutationPlan,
+) -> MutationExecutionAuthorization:
+    """Require complete authorization evidence for one exact current plan."""
+
+    validate_mutation_plan(plan)
+    validate_mutation_execution_authorization(authorization)
+    if (
+        authorization.plan_id != plan.plan_id
+        or authorization.plan_sha256 != plan.plan_sha256
+        or authorization.workspace_id != plan.workspace_id
+        or authorization.revision_id != plan.before_revision_id
+        or authorization.workspace_revision_sha256
+        != plan.before_workspace_revision_sha256
+        or authorization.manifest_sha256 != plan.before_manifest_sha256
+        or authorization.idempotency_key != plan.idempotency_key
+    ):
+        raise MutationPlanError(
+            "mutation.authorization.plan_binding",
+            "execution authorization is not bound to the exact mutation plan",
+        )
+
+    content_objects = {
+        (
+            str(operation.new_content.object_id),
+            str(operation.new_content.exact_sha256),
+            operation.new_content.byte_length,
+        )
+        for operation in plan.operations
+        if operation.new_content is not None
+    }
+    content_evidence = authorization.content_verifications
+    if content_objects and not content_evidence:
+        raise MutationPlanError(
+            "mutation.authorization.content_evidence_missing",
+            "create/replace authorization lacks trusted content evidence",
+        )
+    if not content_objects and content_evidence:
+        raise MutationPlanError(
+            "mutation.authorization.content_evidence_unexpected",
+            "delete/move authorization carries unrelated content evidence",
+        )
+    if len(content_evidence) > len(content_objects):
+        raise MutationPlanError(
+            "mutation.authorization.content_evidence_count",
+            "content evidence exceeds the unique planned content objects",
+        )
+    expected_content_digest = mutation_content_observation_sha256(
+        plan,
+        content_evidence,
+    )
+    if authorization.content_observation_sha256 != expected_content_digest:
+        raise MutationPlanError(
+            "mutation.authorization.content_binding",
+            "content observation digest does not match the plan and evidence",
+        )
+
+    break_glass_bound = authorization.break_glass_authorization_id is not None
+    if plan.risk_tier is MutationRiskTier.R4:
+        if (
+            not break_glass_bound
+            or len(authorization.human_approval_verifications) != 2
+            or len(authorization.break_glass_evidence_verifications) != 3
+        ):
+            raise MutationPlanError(
+                "mutation.authorization.r4_evidence_missing",
+                "R4 plan authorization lacks complete break-glass evidence",
+            )
+    elif (
+        break_glass_bound
+        or authorization.human_approval_verifications
+        or authorization.break_glass_evidence_verifications
+    ):
+        raise MutationPlanError(
+            "mutation.authorization.break_glass_unexpected",
+            "non-R4 plan authorization carries break-glass authority",
         )
     return authorization
 

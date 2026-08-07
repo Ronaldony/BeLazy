@@ -45,9 +45,10 @@ from video_factory.mutation.planner import (
     MutationPlanError,
     break_glass_authorization_to_mapping,
     break_glass_request_sha256,
+    mutation_content_observation_sha256,
     mutation_execution_authorization_id,
     validate_mutation_plan,
-    validate_mutation_execution_authorization,
+    validate_mutation_execution_authorization_for_plan,
 )
 from video_factory.mutation.trust import (
     workspace_observation_sha256,
@@ -612,17 +613,37 @@ class MutationPreSideEffectGuard:
                         f"{operation.destination_path}",
                     )
 
-        content_observations: list[ContentObjectObservation] = []
+        unique_content: dict[str, ContentObject] = {}
         for operation in plan.operations:
             if operation.new_content is None:
                 continue
+            content_key = str(operation.new_content.object_id)
+            existing_content = unique_content.get(content_key)
+            if existing_content is not None:
+                if existing_content != operation.new_content:
+                    _reject(
+                        "mutation.content.object_identity_conflict",
+                        "one content object ID is bound to conflicting bytes",
+                    )
+                continue
+            unique_content[content_key] = operation.new_content
+
+        content_observations: list[ContentObjectObservation] = []
+        for content in sorted(
+            unique_content.values(),
+            key=lambda item: (
+                str(item.object_id),
+                str(item.exact_sha256),
+                item.byte_length,
+            ),
+        ):
             if content_resolver is None:
                 _reject(
                     "mutation.content.resolver_missing",
                     "create/replace requires a trusted current content resolver",
                 )
             content_observation = content_resolver.resolve_current(
-                operation.new_content,
+                content,
                 evaluated_at=evaluated_at,
             )
             if not isinstance(content_observation, ContentObjectObservation):
@@ -631,10 +652,10 @@ class MutationPreSideEffectGuard:
                     "planned content could not be resolved to current bytes",
                 )
             if (
-                content_observation.object_id != operation.new_content.object_id
+                content_observation.object_id != content.object_id
                 or content_observation.exact_sha256
-                != operation.new_content.exact_sha256
-                or content_observation.byte_length != operation.new_content.byte_length
+                != content.exact_sha256
+                or content_observation.byte_length != content.byte_length
             ):
                 _reject(
                     "mutation.content.mismatch",
@@ -645,29 +666,21 @@ class MutationPreSideEffectGuard:
                 "content_resolver_evidence",
             )
             content_observations.append(content_observation)
-        content_identity = [
-            {
-                "object_id": str(item.object_id),
-                "exact_sha256": str(item.exact_sha256),
-                "byte_length": item.byte_length,
-                "resolver_evidence": {
-                    "path": str(item.resolver_evidence.path),
-                    "sha256": str(item.resolver_evidence.sha256),
-                    "artifact_version": str(item.resolver_evidence.artifact_version),
-                },
-            }
-            for item in sorted(
-                content_observations,
-                key=lambda value: (
-                    str(value.object_id),
-                    str(value.exact_sha256),
-                    value.byte_length,
-                ),
-            )
-        ]
-        content_observation_digest = canonical_sha256(content_identity)
+        verification_by_identity = {
+            (
+                str(item.resolver_evidence.path),
+                str(item.resolver_evidence.sha256),
+                str(item.resolver_evidence.artifact_version),
+            ): item.resolver_evidence
+            for item in content_observations
+        }
         content_verifications = tuple(
-            item.resolver_evidence for item in content_observations
+            verification_by_identity[key]
+            for key in sorted(verification_by_identity)
+        )
+        content_observation_digest = mutation_content_observation_sha256(
+            plan,
+            content_verifications,
         )
 
         if authority_verifier is None:
@@ -790,6 +803,9 @@ class MutationPreSideEffectGuard:
             authorization_id=mutation_execution_authorization_id(provisional),
         )
         try:
-            return validate_mutation_execution_authorization(authorization)
+            return validate_mutation_execution_authorization_for_plan(
+                authorization,
+                plan,
+            )
         except MutationPlanError as error:
             _reject(error.reason_code, str(error))

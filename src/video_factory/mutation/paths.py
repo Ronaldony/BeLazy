@@ -16,7 +16,7 @@ _DRIVE = re.compile(r"^[A-Za-z]:")
 _CONTROL = re.compile(r"[\x00-\x1f\x7f]")
 _WINDOWS_FORBIDDEN = frozenset('<>:"|?*')
 _RESERVED_BASENAMES = frozenset(
-    {"con", "prn", "aux", "nul"}
+    {"con", "prn", "aux", "nul", "conin$", "conout$", "clock$"}
     | {f"com{number}" for number in range(1, 10)}
     | {f"lpt{number}" for number in range(1, 10)}
     | {f"com{number}" for number in ("¹", "²", "³")}

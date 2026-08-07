@@ -95,18 +95,22 @@ contracts, pure planner, guard, and runtime Protocol only; it contains no
 filesystem executor or approval issuer.
 
 - Create requires observed absence. Replace/delete/move require the exact
-  current source digest; move also requires destination absence. The versioned
-  risk policy computes a non-downgradable effective tier: caller input may
-  raise risk but cannot lower it. Every tier requires a trusted authority
-  decision; R4 additionally requires break-glass evidence.
+  current source digest; move also requires destination absence. Caller input
+  cannot lower risk. W02 treats every mutation, including every CREATE path, as
+  R4 because a path string cannot prove lower semantic risk. R1/R2/R3 execution
+  remains disabled until W04 supplies a trusted, current, exact-request and
+  policy-bound classifier decision. Normal authority and R4 break-glass are
+  both required in the meantime.
 - Every plan binds the workspace revision, before-manifest digest, serialized
   base revision digest, policy digest, request digest, and idempotency key.
 - Managed paths are canonical relative POSIX NFC strings and reject absolute,
   traversal, backslash, ADS/reserved-name, trailing-dot/space, case/Unicode
   collision, symlink, reparse, missing ancestor, and non-directory ancestor
-  aliases, including Windows superscript-digit device names.
+  aliases, including Windows superscript-digit and console-device names.
 - Create/replace authorization resolves the current immutable content object
-  and rechecks object ID, byte length, and digest. An atomic trusted
+  and rechecks object ID, byte length, and digest. Reused identical objects are
+  resolved once, while one object ID mapped to conflicting bytes is rejected
+  before reservation. An atomic trusted
   idempotency ledger reserves the exact key + plan + workspace observation;
   missing reservations, conflicts, and replays fail closed.
 - Out-of-band drift produces `drift-report/1.0`, sets trust to `UNTRUSTED`, and
@@ -125,6 +129,11 @@ filesystem executor or approval issuer.
   partial/failed/uncertain outcomes. Trusted revision promotion also receives
   the exact authorization and post-execution observation and compares every
   active file byte digest/length before creating immutable entries/tombstones.
+- Standalone execution-authorization validation checks only closed shape and
+  canonical identity. It is deliberately non-authorizing. Guard, executor, and
+  revision consumers must call the plan-aware validator, which rechecks the
+  exact plan binding, planned content evidence, and complete R4 two-human plus
+  snapshot/incident/audit verification set.
 - Revision origin is explicit: a genesis `reconciled_baseline` has no parent
   and requires immutable reconciliation evidence; a `managed_mutation`
   revision requires a parent and cannot masquerade as a baseline.

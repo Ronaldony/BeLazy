@@ -6,11 +6,12 @@
   artifacts, deterministic exact-before planning, immutable revision and
   tombstone derivation, drift quarantine, strict cross-platform path policy,
   trusted content resolution, and atomic idempotency reservation ports.
-- Made caller-declared risk non-authoritative. A versioned policy raises every
-  destructive or authority-sensitive operation to R4; every tier requires a
-  trusted authority decision and R4 additionally requires two distinct current
-  human approvals bound to the exact break-glass request plus verified
-  snapshot, incident, and audit evidence.
+- Made caller-declared risk non-authoritative. W02 conservatively raises every
+  mutation to R4 because no trusted semantic classifier exists yet; activating
+  R1/R2/R3 is deferred to W04 and requires an exact policy-bound decision.
+  Every mutation therefore requires normal authority plus two distinct current
+  human approvals bound to the exact break-glass request and verified snapshot,
+  incident, and audit evidence.
 - Bound execution receipts and downstream generation/publish/adapter gates to
   canonical workspace revisions, exact workspace identity and file bytes,
   execution authorization, pre/post observations, reservation, journal, and

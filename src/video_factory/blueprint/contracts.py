@@ -92,6 +92,15 @@ class EpisodeIntent:
 
 
 @dataclass(frozen=True, slots=True)
+class BlueprintSourceBundle:
+    """Validated source artifacts used to interpret a Blueprint context."""
+
+    channel_constitution: ChannelConstitution
+    concept_constitution: ConceptConstitution
+    episode_intent: EpisodeIntent
+
+
+@dataclass(frozen=True, slots=True)
 class ProductionBlueprint:
     blueprint_id: OpaqueId
     blueprint_sha256: HashDigest
@@ -134,12 +143,27 @@ class ShadowFieldDifference:
 
 
 @dataclass(frozen=True, slots=True)
+class ShadowNormalizationReceipt:
+    receipt_id: OpaqueId
+    receipt_sha256: HashDigest
+    legacy_artifact_ref: ArtifactReference
+    legacy_document_sha256: HashDigest
+    normalizer_id: OpaqueId
+    normalizer_version: str
+    normalizer_sha256: HashDigest
+    normalization_rules_sha256: HashDigest
+    normalized_view_sha256: HashDigest
+    fields: tuple[BlueprintField, ...]
+
+
+@dataclass(frozen=True, slots=True)
 class ShadowComparison:
     comparison_id: OpaqueId
     comparison_sha256: HashDigest
     legacy_artifact_ref: ArtifactReference
     projection_ref: ArtifactReference
     projection_sha256: HashDigest
+    normalization_receipt_sha256: HashDigest
     observed_view_sha256: HashDigest
     comparator_id: OpaqueId
     comparator_version: str

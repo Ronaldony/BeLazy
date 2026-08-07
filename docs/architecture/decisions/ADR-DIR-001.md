@@ -18,10 +18,13 @@ target-owned registry contains twelve core charters and six conditional
 specialists for factual, rights, compositing, dialogue/voice,
 localization/accessibility, and live-production needs.
 
-Activation is deterministic from a versioned policy and exact EpisodeIntent
-digest. Every active task binds the registry, activation policy, charter, base
-Blueprint, Blueprint context, and immutable input references. There are no
-task-to-task predecessor dependencies.
+Activation is deterministic from a versioned policy and the exact validated
+EpisodeIntent in the current source bundle. Every task-planning and synthesis
+consumer re-derives the expected active set from that Intent and the current
+registry; self-consistent caller reductions, unknown signals, and stale policy
+digests fail closed. Every active task binds the registry, activation policy,
+charter, base Blueprint, Blueprint context, and immutable byte-addressed input
+references. There are no task-to-task predecessor dependencies.
 
 Each `director-assessment/1.0` binds the exact task, model identifier, prompt
 charter version, request and response digests, execution receipt, evidence,
@@ -35,8 +38,11 @@ field.
 
 Conflicts use deterministic policy with hard constraints first, then the
 primary owner, then charter priority. All decisions and rejected proposals are
-recorded. Synthesis is limited to two rounds; unresolved conflict, any blocker,
-uncertain verdict, or confidence below policy produces a blocked result.
+recorded. Synthesis is limited to two rounds. Round one has no predecessor;
+round two must carry the exact blocked round-one synthesis digest in the same
+deterministic conflict session, and no third transition is accepted. Unresolved
+conflict, any blocker, uncertain verdict, or confidence below policy produces a
+blocked result.
 
 ## Runtime boundary
 

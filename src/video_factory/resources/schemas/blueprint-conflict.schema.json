@@ -5,7 +5,8 @@
   "type": "object",
   "required": [
     "artifact_version", "conflict_id", "conflict_sha256", "base_blueprint_sha256",
-    "blueprint_context_sha256", "field_path", "proposal_assessment_ids", "status",
+    "blueprint_context_sha256", "conflict_session_id", "previous_synthesis_sha256",
+    "field_path", "proposal_assessment_ids", "status",
     "selected_assessment_id", "rejected_assessment_ids", "selected_replacement_sha256",
     "reason_code", "rounds_used", "evidence_refs"
   ],
@@ -15,6 +16,10 @@
     "conflict_sha256": { "$ref": "artifact-common.schema.json#/$defs/sha256" },
     "base_blueprint_sha256": { "$ref": "artifact-common.schema.json#/$defs/sha256" },
     "blueprint_context_sha256": { "$ref": "artifact-common.schema.json#/$defs/sha256" },
+    "conflict_session_id": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" },
+    "previous_synthesis_sha256": {
+      "oneOf": [{ "type": "null" }, { "$ref": "artifact-common.schema.json#/$defs/sha256" }]
+    },
     "field_path": { "$ref": "artifact-common.schema.json#/$defs/blueprintFieldPath" },
     "proposal_assessment_ids": {
       "type": "array", "minItems": 2, "uniqueItems": true,
@@ -53,6 +58,11 @@
           "selected_replacement_sha256": { "type": "null" }
         }
       }
+    },
+    {
+      "if": { "properties": { "rounds_used": { "const": 1 } } },
+      "then": { "properties": { "previous_synthesis_sha256": { "type": "null" } } },
+      "else": { "properties": { "previous_synthesis_sha256": { "$ref": "artifact-common.schema.json#/$defs/sha256" } } }
     }
   ],
   "additionalProperties": false,

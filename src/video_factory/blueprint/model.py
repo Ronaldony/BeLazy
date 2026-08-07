@@ -13,6 +13,7 @@ from video_factory.json_boundary import JsonInputError, parse_json_bytes
 from .contracts import (
     BlueprintContext,
     BlueprintField,
+    BlueprintSourceBundle,
     BlueprintStatus,
     ChannelConstitution,
     ConceptConstitution,
@@ -26,6 +27,7 @@ from .contracts import (
 FIELD_PATH = re.compile(r"^[a-z][a-z0-9_-]*(?:\.[a-z0-9][a-z0-9_-]*)+$")
 TOKEN = re.compile(r"^[a-z][a-z0-9._-]{0,127}$")
 VERSION = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
+ARTIFACT_VERSION = re.compile(r"^[a-z][a-z0-9-]*/[1-9][0-9]*\.[0-9]+$")
 SHA256 = re.compile(r"^[0-9a-f]{64}$")
 COMPLEXITIES = {"LIGHT", "PRODUCTION", "COMPLEX"}
 ROOT_REQUIRED_FIELDS = {
@@ -136,6 +138,121 @@ def _validate_field(field: BlueprintField) -> BlueprintField:
     return field
 
 
+def _is_material_field_value(field: BlueprintField) -> bool:
+    parsed = parse_json_bytes(field.value_json.encode("utf-8"))
+    return not (
+        parsed is None
+        or parsed == ""
+        or parsed == []
+        or parsed == {}
+    )
+
+
+def _require_material_paths(
+    fields: tuple[BlueprintField, ...],
+    required: set[str],
+    *,
+    reason_code: str,
+    label: str,
+) -> None:
+    by_path = {item.path: item for item in fields}
+    missing = sorted(required - set(by_path))
+    if missing:
+        raise BlueprintContractError(reason_code, f"{label} lacks required fields: {missing}")
+    empty = sorted(
+        path for path in required if not _is_material_field_value(by_path[path])
+    )
+    if empty:
+        raise BlueprintContractError(
+            f"{reason_code}.empty",
+            f"{label} required fields must contain material values: {empty}",
+        )
+
+
+def _validate_reference_locks(value: object, *, path: str) -> None:
+    if not isinstance(value, list) or not value:
+        raise BlueprintContractError(
+            "blueprint.coherent.reference_lock",
+            f"{path} must be a non-empty reference-lock list",
+        )
+    for item in value:
+        if not isinstance(item, dict) or set(item) != {
+            "path",
+            "sha256",
+            "artifact_version",
+        }:
+            raise BlueprintContractError(
+                "blueprint.coherent.reference_lock",
+                f"{path} contains an invalid reference-lock object",
+            )
+        reference_path = item["path"]
+        if (
+            not isinstance(reference_path, str)
+            or not reference_path
+            or reference_path.startswith(("/", "\\"))
+            or "\\" in reference_path
+            or ".." in reference_path.split("/")
+            or re.match(r"^[A-Za-z]:", reference_path)
+        ):
+            raise BlueprintContractError(
+                "blueprint.coherent.reference_lock",
+                f"{path} contains an unsafe reference path",
+            )
+        if not isinstance(item["sha256"], str) or not SHA256.fullmatch(
+            item["sha256"]
+        ):
+            raise BlueprintContractError(
+                "blueprint.coherent.reference_lock",
+                f"{path} contains an invalid reference digest",
+            )
+        if not isinstance(item["artifact_version"], str) or not ARTIFACT_VERSION.fullmatch(
+            item["artifact_version"]
+        ):
+            raise BlueprintContractError(
+                "blueprint.coherent.reference_lock",
+                f"{path} contains an invalid artifact version",
+            )
+
+
+def _validate_coherent_detail_semantics(fields: tuple[BlueprintField, ...]) -> None:
+    string_paths = {"identity.episode_id", "intent.narrative_goal"}
+    list_paths = {
+        "audience_and_success.success_criteria",
+        "delivery_and_distribution.targets",
+        "risks_and_acceptance.criteria",
+    }
+    reference_paths = {"asset_and_reference_locks.references"}
+    string_suffixes = {"purpose", "generation.prompt"}
+    list_suffixes = {"subjects", "acceptance.criteria"}
+    reference_suffixes = {"generation.references"}
+    for field in fields:
+        value = parse_json_bytes(field.value_json.encode("utf-8"))
+        suffix = (
+            ".".join(field.path.split(".")[2:])
+            if field.path.startswith("shot_graph.")
+            else ""
+        )
+        if field.path in reference_paths or suffix in reference_suffixes:
+            _validate_reference_locks(value, path=field.path)
+        elif field.path in string_paths or suffix in string_suffixes:
+            if not isinstance(value, str) or not value.strip():
+                raise BlueprintContractError(
+                    "blueprint.coherent.field_type",
+                    f"{field.path} must be a non-empty string",
+                )
+        elif field.path in list_paths or suffix in list_suffixes:
+            if not isinstance(value, list) or not value:
+                raise BlueprintContractError(
+                    "blueprint.coherent.field_type",
+                    f"{field.path} must be a non-empty list",
+                )
+        elif not isinstance(value, dict) or not value:
+            raise BlueprintContractError(
+                "blueprint.coherent.field_type",
+                f"{field.path} must be a non-empty structured object",
+            )
+
+
 def normalize_fields(fields: Iterable[BlueprintField]) -> tuple[BlueprintField, ...]:
     values = tuple(_validate_field(item) for item in fields)
     paths = [item.path for item in values]
@@ -191,6 +308,13 @@ def _identity(prefix: str, mapping: Mapping[str, object]) -> tuple[OpaqueId, Has
 
 
 def channel_constitution_to_mapping(value: ChannelConstitution) -> dict[str, object]:
+    normalized = normalize_fields(value.fields)
+    _require_material_paths(
+        normalized,
+        {"audience.profile", "success.criteria", "visual.principles", "distribution.constraints"},
+        reason_code="blueprint.channel.required",
+        label="channel constitution",
+    )
     identity = {
         "channel_id": str(value.channel_id),
         "rules_version": value.rules_version,
@@ -213,11 +337,12 @@ def build_channel_constitution(
     *, channel_id: str, rules_version: str, fields: Iterable[BlueprintField]
 ) -> ChannelConstitution:
     normalized = normalize_fields(sorted(fields, key=lambda item: item.path))
-    required = {"audience.profile", "success.criteria", "visual.principles", "distribution.constraints"}
-    if not required.issubset({item.path for item in normalized}):
-        raise BlueprintContractError(
-            "blueprint.channel.required", "channel constitution lacks required fields"
-        )
+    _require_material_paths(
+        normalized,
+        {"audience.profile", "success.criteria", "visual.principles", "distribution.constraints"},
+        reason_code="blueprint.channel.required",
+        label="channel constitution",
+    )
     identity = {
         "channel_id": _token(channel_id, "channel_id"),
         "rules_version": _token(rules_version, "rules_version"),
@@ -234,6 +359,13 @@ def build_channel_constitution(
 
 
 def concept_constitution_to_mapping(value: ConceptConstitution) -> dict[str, object]:
+    normalized = normalize_fields(value.fields)
+    _require_material_paths(
+        normalized,
+        {"premise.summary", "narrative.principles", "visual.direction", "constraints.production"},
+        reason_code="blueprint.concept.required",
+        label="concept constitution",
+    )
     identity = {
         "concept_id": str(value.concept_id),
         "channel_constitution_sha256": str(value.channel_constitution_sha256),
@@ -262,11 +394,12 @@ def build_concept_constitution(
     fields: Iterable[BlueprintField],
 ) -> ConceptConstitution:
     normalized = normalize_fields(sorted(fields, key=lambda item: item.path))
-    required = {"premise.summary", "narrative.principles", "visual.direction", "constraints.production"}
-    if not required.issubset({item.path for item in normalized}):
-        raise BlueprintContractError(
-            "blueprint.concept.required", "concept constitution lacks required fields"
-        )
+    _require_material_paths(
+        normalized,
+        {"premise.summary", "narrative.principles", "visual.direction", "constraints.production"},
+        reason_code="blueprint.concept.required",
+        label="concept constitution",
+    )
     identity = {
         "concept_id": _token(concept_id, "concept_id"),
         "channel_constitution_sha256": str(_sha(channel_constitution_sha256, "channel constitution")),
@@ -285,6 +418,13 @@ def build_concept_constitution(
 
 
 def episode_intent_to_mapping(value: EpisodeIntent) -> dict[str, object]:
+    normalized = normalize_fields(value.fields)
+    _require_material_paths(
+        normalized,
+        {"goal.narrative", "audience.effect", "success.criteria", "duration.target"},
+        reason_code="blueprint.intent.required",
+        label="episode intent",
+    )
     identity = {
         "episode_id": str(value.episode_id),
         "channel_constitution_sha256": str(value.channel_constitution_sha256),
@@ -316,11 +456,12 @@ def build_episode_intent(
     fields: Iterable[BlueprintField],
 ) -> EpisodeIntent:
     normalized = normalize_fields(sorted(fields, key=lambda item: item.path))
-    required = {"goal.narrative", "audience.effect", "success.criteria", "duration.target"}
-    if not required.issubset({item.path for item in normalized}):
-        raise BlueprintContractError(
-            "blueprint.intent.required", "episode intent lacks required fields"
-        )
+    _require_material_paths(
+        normalized,
+        {"goal.narrative", "audience.effect", "success.criteria", "duration.target"},
+        reason_code="blueprint.intent.required",
+        label="episode intent",
+    )
     if needs_complexity not in COMPLEXITIES:
         raise BlueprintContractError("blueprint.intent.complexity", "invalid needs complexity")
     signals = tuple(sorted(set(activation_signals)))
@@ -405,9 +546,57 @@ def _validate_blueprint_detail(fields: tuple[BlueprintField, ...]) -> None:
             )
 
 
+def build_blueprint_source_bundle(
+    *,
+    channel_constitution: ChannelConstitution,
+    concept_constitution: ConceptConstitution,
+    episode_intent: EpisodeIntent,
+) -> BlueprintSourceBundle:
+    channel_constitution_to_mapping(channel_constitution)
+    concept_constitution_to_mapping(concept_constitution)
+    episode_intent_to_mapping(episode_intent)
+    if (
+        concept_constitution.channel_constitution_sha256
+        != channel_constitution.constitution_sha256
+        or episode_intent.channel_constitution_sha256
+        != channel_constitution.constitution_sha256
+        or episode_intent.concept_constitution_sha256
+        != concept_constitution.constitution_sha256
+    ):
+        raise BlueprintContractError(
+            "blueprint.source_chain",
+            "Channel, Concept, and EpisodeIntent artifacts do not form one exact chain",
+        )
+    return BlueprintSourceBundle(
+        channel_constitution=channel_constitution,
+        concept_constitution=concept_constitution,
+        episode_intent=episode_intent,
+    )
+
+
 def _blueprint_identity_mapping(value: ProductionBlueprint) -> dict[str, object]:
     fields = normalize_fields(value.fields)
     _validate_blueprint_detail(fields)
+    identity_episode = next(
+        item for item in fields if item.path == "identity.episode_id"
+    )
+    if parse_json_bytes(identity_episode.value_json.encode("utf-8")) != str(
+        value.episode_id
+    ):
+        raise BlueprintContractError(
+            "blueprint.episode_identity",
+            "identity.episode_id must exactly match the top-level episode_id",
+        )
+    if value.status is BlueprintStatus.COHERENT:
+        empty = tuple(
+            item.path for item in fields if not _is_material_field_value(item)
+        )
+        if empty:
+            raise BlueprintContractError(
+                "blueprint.coherent.empty_detail",
+                f"coherent Blueprint fields must contain material values: {empty}",
+            )
+        _validate_coherent_detail_semantics(fields)
     ownership = tuple(value.ownership)
     ownership_paths = [item.field_path for item in ownership]
     field_paths = [item.path for item in fields]
@@ -422,6 +611,11 @@ def _blueprint_identity_mapping(value: ProductionBlueprint) -> dict[str, object]
         raise BlueprintContractError(
             "blueprint.provenance.order", "director provenance must use canonical order"
         )
+    provenance_ids = tuple(item["director_id"] for item in provenance_mapping)
+    if len(provenance_ids) != len(set(provenance_ids)):
+        raise BlueprintContractError(
+            "blueprint.provenance.duplicate", "director provenance must be unique per director"
+        )
     blockers = tuple(value.unresolved_blockers)
     if blockers != tuple(sorted(set(blockers))) or any(not TOKEN.fullmatch(item) for item in blockers):
         raise BlueprintContractError(
@@ -429,6 +623,19 @@ def _blueprint_identity_mapping(value: ProductionBlueprint) -> dict[str, object]
         )
     if value.status is BlueprintStatus.COHERENT and blockers:
         raise BlueprintContractError("blueprint.status.blockers", "coherent Blueprint has blockers")
+    if value.status is BlueprintStatus.COHERENT:
+        required_directors = {
+            str(item.owner_director_id) for item in ownership
+        } | {
+            str(director_id)
+            for item in ownership
+            for director_id in item.verifier_director_ids
+        }
+        if set(provenance_ids) != required_directors:
+            raise BlueprintContractError(
+                "blueprint.provenance.coverage",
+                "coherent Blueprint provenance must exactly cover every active owner and verifier",
+            )
     if value.status is BlueprintStatus.BLOCKED and not blockers:
         raise BlueprintContractError("blueprint.status.blockers", "blocked Blueprint needs blockers")
     if not isinstance(value.revision, int) or isinstance(value.revision, bool) or value.revision < 1:
@@ -458,6 +665,41 @@ def production_blueprint_to_mapping(value: ProductionBlueprint) -> dict[str, obj
         "blueprint_sha256": str(value.blueprint_sha256),
         **identity,
     }
+
+
+def production_blueprint_artifact_sha256(
+    value: ProductionBlueprint,
+) -> HashDigest:
+    """Return the exact canonical serialized-byte digest for an artifact reference."""
+
+    return HashDigest(
+        hashlib.sha256(canonical_json_bytes(production_blueprint_to_mapping(value))).hexdigest()
+    )
+
+
+def validate_blueprint_source_bundle(
+    blueprint: ProductionBlueprint, source_bundle: BlueprintSourceBundle
+) -> None:
+    production_blueprint_to_mapping(blueprint)
+    expected = build_blueprint_source_bundle(
+        channel_constitution=source_bundle.channel_constitution,
+        concept_constitution=source_bundle.concept_constitution,
+        episode_intent=source_bundle.episode_intent,
+    )
+    context = blueprint.context
+    intent = expected.episode_intent
+    if (
+        blueprint.episode_id != intent.episode_id
+        or context.channel_constitution_sha256
+        != expected.channel_constitution.constitution_sha256
+        or context.concept_constitution_sha256
+        != expected.concept_constitution.constitution_sha256
+        or context.episode_intent_sha256 != intent.intent_sha256
+    ):
+        raise BlueprintContractError(
+            "blueprint.source_binding",
+            "Blueprint is not bound to the exact Channel/Concept/EpisodeIntent source chain",
+        )
 
 
 def build_production_blueprint(

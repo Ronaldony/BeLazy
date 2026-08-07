@@ -166,12 +166,17 @@ def conflict_result_from_mapping(document: Mapping[str, object]) -> ConflictResu
     payload = _schema_mapping(document)
     selected_id = payload["selected_assessment_id"]
     selected_sha = payload["selected_replacement_sha256"]
+    previous_sha = payload["previous_synthesis_sha256"]
     value = ConflictResult(
         conflict_id=OpaqueId(str(payload["conflict_id"])),
         conflict_sha256=HashDigest(str(payload["conflict_sha256"])),
         base_blueprint_sha256=HashDigest(str(payload["base_blueprint_sha256"])),
         blueprint_context_sha256=HashDigest(
             str(payload["blueprint_context_sha256"])
+        ),
+        conflict_session_id=OpaqueId(str(payload["conflict_session_id"])),
+        previous_synthesis_sha256=(
+            HashDigest(str(previous_sha)) if previous_sha is not None else None
         ),
         field_path=str(payload["field_path"]),
         proposal_assessment_ids=tuple(
@@ -202,12 +207,17 @@ def director_synthesis_from_mapping(
 ) -> DirectorSynthesis:
     payload = _schema_mapping(document)
     result_sha = payload["resulting_blueprint_sha256"]
+    previous_sha = payload["previous_synthesis_sha256"]
     value = DirectorSynthesis(
         synthesis_id=OpaqueId(str(payload["synthesis_id"])),
         synthesis_sha256=HashDigest(str(payload["synthesis_sha256"])),
         base_blueprint_sha256=HashDigest(str(payload["base_blueprint_sha256"])),
         blueprint_context_sha256=HashDigest(
             str(payload["blueprint_context_sha256"])
+        ),
+        conflict_session_id=OpaqueId(str(payload["conflict_session_id"])),
+        previous_synthesis_sha256=(
+            HashDigest(str(previous_sha)) if previous_sha is not None else None
         ),
         assessment_sha256s=tuple(
             HashDigest(str(item))

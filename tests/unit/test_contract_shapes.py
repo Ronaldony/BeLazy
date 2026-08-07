@@ -2,7 +2,12 @@ from __future__ import annotations
 
 from dataclasses import fields, is_dataclass
 
-from video_factory.blueprint import BlueprintProjection, ProductionBlueprint
+from video_factory.blueprint import (
+    BlueprintProjection,
+    BlueprintSourceBundle,
+    ProductionBlueprint,
+    ShadowNormalizationReceipt,
+)
 from video_factory.config import (
     CONFIG_LAYER_ORDER,
     ChannelConfig,
@@ -104,6 +109,11 @@ def test_provider_and_executor_ports_are_behaviorally_separate() -> None:
 
 
 def test_blueprint_and_director_contract_shapes_are_explicit() -> None:
+    assert _field_names(BlueprintSourceBundle) == (
+        "channel_constitution",
+        "concept_constitution",
+        "episode_intent",
+    )
     assert _field_names(ProductionBlueprint) == (
         "blueprint_id",
         "blueprint_sha256",
@@ -133,6 +143,18 @@ def test_blueprint_and_director_contract_shapes_are_explicit() -> None:
         "authority_effect",
         "editable",
         "read_only",
+        "fields",
+    )
+    assert _field_names(ShadowNormalizationReceipt) == (
+        "receipt_id",
+        "receipt_sha256",
+        "legacy_artifact_ref",
+        "legacy_document_sha256",
+        "normalizer_id",
+        "normalizer_version",
+        "normalizer_sha256",
+        "normalization_rules_sha256",
+        "normalized_view_sha256",
         "fields",
     )
     assert _field_names(DirectorTaskPlan) == (

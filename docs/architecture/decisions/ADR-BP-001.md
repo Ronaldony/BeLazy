@@ -26,8 +26,23 @@ incomplete ownership, self-verification, stale identity, and non-canonical JSON
 fail closed.
 
 Channel and concept constitutions plus `episode-intent/1.0` are immutable inputs
-to the Blueprint context. A synthesized Blueprint is a new revision; it never
-modifies its base object in place.
+to the Blueprint context. Planning and synthesis receive the actual validated
+three-artifact `BlueprintSourceBundle`, not caller-provided digest strings alone.
+The bundle must form one exact Channel -> Concept -> EpisodeIntent chain, and the
+Intent episode ID, Blueprint top-level episode ID, and `identity.episode_id`
+field must agree. A synthesized Blueprint is a new revision; it never modifies
+its base object in place.
+
+`coherent` is a verified promotion state. Every required field must carry a
+non-empty value of its declared structural kind, reference locks must contain
+safe relative paths plus exact byte digests and artifact versions, and Director
+provenance must exactly cover every active owner and verifier. Incomplete design
+objects remain `draft` or `blocked`.
+
+Logical identity digests (`blueprint_sha256`, `projection_sha256`) and immutable
+artifact byte digests have different meanings. `ArtifactReference.sha256`
+always hashes the exact canonical serialized bytes. The logical digest remains
+a separate field and is never substituted for the byte digest.
 
 ## Authority boundary
 
@@ -38,7 +53,8 @@ human evidence, and later authority decisions.
 
 ## Consequences
 
-- One canonical digest represents the complete design and its material context.
+- One logical digest represents the complete design and its material context;
+  a separate exact-byte digest addresses serialized artifact bytes.
 - Field-level provenance and ownership can be audited independently.
 - More detail is required before a Blueprint can be coherent.
 - Legacy consumers continue operating during W03 through non-authoritative

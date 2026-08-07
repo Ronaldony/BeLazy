@@ -22,6 +22,24 @@ import zipfile
 SCHEMA_PREFIX = "video_factory/resources/schemas/"
 DIRECTOR_PREFIX = "video_factory/resources/directors/"
 EXPECTED_WHEEL_TAG = "py3-none-any"
+DIRECTOR_RESOURCE_ROOT = (
+    Path(__file__).resolve().parents[1]
+    / "src"
+    / "video_factory"
+    / "resources"
+    / "directors"
+)
+
+
+def _canonical_sha256(value: object) -> str:
+    payload = json.dumps(
+        value,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+        allow_nan=False,
+    ).encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
 
 
 def _normalized_distribution(value: str) -> str:
@@ -163,6 +181,10 @@ def _validate_director_resources(
     if actual_json != expected_json:
         raise ValueError("wheel Director resource member set is invalid")
     manifest = _strict_object(archive.read(manifest_name), manifest_name)
+    if set(manifest) != {"manifest_version", "resource_count", "resources"} or manifest.get(
+        "manifest_version"
+    ) != "director-resource-manifest/1.0":
+        raise ValueError("wheel Director resource manifest shape/version is invalid")
     entries = manifest.get("resources")
     if manifest.get("resource_count") != 2 or not isinstance(entries, list):
         raise ValueError("wheel Director resource manifest count is invalid")
@@ -171,7 +193,7 @@ def _validate_director_resources(
         if not isinstance(entry, Mapping):
             raise ValueError("wheel Director resource entry is not an object")
         filename = entry.get("filename")
-        if not isinstance(filename, str):
+        if set(entry) != {"filename", "sha256"} or not isinstance(filename, str):
             raise ValueError("wheel Director resource filename is invalid")
         filenames.append(filename)
         data = archive.read(DIRECTOR_PREFIX + filename)
@@ -183,18 +205,88 @@ def _validate_director_resources(
         archive.read(DIRECTOR_PREFIX + "director-registry.json"),
         "wheel Director registry",
     )
+    if set(registry) != {"registry_version", "registry_sha256", "charters"} or registry.get(
+        "registry_version"
+    ) != "director-registry/1.0":
+        raise ValueError("wheel Director registry shape/version is invalid")
     charters = registry.get("charters")
     if not isinstance(charters, list) or len(charters) != 18:
         raise ValueError("wheel Director registry must contain 18 charters")
-    director_ids = {
-        item.get("director_id") for item in charters if isinstance(item, Mapping)
+    expected_charter_keys = {
+        "artifact_version",
+        "charter_id",
+        "charter_sha256",
+        "director_id",
+        "director_version",
+        "kind",
+        "owned_patterns",
+        "verified_patterns",
+        "activation_signals",
+        "veto_patterns",
+        "conflict_priority",
+        "rules_version",
     }
-    if len(director_ids) != 18 or "live-production-director" not in director_ids:
+    director_ids: list[str] = []
+    for charter in charters:
+        if not isinstance(charter, Mapping) or set(charter) != expected_charter_keys:
+            raise ValueError("wheel Director charter shape is invalid")
+        if charter.get("artifact_version") != "director-charter/1.0":
+            raise ValueError("wheel Director charter artifact version is invalid")
+        director_id = charter.get("director_id")
+        if not isinstance(director_id, str):
+            raise ValueError("wheel Director charter identity is invalid")
+        director_ids.append(director_id)
+        for field in (
+            "owned_patterns",
+            "verified_patterns",
+            "activation_signals",
+            "veto_patterns",
+        ):
+            values = charter.get(field)
+            if (
+                not isinstance(values, list)
+                or values != sorted(set(values))
+                or any(not isinstance(item, str) for item in values)
+            ):
+                raise ValueError("wheel Director charter list is not canonical")
+        identity = {
+            key: charter[key]
+            for key in (
+                "director_id",
+                "director_version",
+                "kind",
+                "owned_patterns",
+                "verified_patterns",
+                "activation_signals",
+                "veto_patterns",
+                "conflict_priority",
+                "rules_version",
+            )
+        }
+        charter_sha = _canonical_sha256(identity)
+        if charter.get("charter_sha256") != charter_sha or charter.get(
+            "charter_id"
+        ) != f"director-charter-{charter_sha[:20]}":
+            raise ValueError("wheel Director charter identity digest is invalid")
+    if director_ids != sorted(set(director_ids)) or "live-production-director" not in director_ids:
         raise ValueError("wheel Director registry identity set is invalid")
+    expected_registry_sha = _canonical_sha256(
+        {"registry_version": "director-registry/1.0", "charters": charters}
+    )
+    if registry.get("registry_sha256") != expected_registry_sha:
+        raise ValueError("wheel Director registry digest is invalid")
     activation = _strict_object(
         archive.read(DIRECTOR_PREFIX + "director-activation-policy.json"),
         "wheel Director activation policy",
     )
+    if set(activation) != {
+        "activation_policy_version",
+        "activation_policy_sha256",
+        "sequential_stages_forbidden",
+        "maximum_conflict_rounds",
+        "conditional",
+    } or activation.get("activation_policy_version") != "director-activation-policy/1.0":
+        raise ValueError("wheel Director activation policy shape/version is invalid")
     conditional = activation.get("conditional")
     if (
         activation.get("sequential_stages_forbidden") is not True
@@ -203,6 +295,35 @@ def _validate_director_resources(
         or len(conditional) != 6
     ):
         raise ValueError("wheel Director activation policy is invalid")
+    expected_conditional = [
+        {
+            "director_id": charter["director_id"],
+            "signals": charter["activation_signals"],
+        }
+        for charter in charters
+        if charter["activation_signals"]
+    ]
+    if conditional != expected_conditional:
+        raise ValueError("wheel Director activation policy does not match registry")
+    expected_activation_sha = _canonical_sha256(
+        {
+            "activation_policy_version": "director-activation-policy/1.0",
+            "sequential_stages_forbidden": True,
+            "maximum_conflict_rounds": 2,
+            "conditional": expected_conditional,
+        }
+    )
+    if activation.get("activation_policy_sha256") != expected_activation_sha:
+        raise ValueError("wheel Director activation policy digest is invalid")
+    if not DIRECTOR_RESOURCE_ROOT.is_dir():
+        raise ValueError("source Director resource projection is unavailable")
+    for filename in (*sorted(expected_documents), "director-resource-manifest.json"):
+        if archive.read(DIRECTOR_PREFIX + filename) != (
+            DIRECTOR_RESOURCE_ROOT / filename
+        ).read_bytes():
+            raise ValueError(
+                f"wheel Director resource does not match code projection: {filename}"
+            )
 
 
 def inspect_wheel(path: Path) -> tuple[int, int, str]:

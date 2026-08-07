@@ -25,15 +25,20 @@ from video_factory.blueprint import (
     blueprint_context_sha256,
     blueprint_field,
     blueprint_projection_to_mapping,
+    blueprint_projection_artifact_sha256,
     build_channel_constitution,
+    build_blueprint_source_bundle,
     build_concept_constitution,
     build_episode_intent,
     build_production_blueprint,
+    build_shadow_normalization_receipt,
     compare_shadow_projection,
     field_index,
     field_value_sha256,
     project_all_blueprint_views,
     production_blueprint_to_mapping,
+    production_blueprint_artifact_sha256,
+    shadow_comparison_to_mapping,
     validate_projection_current,
 )
 from video_factory.config.canonical import canonical_sha256
@@ -56,11 +61,13 @@ from video_factory.directors import (
     build_director_charter,
     build_field_ownership,
     default_director_charters,
+    director_activation_to_mapping,
     director_artifact_from_bytes,
     director_artifact_from_mapping,
     director_artifact_to_bytes,
     director_artifact_to_mapping,
     director_registry_sha256,
+    director_task_plan_to_mapping,
     plan_director_tasks,
     synthesize_director_assessments,
     validate_director_assessment,
@@ -124,12 +131,41 @@ def _blueprint_fixture(*, signals: tuple[str, ...] = ()):
             blueprint_field("audience.effect", "confident"),
         ),
     )
-    fields = [
-        blueprint_field(path, {"source": path})
-        for path in ROOT_REQUIRED_FIELDS
-    ]
+    reference_lock = {
+        "path": "artifacts/source.json",
+        "sha256": "a" * 64,
+        "artifact_version": "analytics-record/1.0",
+    }
+
+    def detail_value(path: str) -> object:
+        suffix = (
+            ".".join(path.split(".")[2:])
+            if path.startswith("shot_graph.")
+            else ""
+        )
+        if path == "identity.episode_id":
+            return "episode-demo"
+        if path == "intent.narrative_goal" or suffix in {
+            "purpose",
+            "generation.prompt",
+        }:
+            return f"configured:{path}"
+        if path in {
+            "audience_and_success.success_criteria",
+            "delivery_and_distribution.targets",
+            "risks_and_acceptance.criteria",
+        } or suffix in {"subjects", "acceptance.criteria"}:
+            return [f"configured:{path}"]
+        if path == "asset_and_reference_locks.references" or suffix == "generation.references":
+            return [reference_lock]
+        return {"configured": path}
+
+    fields = [blueprint_field(path, detail_value(path)) for path in ROOT_REQUIRED_FIELDS]
     fields.extend(
-        blueprint_field(f"shot_graph.s01.{suffix}", {"source": suffix})
+        blueprint_field(
+            f"shot_graph.s01.{suffix}",
+            detail_value(f"shot_graph.s01.{suffix}"),
+        )
         for suffix in SHOT_REQUIRED_SUFFIXES
     )
     conditional_scopes = {
@@ -154,6 +190,11 @@ def _blueprint_fixture(*, signals: tuple[str, ...] = ()):
         ),
         charters=charters,
     )
+    source_bundle = build_blueprint_source_bundle(
+        channel_constitution=channel,
+        concept_constitution=concept,
+        episode_intent=intent,
+    )
     ownership = build_field_ownership(ordered_fields, charters, activation)
     context = BlueprintContext(
         channel_constitution_sha256=channel.constitution_sha256,
@@ -168,24 +209,25 @@ def _blueprint_fixture(*, signals: tuple[str, ...] = ()):
     blueprint = build_production_blueprint(
         episode_id="episode-demo",
         revision=1,
-        status=BlueprintStatus.COHERENT,
+        status=BlueprintStatus.DRAFT,
         context=context,
         fields=reversed(ordered_fields),
         ownership=reversed(ownership),
     )
-    return channel, concept, intent, charters, activation, blueprint
+    return channel, concept, intent, source_bundle, charters, activation, blueprint
 
 
-def _tasks(blueprint, charters, activation):
+def _tasks(blueprint, charters, activation, source_bundle):
     blueprint_ref = ArtifactReference(
         path=RelativeArtifactPath("artifacts/production-blueprint.json"),
-        sha256=blueprint.blueprint_sha256,
+        sha256=production_blueprint_artifact_sha256(blueprint),
         artifact_version=ArtifactVersion("production-blueprint/1.0"),
     )
     return plan_director_tasks(
         blueprint=blueprint,
         charters=charters,
         activation=activation,
+        source_bundle=source_bundle,
         input_refs=(blueprint_ref,),
     )
 
@@ -232,7 +274,7 @@ def _all_assessments(blueprint, charters, activation, tasks):
 
 
 def test_detailed_blueprint_is_deterministic_and_fully_owned() -> None:
-    channel, concept, intent, charters, activation, blueprint = _blueprint_fixture()
+    channel, concept, intent, _, charters, activation, blueprint = _blueprint_fixture()
     assert len(blueprint.fields) == len(ROOT_REQUIRED_FIELDS) + len(
         SHOT_REQUIRED_SUFFIXES
     )
@@ -247,7 +289,7 @@ def test_detailed_blueprint_is_deterministic_and_fully_owned() -> None:
     rebuilt = build_production_blueprint(
         episode_id="episode-demo",
         revision=1,
-        status=BlueprintStatus.COHERENT,
+        status=blueprint.status,
         context=blueprint.context,
         fields=reversed(blueprint.fields),
         ownership=reversed(blueprint.ownership),
@@ -258,10 +300,26 @@ def test_detailed_blueprint_is_deterministic_and_fully_owned() -> None:
         assert validate_artifact_mapping(mapping).ok
         assert blueprint_artifact_from_mapping(mapping) == value
         assert blueprint_artifact_from_bytes(blueprint_artifact_to_bytes(value)) == value
+    assert production_blueprint_artifact_sha256(blueprint) == HashDigest(
+        hashlib.sha256(blueprint_artifact_to_bytes(blueprint)).hexdigest()
+    )
+    empty_coherent_mapping = production_blueprint_to_mapping(blueprint)
+    empty_coherent_mapping["status"] = "coherent"
+    empty_coherent_mapping["director_provenance"] = []
+    empty_coherent_mapping["fields"] = [
+        {
+            **item,
+            "value_json": (
+                '"episode-demo"' if item["path"] == "identity.episode_id" else "null"
+            ),
+        }
+        for item in empty_coherent_mapping["fields"]
+    ]
+    assert validate_artifact_mapping(empty_coherent_mapping).ok is False
 
 
 def test_blueprint_rejects_missing_detail_and_owner_verifier_gaps() -> None:
-    _, _, _, _, _, blueprint = _blueprint_fixture()
+    _, _, _, _, _, _, blueprint = _blueprint_fixture()
     with pytest.raises(BlueprintContractError, match="required Blueprint fields"):
         build_production_blueprint(
             episode_id="episode-demo",
@@ -286,8 +344,37 @@ def test_blueprint_rejects_missing_detail_and_owner_verifier_gaps() -> None:
         )
 
 
+def test_coherent_blueprint_requires_material_detail_and_exact_provenance() -> None:
+    _, _, _, _, _, _, blueprint = _blueprint_fixture()
+    empty_fields = tuple(
+        blueprint_field(
+            item.path,
+            "episode-demo" if item.path == "identity.episode_id" else None,
+        )
+        for item in blueprint.fields
+    )
+    with pytest.raises(BlueprintContractError, match="material values"):
+        build_production_blueprint(
+            episode_id="episode-demo",
+            revision=1,
+            status=BlueprintStatus.COHERENT,
+            context=blueprint.context,
+            fields=empty_fields,
+            ownership=blueprint.ownership,
+        )
+    with pytest.raises(BlueprintContractError, match="exactly cover"):
+        build_production_blueprint(
+            episode_id="episode-demo",
+            revision=1,
+            status=BlueprintStatus.COHERENT,
+            context=blueprint.context,
+            fields=blueprint.fields,
+            ownership=blueprint.ownership,
+        )
+
+
 def test_registry_rejects_missing_and_ambiguous_field_owners() -> None:
-    _, _, intent, charters, _, blueprint = _blueprint_fixture()
+    _, _, intent, _, charters, _, blueprint = _blueprint_fixture()
     profile = EpisodeNeedsProfile(
         complexity=NeedsComplexity.PRODUCTION, activation_signals=()
     )
@@ -336,7 +423,7 @@ def test_registry_rejects_missing_and_ambiguous_field_owners() -> None:
     ],
 )
 def test_each_conditional_specialist_has_concrete_field_scope(signal: str) -> None:
-    _, _, _, charters, activation, blueprint = _blueprint_fixture(signals=(signal,))
+    _, _, _, _, charters, activation, blueprint = _blueprint_fixture(signals=(signal,))
     assert len(activation.active_director_ids) == 13
     conditional_id = next(
         item.director_id for item in charters if signal in item.activation_signals
@@ -346,9 +433,53 @@ def test_each_conditional_specialist_has_concrete_field_scope(signal: str) -> No
     )
 
 
+def test_task_planning_rederives_conditional_activation_and_rejects_unknown_signals() -> None:
+    signal = "rights_or_policy_risk"
+    channel, concept, intent, sources, charters, activation, blueprint = (
+        _blueprint_fixture(signals=(signal,))
+    )
+    specialist_id = next(
+        item.director_id for item in charters if signal in item.activation_signals
+    )
+    reduced_ids = tuple(
+        item for item in activation.active_director_ids if item != specialist_id
+    )
+    reduced_identity = director_activation_to_mapping(activation)
+    reduced_identity["active_director_ids"] = [str(item) for item in reduced_ids]
+    reduced_digest = canonical_sha256(reduced_identity)
+    reduced = replace(
+        activation,
+        activation_id=type(activation.activation_id)(
+            f"director-activation-{str(reduced_digest)[:20]}"
+        ),
+        activation_sha256=reduced_digest,
+        active_director_ids=reduced_ids,
+    )
+    with pytest.raises(DirectorRegistryError, match="registry policy"):
+        _tasks(blueprint, charters, reduced, sources)
+
+    unknown_intent = build_episode_intent(
+        episode_id="episode-demo",
+        channel_constitution_sha256=str(channel.constitution_sha256),
+        concept_constitution_sha256=str(concept.constitution_sha256),
+        needs_complexity="PRODUCTION",
+        activation_signals=("unregistered_specialist_signal",),
+        fields=intent.fields,
+    )
+    with pytest.raises(DirectorRegistryError, match="not registered"):
+        activate_directors(
+            episode_intent=unknown_intent,
+            profile=EpisodeNeedsProfile(
+                complexity=NeedsComplexity.PRODUCTION,
+                activation_signals=unknown_intent.activation_signals,
+            ),
+            charters=charters,
+        )
+
+
 def test_task_mesh_is_logically_parallel_and_context_bound() -> None:
-    _, _, _, charters, activation, blueprint = _blueprint_fixture()
-    tasks = _tasks(blueprint, charters, activation)
+    _, _, _, sources, charters, activation, blueprint = _blueprint_fixture()
+    tasks = _tasks(blueprint, charters, activation, sources)
     assert len(tasks) == 12
     assert len({task.base_blueprint_sha256 for task in tasks}) == 1
     assert len({task.blueprint_context_sha256 for task in tasks}) == 1
@@ -362,12 +493,27 @@ def test_task_mesh_is_logically_parallel_and_context_bound() -> None:
             blueprint=blueprint,
             charters=charters,
             activation=activation,
+            source_bundle=sources,
             input_refs=(_reference("wrong", "production-blueprint/1.0"),),
+        )
+    base_ref = ArtifactReference(
+        path=RelativeArtifactPath("artifacts/production-blueprint.json"),
+        sha256=production_blueprint_artifact_sha256(blueprint),
+        artifact_version=ArtifactVersion("production-blueprint/1.0"),
+    )
+    conflicting_ref = replace(base_ref, sha256=_hash("f"))
+    with pytest.raises(DirectorMeshError, match="multiple identities"):
+        plan_director_tasks(
+            blueprint=blueprint,
+            charters=charters,
+            activation=activation,
+            source_bundle=sources,
+            input_refs=(base_ref, conflicting_ref),
         )
 
 
 def test_activation_must_match_intent_and_blueprint_context() -> None:
-    channel, concept, intent, charters, _, blueprint = _blueprint_fixture()
+    channel, concept, intent, sources, charters, _, blueprint = _blueprint_fixture()
     with pytest.raises(DirectorRegistryError, match="exactly match"):
         activate_directors(
             episode_intent=intent,
@@ -392,15 +538,35 @@ def test_activation_must_match_intent_and_blueprint_context() -> None:
         ),
         charters=charters,
     )
-    with pytest.raises(DirectorMeshError, match="Blueprint EpisodeIntent"):
+    with pytest.raises(DirectorRegistryError, match="current EpisodeIntent"):
         plan_director_tasks(
             blueprint=blueprint,
             charters=charters,
             activation=other_activation,
+            source_bundle=sources,
             input_refs=(
                 ArtifactReference(
                     path=RelativeArtifactPath("artifacts/production-blueprint.json"),
-                    sha256=blueprint.blueprint_sha256,
+                    sha256=production_blueprint_artifact_sha256(blueprint),
+                    artifact_version=ArtifactVersion("production-blueprint/1.0"),
+                ),
+            ),
+        )
+    other_sources = build_blueprint_source_bundle(
+        channel_constitution=channel,
+        concept_constitution=concept,
+        episode_intent=other_intent,
+    )
+    with pytest.raises(BlueprintContractError, match="exact Channel/Concept/EpisodeIntent"):
+        plan_director_tasks(
+            blueprint=blueprint,
+            charters=charters,
+            activation=other_activation,
+            source_bundle=other_sources,
+            input_refs=(
+                ArtifactReference(
+                    path=RelativeArtifactPath("artifacts/production-blueprint.json"),
+                    sha256=production_blueprint_artifact_sha256(blueprint),
                     artifact_version=ArtifactVersion("production-blueprint/1.0"),
                 ),
             ),
@@ -408,8 +574,8 @@ def test_activation_must_match_intent_and_blueprint_context() -> None:
 
 
 def test_assessment_binds_task_blueprint_context_model_and_receipt() -> None:
-    _, _, _, charters, activation, blueprint = _blueprint_fixture()
-    task = _tasks(blueprint, charters, activation)[0]
+    _, _, _, sources, charters, activation, blueprint = _blueprint_fixture()
+    task = _tasks(blueprint, charters, activation, sources)[0]
     charter = {str(item.director_id): item for item in charters}[
         str(task.director_id)
     ]
@@ -442,13 +608,14 @@ def test_assessment_binds_task_blueprint_context_model_and_receipt() -> None:
 
 
 def test_synthesis_is_deterministic_and_bounded_to_two_rounds() -> None:
-    _, _, _, charters, activation, blueprint = _blueprint_fixture()
-    tasks = _tasks(blueprint, charters, activation)
+    _, _, _, sources, charters, activation, blueprint = _blueprint_fixture()
+    tasks = _tasks(blueprint, charters, activation, sources)
     assessments = _all_assessments(blueprint, charters, activation, tasks)
     first = synthesize_director_assessments(
         blueprint=blueprint,
         charters=charters,
         activation=activation,
+        source_bundle=sources,
         tasks=reversed(tasks),
         assessments=reversed(assessments),
     )
@@ -456,6 +623,7 @@ def test_synthesis_is_deterministic_and_bounded_to_two_rounds() -> None:
         blueprint=blueprint,
         charters=charters,
         activation=activation,
+        source_bundle=sources,
         tasks=tasks,
         assessments=assessments,
     )
@@ -466,19 +634,145 @@ def test_synthesis_is_deterministic_and_bounded_to_two_rounds() -> None:
     assert director_artifact_from_bytes(
         director_artifact_to_bytes(first.synthesis)
     ) == first.synthesis
+    assert first.synthesis.rounds_used == 1
+    assert first.synthesis.previous_synthesis_sha256 is None
+    with pytest.raises(DirectorMeshError, match="assessment digests"):
+        director_artifact_to_mapping(
+            replace(first.synthesis, assessment_sha256s=(HashDigest("bad"),))
+        )
+
+
+def test_conflict_round_two_requires_exact_blocked_predecessor_and_stops() -> None:
+    _, _, _, sources, charters, activation, blueprint = _blueprint_fixture()
+    tasks = _tasks(blueprint, charters, activation, sources)
+    by_id = {str(item.director_id): item for item in charters}
+    assessments = tuple(
+        _assessment(
+            task,
+            by_id[str(task.director_id)],
+            blueprint,
+            activation,
+            confidence=(5_999 if index == 0 else 9_000),
+        )
+        for index, task in enumerate(tasks)
+    )
+    first = synthesize_director_assessments(
+        blueprint=blueprint,
+        charters=charters,
+        activation=activation,
+        source_bundle=sources,
+        tasks=tasks,
+        assessments=assessments,
+    )
+    assert first.synthesis.status is SynthesisStatus.BLOCKED
+    assert first.synthesis.rounds_used == 1
+    second = synthesize_director_assessments(
+        blueprint=blueprint,
+        charters=charters,
+        activation=activation,
+        source_bundle=sources,
+        tasks=tasks,
+        assessments=assessments,
+        previous_synthesis=first.synthesis,
+    )
+    assert second.synthesis.rounds_used == MAX_CONFLICT_ROUNDS
+    assert second.synthesis.previous_synthesis_sha256 == first.synthesis.synthesis_sha256
+    assert second.synthesis.conflict_session_id == first.synthesis.conflict_session_id
     with pytest.raises(DirectorMeshError, match="maximum conflict rounds"):
         synthesize_director_assessments(
             blueprint=blueprint,
             charters=charters,
             activation=activation,
+            source_bundle=sources,
             tasks=tasks,
             assessments=assessments,
-            rounds_used=MAX_CONFLICT_ROUNDS + 1,
+            previous_synthesis=second.synthesis,
+        )
+    with pytest.raises(DirectorMeshError, match="identity mismatch"):
+        synthesize_director_assessments(
+            blueprint=blueprint,
+            charters=charters,
+            activation=activation,
+            source_bundle=sources,
+            tasks=tasks,
+            assessments=assessments,
+            previous_synthesis=replace(
+                first.synthesis,
+                conflict_session_id=type(first.synthesis.conflict_session_id)(
+                    "other-session"
+                ),
+            ),
+        )
+
+
+def test_synthesis_revalidates_activation_registry_coverage_and_task_scope() -> None:
+    _, _, _, sources, charters, activation, blueprint = _blueprint_fixture()
+    tasks = _tasks(blueprint, charters, activation, sources)
+    assessments = _all_assessments(blueprint, charters, activation, tasks)
+
+    retained_identity_tamper = replace(
+        activation, active_director_ids=(activation.active_director_ids[0],)
+    )
+    with pytest.raises(DirectorRegistryError, match="identity mismatch"):
+        synthesize_director_assessments(
+            blueprint=blueprint,
+            charters=charters,
+            activation=retained_identity_tamper,
+            source_bundle=sources,
+            tasks=(tasks[0],),
+            assessments=(assessments[0],),
+        )
+
+    rebound_identity = director_activation_to_mapping(activation)
+    rebound_identity["active_director_ids"] = [
+        str(activation.active_director_ids[0])
+    ]
+    rebound_digest = canonical_sha256(rebound_identity)
+    rebound_activation = replace(
+        activation,
+        activation_id=type(activation.activation_id)(
+            f"director-activation-{str(rebound_digest)[:20]}"
+        ),
+        activation_sha256=rebound_digest,
+        active_director_ids=(activation.active_director_ids[0],),
+    )
+    with pytest.raises(DirectorRegistryError):
+        synthesize_director_assessments(
+            blueprint=blueprint,
+            charters=charters,
+            activation=rebound_activation,
+            source_bundle=sources,
+            tasks=(tasks[0],),
+            assessments=(assessments[0],),
+        )
+
+    task_mapping = director_task_plan_to_mapping(tasks[0])
+    task_identity = {
+        key: value
+        for key, value in task_mapping.items()
+        if key not in {"task_id", "task_sha256"}
+    }
+    task_identity["owned_fields"] = list(tasks[0].owned_fields[1:])
+    task_digest = canonical_sha256(task_identity)
+    rebound_task = replace(
+        tasks[0],
+        task_id=type(tasks[0].task_id)(f"director-task-{str(task_digest)[:20]}"),
+        task_sha256=task_digest,
+        owned_fields=tasks[0].owned_fields[1:],
+    )
+    with pytest.raises(DirectorMeshError, match="registry-derived scope"):
+        synthesize_director_assessments(
+            blueprint=blueprint,
+            charters=charters,
+            activation=activation,
+            source_bundle=sources,
+            tasks=(rebound_task, *tasks[1:]),
+            assessments=assessments,
         )
 
 
 def test_unresolved_base_blueprint_blocker_cannot_be_laundered_by_passes() -> None:
-    _, _, _, charters, activation, blueprint = _blueprint_fixture()
+    _, _, _, sources, charters, activation, blueprint = _blueprint_fixture()
     blocked = build_production_blueprint(
         episode_id=str(blueprint.episode_id),
         revision=blueprint.revision,
@@ -488,12 +782,13 @@ def test_unresolved_base_blueprint_blocker_cannot_be_laundered_by_passes() -> No
         ownership=blueprint.ownership,
         unresolved_blockers=("blueprint.base.unresolved",),
     )
-    tasks = _tasks(blocked, charters, activation)
+    tasks = _tasks(blocked, charters, activation, sources)
     assessments = _all_assessments(blocked, charters, activation, tasks)
     outcome = synthesize_director_assessments(
         blueprint=blocked,
         charters=charters,
         activation=activation,
+        source_bundle=sources,
         tasks=tasks,
         assessments=assessments,
     )
@@ -502,8 +797,8 @@ def test_unresolved_base_blueprint_blocker_cannot_be_laundered_by_passes() -> No
 
 
 def test_director_runtime_is_an_injected_fake_only() -> None:
-    _, _, _, charters, activation, blueprint = _blueprint_fixture()
-    task = _tasks(blueprint, charters, activation)[0]
+    _, _, _, sources, charters, activation, blueprint = _blueprint_fixture()
+    task = _tasks(blueprint, charters, activation, sources)[0]
     charter = {str(item.director_id): item for item in charters}[
         str(task.director_id)
     ]
@@ -523,8 +818,8 @@ def test_director_runtime_is_an_injected_fake_only() -> None:
 
 
 def test_owner_wins_nonhard_conflict_and_conflict_is_auditable() -> None:
-    _, _, _, charters, activation, blueprint = _blueprint_fixture()
-    tasks = _tasks(blueprint, charters, activation)
+    _, _, _, sources, charters, activation, blueprint = _blueprint_fixture()
+    tasks = _tasks(blueprint, charters, activation, sources)
     charter_by_id = {str(item.director_id): item for item in charters}
     target = "narrative.structure"
     owner_id = next(
@@ -545,7 +840,9 @@ def test_owner_wins_nonhard_conflict_and_conflict_is_auditable() -> None:
             field_path=target,
             proposal_kind=ProposalKind.OWNER,
             expected_value_sha256=field_value_sha256(current),
-            replacement_value_json=blueprint_field(target, "owner").value_json,
+            replacement_value_json=blueprint_field(
+                target, {"selection": "owner"}
+            ).value_json,
             reason_code="director.patch.owner",
             hard_constraint=False,
             evidence_refs=evidence,
@@ -554,7 +851,9 @@ def test_owner_wins_nonhard_conflict_and_conflict_is_auditable() -> None:
             field_path=target,
             proposal_kind=ProposalKind.VERIFIER,
             expected_value_sha256=field_value_sha256(current),
-            replacement_value_json=blueprint_field(target, "verifier").value_json,
+            replacement_value_json=blueprint_field(
+                target, {"selection": "verifier"}
+            ).value_json,
             reason_code="director.patch.verifier",
             hard_constraint=False,
             evidence_refs=evidence,
@@ -577,6 +876,7 @@ def test_owner_wins_nonhard_conflict_and_conflict_is_auditable() -> None:
         blueprint=blueprint,
         charters=charters,
         activation=activation,
+        source_bundle=sources,
         tasks=tasks,
         assessments=assessments,
     )
@@ -590,14 +890,18 @@ def test_owner_wins_nonhard_conflict_and_conflict_is_auditable() -> None:
         for item in assessments
         if item.director_id == owner_task.director_id
     )
-    assert field_index(outcome.blueprint)[target].value_json == '"owner"'
+    assert field_index(outcome.blueprint)[target].value_json == '{"selection":"owner"}'
     assert director_artifact_from_bytes(director_artifact_to_bytes(conflict)) == conflict
+    with pytest.raises(DirectorMeshError, match="invalid base_blueprint_sha256"):
+        director_artifact_to_mapping(
+            replace(conflict, base_blueprint_sha256=HashDigest("bad"))
+        )
 
 
 @pytest.mark.parametrize("mode", ["blocked", "low-confidence"])
 def test_blocker_and_low_confidence_fail_closed(mode: str) -> None:
-    _, _, _, charters, activation, blueprint = _blueprint_fixture()
-    tasks = _tasks(blueprint, charters, activation)
+    _, _, _, sources, charters, activation, blueprint = _blueprint_fixture()
+    tasks = _tasks(blueprint, charters, activation, sources)
     charter_by_id = {str(item.director_id): item for item in charters}
     assessments = []
     for index, task in enumerate(tasks):
@@ -632,6 +936,7 @@ def test_blocker_and_low_confidence_fail_closed(mode: str) -> None:
         blueprint=blueprint,
         charters=charters,
         activation=activation,
+        source_bundle=sources,
         tasks=tasks,
         assessments=assessments,
     )
@@ -641,10 +946,10 @@ def test_blocker_and_low_confidence_fail_closed(mode: str) -> None:
 
 
 def test_projection_envelope_is_deterministic_read_only_and_non_authoritative() -> None:
-    _, _, _, _, _, blueprint = _blueprint_fixture()
+    _, _, _, _, _, _, blueprint = _blueprint_fixture()
     source_ref = ArtifactReference(
         path=RelativeArtifactPath("artifacts/production-blueprint.json"),
-        sha256=blueprint.blueprint_sha256,
+        sha256=production_blueprint_artifact_sha256(blueprint),
         artifact_version=ArtifactVersion("production-blueprint/1.0"),
     )
     projections = project_all_blueprint_views(
@@ -664,6 +969,9 @@ def test_projection_envelope_is_deterministic_read_only_and_non_authoritative() 
         assert mapping["artifact_version"] != projection.legacy_artifact_version
         assert validate_artifact_mapping(mapping).ok
         assert blueprint_artifact_from_mapping(mapping) == projection
+        assert blueprint_projection_artifact_sha256(projection) == HashDigest(
+            hashlib.sha256(blueprint_artifact_to_bytes(projection)).hexdigest()
+        )
         validate_projection_current(
             projection,
             current_blueprint=blueprint,
@@ -685,7 +993,7 @@ def test_projection_envelope_is_deterministic_read_only_and_non_authoritative() 
             current_blueprint=changed,
             current_blueprint_ref=ArtifactReference(
                 path=source_ref.path,
-                sha256=changed.blueprint_sha256,
+                sha256=production_blueprint_artifact_sha256(changed),
                 artifact_version=source_ref.artifact_version,
             ),
         )
@@ -699,10 +1007,10 @@ def test_projection_envelope_is_deterministic_read_only_and_non_authoritative() 
 
 
 def test_shadow_comparison_is_observational_and_projection_cannot_be_current() -> None:
-    _, _, _, _, _, blueprint = _blueprint_fixture()
+    _, _, _, _, _, _, blueprint = _blueprint_fixture()
     source_ref = ArtifactReference(
         path=RelativeArtifactPath("artifacts/production-blueprint.json"),
-        sha256=blueprint.blueprint_sha256,
+        sha256=production_blueprint_artifact_sha256(blueprint),
         artifact_version=ArtifactVersion("production-blueprint/1.0"),
     )
     projection = next(
@@ -714,15 +1022,24 @@ def test_shadow_comparison_is_observational_and_projection_cannot_be_current() -
     )
     projection_ref = ArtifactReference(
         path=RelativeArtifactPath("shadow/brief.json"),
-        sha256=projection.projection_sha256,
+        sha256=blueprint_projection_artifact_sha256(projection),
         artifact_version=ArtifactVersion("blueprint-projection/1.0"),
     )
-    legacy_ref = _reference("legacy-brief", projection.legacy_artifact_version)
+    legacy_bytes = b'{"legacy":"brief"}'
+    legacy_ref = ArtifactReference(
+        path=RelativeArtifactPath("artifacts/legacy-brief.json"),
+        sha256=HashDigest(hashlib.sha256(legacy_bytes).hexdigest()),
+        artifact_version=ArtifactVersion(projection.legacy_artifact_version),
+    )
+    receipt = build_shadow_normalization_receipt(
+        legacy_artifact_ref=legacy_ref,
+        legacy_document_bytes=legacy_bytes,
+        normalized_fields=reversed(projection.fields),
+    )
     comparison = compare_shadow_projection(
         projection,
         projection_ref=projection_ref,
-        legacy_artifact_ref=legacy_ref,
-        observed_fields=reversed(projection.fields),
+        normalization_receipt=receipt,
     )
     assert comparison.matches is True
     assert comparison.authority_effect == "none"
@@ -730,13 +1047,27 @@ def test_shadow_comparison_is_observational_and_projection_cannot_be_current() -
         blueprint_field(projection.fields[0].path, "changed"),
         *projection.fields[1:],
     )
+    changed_receipt = build_shadow_normalization_receipt(
+        legacy_artifact_ref=legacy_ref,
+        legacy_document_bytes=legacy_bytes,
+        normalized_fields=changed_fields,
+    )
     changed = compare_shadow_projection(
         projection,
         projection_ref=projection_ref,
-        legacy_artifact_ref=legacy_ref,
-        observed_fields=changed_fields,
+        normalization_receipt=changed_receipt,
     )
     assert changed.matches is False
+    with pytest.raises(BlueprintContractError, match="do not match"):
+        build_shadow_normalization_receipt(
+            legacy_artifact_ref=legacy_ref,
+            legacy_document_bytes=b"different",
+            normalized_fields=projection.fields,
+        )
+    with pytest.raises(BlueprintContractError, match="fixed comparator"):
+        shadow_comparison_to_mapping(
+            replace(comparison, comparator_version="2.0")
+        )
     document = blueprint_projection_to_mapping(projection)
     graph = build_artifact_graph(
         [make_artifact_snapshot("shadow/brief.json", document, is_current=True)]
@@ -788,10 +1119,10 @@ def test_target_owned_director_resources_match_code_projection(tmp_path: Path) -
 
 
 def test_unsafe_reference_paths_fail_before_task_or_projection_identity() -> None:
-    _, _, _, charters, activation, blueprint = _blueprint_fixture()
+    _, _, _, sources, charters, activation, blueprint = _blueprint_fixture()
     unsafe = ArtifactReference(
         path=RelativeArtifactPath("../outside.json"),
-        sha256=blueprint.blueprint_sha256,
+        sha256=production_blueprint_artifact_sha256(blueprint),
         artifact_version=ArtifactVersion("production-blueprint/1.0"),
     )
     with pytest.raises(DirectorMeshError, match="invalid artifact reference"):
@@ -799,6 +1130,7 @@ def test_unsafe_reference_paths_fail_before_task_or_projection_identity() -> Non
             blueprint=blueprint,
             charters=charters,
             activation=activation,
+            source_bundle=sources,
             input_refs=(unsafe,),
         )
     with pytest.raises(BlueprintContractError, match="invalid immutable"):

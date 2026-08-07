@@ -45,6 +45,7 @@ from .registry import (
     director_registry_sha256,
     scope_matches,
     validate_field_ownership,
+    validate_director_activation,
 )
 from .runtime import DirectorRuntimePort
 from .serialization import (
@@ -110,5 +111,6 @@ __all__ = [
     "scope_matches",
     "synthesize_director_assessments",
     "validate_director_assessment",
+    "validate_director_activation",
     "validate_field_ownership",
 ]

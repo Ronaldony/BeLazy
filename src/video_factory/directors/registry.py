@@ -306,6 +306,18 @@ def activate_directors(
         raise DirectorRegistryError(
             "director.activation.signals", "profile signals must be sorted unique"
         )
+    registered_signals = {
+        signal
+        for item in values
+        if item.kind is DirectorKind.CONDITIONAL
+        for signal in item.activation_signals
+    }
+    unknown_signals = set(signals) - registered_signals
+    if unknown_signals:
+        raise DirectorRegistryError(
+            "director.activation.signal_unknown",
+            f"activation signals are not registered: {sorted(unknown_signals)}",
+        )
     if profile.complexity.value != episode_intent.needs_complexity or signals != (
         episode_intent.activation_signals
     ):
@@ -342,6 +354,28 @@ def activate_directors(
         activation_signals=signals,
         active_director_ids=active,
     )
+
+
+def validate_director_activation(
+    activation: DirectorActivation,
+    *,
+    episode_intent: blueprint_contracts.EpisodeIntent,
+    charters: Iterable[DirectorCharter],
+) -> None:
+    director_activation_to_mapping(activation)
+    expected = activate_directors(
+        episode_intent=episode_intent,
+        profile=EpisodeNeedsProfile(
+            complexity=activation.complexity,
+            activation_signals=activation.activation_signals,
+        ),
+        charters=tuple(charters),
+    )
+    if activation != expected:
+        raise DirectorRegistryError(
+            "director.activation.policy_mismatch",
+            "activation does not match the current EpisodeIntent and registry policy",
+        )
 
 
 def build_field_ownership(

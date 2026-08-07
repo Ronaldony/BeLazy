@@ -93,14 +93,21 @@ write/process APIs. Complements `check_core_purity.py` and `check_repo_isolation
 includes eight material context digests, every canonical active field, exact
 owner/verifier coverage, Director provenance, status, and blockers. Required
 root and per-shot detail is validated in Python in addition to the closed JSON
-Schema contract.
+Schema contract. `coherent` requires non-empty path-specific values, valid
+reference locks, and provenance that exactly covers every active owner and
+verifier. Task planning and synthesis additionally require the actual validated
+Channel -> Concept -> EpisodeIntent source bundle and exact episode identity;
+opaque context digests alone are insufficient.
 
 Director work is logically parallel. Every task and assessment binds the exact
 base Blueprint, context, registry, activation policy, charter, immutable input
 references, model/prompt identity, request/response digests, and execution
-receipt. Any blocker, uncertain result, low confidence, stale patch, incomplete
+receipt. Conditional activation and policy digests are re-derived at every
+consumer, and unknown signals fail closed. Any blocker, uncertain result, low
+confidence, stale patch, incomplete
 coverage, or unresolved conflict blocks synthesis. Conflict resolution has a
-hard maximum of two rounds.
+hard maximum of two rounds backed by a deterministic conflict-session ID and an
+exact blocked-predecessor digest for round two.
 
 `blueprint-projection/1.0` is the only serialized projection family. Brief,
 storyboard, generation, edit, sound, and publish are nested view kinds, not
@@ -108,6 +115,10 @@ top-level legacy artifacts. Projections are always shadow-only, read-only,
 non-editable, and have `authority_effect=none`; supplying one as current input
 adds a blocking ArtifactGraph finding. Neither a coherent Blueprint, a Director
 PASS, nor a matching shadow comparison grants readiness or execution authority.
+Shadow comparison consumes a normalization receipt that binds the exact legacy
+document bytes, fixed normalizer/rules identity, and normalized field digest.
+`ArtifactReference.sha256` always means exact serialized bytes; logical
+Blueprint/projection identity digests remain separate fields.
 
 ## Managed mutation plane (W02)
 

@@ -23,7 +23,7 @@
     },
     {
       "filename": "blueprint-conflict.schema.json",
-      "sha256": "a55827f8618d3c111aa1fdbb621e1d4e93d0c72d1afe7a116a8e41fb9806f8a3",
+      "sha256": "33e63cf5ed80bdec8f1dfa59da37a5ca023abe1f3972f56891ea814aeb8408c4",
       "schema_id": "https://schemas.video-factory.invalid/director/blueprint-conflict.schema.json",
       "artifact_version": "blueprint-conflict/1.0"
     },
@@ -113,7 +113,7 @@
     },
     {
       "filename": "director-synthesis.schema.json",
-      "sha256": "b51ff79050d16b1b778aecfe192f8b729e5afd26672b67e98a2f2e9f1ebee86c",
+      "sha256": "0b88fbe4e9f19c6ab79bef844a196170a316ca5b4722b58c501a2bb8b138a3fc",
       "schema_id": "https://schemas.video-factory.invalid/director/director-synthesis.schema.json",
       "artifact_version": "director-synthesis/1.0"
     },
@@ -281,7 +281,7 @@
     },
     {
       "filename": "production-blueprint.schema.json",
-      "sha256": "cb8878bee92c8f2b895077922e18f398da9cdfc23cce2098574dba457b377013",
+      "sha256": "7f2a5a1583068c3087be8c1c9e3c4ce6152ad892c6df5761f5919829045daead",
       "schema_id": "https://schemas.video-factory.invalid/blueprint/production-blueprint.schema.json",
       "artifact_version": "production-blueprint/1.0"
     },

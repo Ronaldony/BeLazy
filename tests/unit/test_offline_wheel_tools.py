@@ -6,6 +6,7 @@ import base64
 import csv
 import hashlib
 import io
+import json
 from pathlib import Path
 import zipfile
 
@@ -18,6 +19,25 @@ from tools.verify_schema_wheel import inspect_wheel
 def _digest(payload: bytes) -> str:
     encoded = base64.urlsafe_b64encode(hashlib.sha256(payload).digest())
     return "sha256=" + encoded.rstrip(b"=").decode("ascii")
+
+
+def _canonical_sha256(value: object) -> str:
+    return hashlib.sha256(
+        json.dumps(
+            value,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+            allow_nan=False,
+        ).encode("utf-8")
+    ).hexdigest()
+
+
+def _render(value: object) -> bytes:
+    return (
+        json.dumps(value, ensure_ascii=False, indent=2, sort_keys=False, allow_nan=False)
+        + "\n"
+    ).encode("utf-8")
 
 
 def _rewrite(
@@ -78,6 +98,59 @@ def test_wheel_rejects_director_resource_digest_corruption(tmp_path: Path) -> No
     target = "video_factory/resources/directors/director-registry.json"
     _rewrite(wheel, damaged, {target: b"{}\n"}, refresh_record=True)
     with pytest.raises(ValueError, match="Director resource digest mismatch"):
+        inspect_wheel(damaged)
+
+
+def test_wheel_rejects_coherently_rehashed_director_resource_tamper(
+    tmp_path: Path,
+) -> None:
+    wheel = _built_wheel(tmp_path)
+    registry_name = "video_factory/resources/directors/director-registry.json"
+    manifest_name = (
+        "video_factory/resources/directors/director-resource-manifest.json"
+    )
+    with zipfile.ZipFile(wheel) as archive:
+        registry = json.loads(archive.read(registry_name))
+        manifest = json.loads(archive.read(manifest_name))
+    charter = registry["charters"][0]
+    charter["director_version"] = "9.9"
+    identity = {
+        key: charter[key]
+        for key in (
+            "director_id",
+            "director_version",
+            "kind",
+            "owned_patterns",
+            "verified_patterns",
+            "activation_signals",
+            "veto_patterns",
+            "conflict_priority",
+            "rules_version",
+        )
+    }
+    charter_sha = _canonical_sha256(identity)
+    charter["charter_sha256"] = charter_sha
+    charter["charter_id"] = f"director-charter-{charter_sha[:20]}"
+    registry["registry_sha256"] = _canonical_sha256(
+        {
+            "registry_version": registry["registry_version"],
+            "charters": registry["charters"],
+        }
+    )
+    registry_bytes = _render(registry)
+    for entry in manifest["resources"]:
+        if entry["filename"] == "director-registry.json":
+            entry["sha256"] = hashlib.sha256(registry_bytes).hexdigest()
+    manifest_bytes = _render(manifest)
+    damaged = tmp_path / "director-coherent-tamper" / wheel.name
+    damaged.parent.mkdir()
+    _rewrite(
+        wheel,
+        damaged,
+        {registry_name: registry_bytes, manifest_name: manifest_bytes},
+        refresh_record=True,
+    )
+    with pytest.raises(ValueError, match="code projection"):
         inspect_wheel(damaged)
 
 

@@ -66,7 +66,26 @@
   "allOf": [
     {
       "if": { "properties": { "status": { "const": "coherent" } } },
-      "then": { "properties": { "unresolved_blockers": { "maxItems": 0 } } }
+      "then": {
+        "properties": {
+          "unresolved_blockers": { "maxItems": 0 },
+          "director_provenance": { "minItems": 1 },
+          "fields": {
+            "items": {
+              "allOf": [
+                { "$ref": "artifact-common.schema.json#/$defs/blueprintField" },
+                {
+                  "properties": {
+                    "value_json": {
+                      "not": { "enum": ["null", "\"\"", "[]", "{}"] }
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        }
+      }
     },
     {
       "if": { "properties": { "status": { "const": "blocked" } } },

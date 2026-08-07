@@ -9,6 +9,7 @@ import re
 from video_factory.blueprint.contracts import (
     BlueprintField,
     BlueprintStatus,
+    BlueprintSourceBundle,
     DirectorProvenance,
     ProductionBlueprint,
 )
@@ -20,6 +21,8 @@ from video_factory.blueprint.model import (
     field_value_sha256,
     normalize_fields,
     production_blueprint_to_mapping,
+    production_blueprint_artifact_sha256,
+    validate_blueprint_source_bundle,
 )
 from video_factory.config.canonical import canonical_sha256
 from video_factory.domain import ArtifactReference, HashDigest, OpaqueId
@@ -41,10 +44,11 @@ from .contracts import (
 )
 from .registry import (
     MAX_CONFLICT_ROUNDS,
-    director_activation_to_mapping,
+    activation_policy_sha256,
     director_charter_to_mapping,
     director_registry_sha256,
     scope_matches,
+    validate_director_activation,
     validate_field_ownership,
 )
 
@@ -96,6 +100,17 @@ def _normalize_references(
         ): item
         for item in values
     }
+    identities_by_path: dict[str, tuple[str, str]] = {}
+    for item in values:
+        _reference_mapping(item)
+        path = str(item.path)
+        identity = (str(item.sha256), str(item.artifact_version))
+        if path in identities_by_path and identities_by_path[path] != identity:
+            raise DirectorMeshError(
+                "director.reference.path_conflict",
+                "one artifact path cannot carry multiple identities",
+            )
+        identities_by_path[path] = identity
     expected = tuple(keyed[key] for key in sorted(keyed))
     if values != expected or len(values) != len(keyed):
         raise DirectorMeshError(
@@ -105,8 +120,6 @@ def _normalize_references(
         raise DirectorMeshError(
             "director.reference.missing", "at least one evidence reference is required"
         )
-    for item in values:
-        _reference_mapping(item)
     return values
 
 
@@ -180,29 +193,37 @@ def plan_director_tasks(
     blueprint: ProductionBlueprint,
     charters: Iterable[DirectorCharter],
     activation: DirectorActivation,
+    source_bundle: BlueprintSourceBundle,
     input_refs: Iterable[ArtifactReference],
 ) -> tuple[DirectorTaskPlan, ...]:
     production_blueprint_to_mapping(blueprint)
-    director_activation_to_mapping(activation)
+    validate_blueprint_source_bundle(blueprint, source_bundle)
+    values = tuple(charters)
+    validate_director_activation(
+        activation,
+        episode_intent=source_bundle.episode_intent,
+        charters=values,
+    )
     if activation.episode_intent_sha256 != blueprint.context.episode_intent_sha256:
         raise DirectorMeshError(
             "director.task.activation",
             "activation is not bound to the Blueprint EpisodeIntent",
         )
-    values = tuple(charters)
     validate_field_ownership(blueprint, values, activation)
     registry_digest = director_registry_sha256(values)
     if registry_digest != activation.registry_sha256:
         raise DirectorMeshError("director.task.registry", "activation registry is stale")
     refs = _canonical_references(input_refs, required=True)
-    if not any(
-        item.sha256 == blueprint.blueprint_sha256
+    blueprint_artifact_sha256 = production_blueprint_artifact_sha256(blueprint)
+    blueprint_refs = tuple(
+        item.sha256 == blueprint_artifact_sha256
         and str(item.artifact_version) == "production-blueprint/1.0"
         for item in refs
-    ):
+    )
+    if sum(blueprint_refs) != 1:
         raise DirectorMeshError(
             "director.task.blueprint_ref",
-            "task inputs must contain the exact base ProductionBlueprint reference",
+            "task inputs must contain the exact base ProductionBlueprint reference exactly once",
         )
     active = {str(item) for item in activation.active_director_ids}
     tasks: list[DirectorTaskPlan] = []
@@ -607,8 +628,32 @@ def build_director_assessment(
 def _conflict_identity_mapping(value: ConflictResult) -> dict[str, object]:
     proposals = tuple(str(item) for item in value.proposal_assessment_ids)
     rejected = tuple(str(item) for item in value.rejected_assessment_ids)
+    for label in ("base_blueprint_sha256", "blueprint_context_sha256"):
+        if not SHA256.fullmatch(str(getattr(value, label))):
+            raise DirectorMeshError("director.conflict.digest", f"invalid {label}")
+    if not TOKEN.fullmatch(str(value.conflict_session_id)):
+        raise DirectorMeshError(
+            "director.conflict.session", "invalid conflict session identity"
+        )
+    if value.previous_synthesis_sha256 is not None and not SHA256.fullmatch(
+        str(value.previous_synthesis_sha256)
+    ):
+        raise DirectorMeshError(
+            "director.conflict.predecessor", "invalid previous synthesis digest"
+        )
+    if (value.rounds_used == 1) != (value.previous_synthesis_sha256 is None):
+        raise DirectorMeshError(
+            "director.conflict.predecessor",
+            "round one forbids and round two requires a previous synthesis",
+        )
     if proposals != tuple(sorted(set(proposals))) or rejected != tuple(sorted(set(rejected))):
         raise DirectorMeshError("director.conflict.order", "conflict IDs not canonical")
+    if len(proposals) < 2 or len(rejected) < 1 or any(
+        not TOKEN.fullmatch(item) for item in (*proposals, *rejected)
+    ):
+        raise DirectorMeshError(
+            "director.conflict.proposals", "conflict requires valid competing assessments"
+        )
     if not REASON.fullmatch(value.reason_code):
         raise DirectorMeshError("director.conflict.reason", "invalid conflict reason code")
     try:
@@ -631,6 +676,12 @@ def _conflict_identity_mapping(value: ConflictResult) -> dict[str, object]:
         value.selected_assessment_id
     ) not in proposals:
         raise DirectorMeshError("director.conflict.selection", "selection is not a proposal")
+    if value.selected_replacement_sha256 is not None and not SHA256.fullmatch(
+        str(value.selected_replacement_sha256)
+    ):
+        raise DirectorMeshError(
+            "director.conflict.selection", "selected replacement digest is invalid"
+        )
     expected_rejected = tuple(
         item
         for item in proposals
@@ -647,6 +698,12 @@ def _conflict_identity_mapping(value: ConflictResult) -> dict[str, object]:
     return {
         "base_blueprint_sha256": str(value.base_blueprint_sha256),
         "blueprint_context_sha256": str(value.blueprint_context_sha256),
+        "conflict_session_id": str(value.conflict_session_id),
+        "previous_synthesis_sha256": (
+            str(value.previous_synthesis_sha256)
+            if value.previous_synthesis_sha256 is not None
+            else None
+        ),
         "field_path": value.field_path,
         "proposal_assessment_ids": list(proposals),
         "status": value.status.value,
@@ -688,8 +745,34 @@ def conflict_result_to_mapping(value: ConflictResult) -> dict[str, object]:
 def _synthesis_identity_mapping(value: DirectorSynthesis) -> dict[str, object]:
     assessments = tuple(str(item) for item in value.assessment_sha256s)
     conflicts = tuple(str(item) for item in value.conflict_sha256s)
+    for label in ("base_blueprint_sha256", "blueprint_context_sha256"):
+        if not SHA256.fullmatch(str(getattr(value, label))):
+            raise DirectorMeshError("director.synthesis.digest", f"invalid {label}")
+    if not TOKEN.fullmatch(str(value.conflict_session_id)):
+        raise DirectorMeshError(
+            "director.synthesis.session", "invalid conflict session identity"
+        )
+    if value.previous_synthesis_sha256 is not None and not SHA256.fullmatch(
+        str(value.previous_synthesis_sha256)
+    ):
+        raise DirectorMeshError(
+            "director.synthesis.predecessor", "invalid previous synthesis digest"
+        )
+    if (value.rounds_used == 1) != (value.previous_synthesis_sha256 is None):
+        raise DirectorMeshError(
+            "director.synthesis.predecessor",
+            "round one forbids and round two requires a previous synthesis",
+        )
     if assessments != tuple(sorted(set(assessments))) or conflicts != tuple(sorted(set(conflicts))):
         raise DirectorMeshError("director.synthesis.order", "synthesis inputs not canonical")
+    if not assessments or any(not SHA256.fullmatch(item) for item in assessments):
+        raise DirectorMeshError(
+            "director.synthesis.assessments", "synthesis requires valid assessment digests"
+        )
+    if any(not SHA256.fullmatch(item) for item in conflicts):
+        raise DirectorMeshError(
+            "director.synthesis.conflicts", "synthesis conflict digests are invalid"
+        )
     blockers = tuple(value.unresolved_blockers)
     if blockers != tuple(sorted(set(blockers))) or any(
         not REASON.fullmatch(item) for item in blockers
@@ -703,6 +786,12 @@ def _synthesis_identity_mapping(value: DirectorSynthesis) -> dict[str, object]:
         value.resulting_blueprint_sha256 is None or value.unresolved_blockers
     ):
         raise DirectorMeshError("director.synthesis.coherent_shape", "invalid coherent synthesis")
+    if value.resulting_blueprint_sha256 is not None and not SHA256.fullmatch(
+        str(value.resulting_blueprint_sha256)
+    ):
+        raise DirectorMeshError(
+            "director.synthesis.result", "resulting Blueprint digest is invalid"
+        )
     if value.status is SynthesisStatus.BLOCKED and (
         value.resulting_blueprint_sha256 is not None or not value.unresolved_blockers
     ):
@@ -710,6 +799,12 @@ def _synthesis_identity_mapping(value: DirectorSynthesis) -> dict[str, object]:
     return {
         "base_blueprint_sha256": str(value.base_blueprint_sha256),
         "blueprint_context_sha256": str(value.blueprint_context_sha256),
+        "conflict_session_id": str(value.conflict_session_id),
+        "previous_synthesis_sha256": (
+            str(value.previous_synthesis_sha256)
+            if value.previous_synthesis_sha256 is not None
+            else None
+        ),
         "assessment_sha256s": list(assessments),
         "conflict_sha256s": list(conflicts),
         "status": value.status.value,
@@ -746,6 +841,8 @@ def _new_conflict(
     selected: tuple[DirectorAssessment, PatchProposal] | None,
     reason_code: str,
     rounds_used: int,
+    conflict_session_id: OpaqueId,
+    previous_synthesis_sha256: HashDigest | None,
 ) -> ConflictResult:
     proposal_ids = tuple(sorted((item[0].assessment_id for item in proposals), key=str))
     selected_id = selected[0].assessment_id if selected is not None else None
@@ -765,6 +862,8 @@ def _new_conflict(
         conflict_sha256=HashDigest("0" * 64),
         base_blueprint_sha256=blueprint.blueprint_sha256,
         blueprint_context_sha256=blueprint_context_sha256(blueprint.context),
+        conflict_session_id=conflict_session_id,
+        previous_synthesis_sha256=previous_synthesis_sha256,
         field_path=field_path,
         proposal_assessment_ids=proposal_ids,
         status=(ConflictStatus.RESOLVED if selected is not None else ConflictStatus.BLOCKED),
@@ -789,15 +888,66 @@ def synthesize_director_assessments(
     blueprint: ProductionBlueprint,
     charters: Iterable[DirectorCharter],
     activation: DirectorActivation,
+    source_bundle: BlueprintSourceBundle,
     tasks: Iterable[DirectorTaskPlan],
     assessments: Iterable[DirectorAssessment],
-    rounds_used: int = 1,
+    previous_synthesis: DirectorSynthesis | None = None,
 ) -> SynthesisOutcome:
-    if not 1 <= rounds_used <= MAX_CONFLICT_ROUNDS:
-        raise DirectorMeshError(
-            "director.synthesis.round_limit", "synthesis exceeds maximum conflict rounds"
-        )
+    production_blueprint_to_mapping(blueprint)
+    validate_blueprint_source_bundle(blueprint, source_bundle)
     charter_values = tuple(charters)
+    validate_director_activation(
+        activation,
+        episode_intent=source_bundle.episode_intent,
+        charters=charter_values,
+    )
+    registry_digest = director_registry_sha256(charter_values)
+    policy_digest = activation_policy_sha256(charter_values)
+    if (
+        activation.registry_sha256 != registry_digest
+        or activation.activation_policy_sha256 != policy_digest
+        or activation.episode_intent_sha256
+        != blueprint.context.episode_intent_sha256
+    ):
+        raise DirectorMeshError(
+            "director.synthesis.activation_binding",
+            "activation is not bound to the current registry, policy, and Blueprint",
+        )
+    validate_field_ownership(blueprint, charter_values, activation)
+    session_digest = canonical_sha256(
+        {
+            "base_blueprint_sha256": str(blueprint.blueprint_sha256),
+            "blueprint_context_sha256": str(
+                blueprint_context_sha256(blueprint.context)
+            ),
+            "activation_sha256": str(activation.activation_sha256),
+        }
+    )
+    conflict_session_id = OpaqueId(
+        f"director-conflict-session-{str(session_digest)[:20]}"
+    )
+    previous_synthesis_sha256: HashDigest | None = None
+    rounds_used = 1
+    if previous_synthesis is not None:
+        director_synthesis_to_mapping(previous_synthesis)
+        if (
+            previous_synthesis.conflict_session_id != conflict_session_id
+            or previous_synthesis.base_blueprint_sha256 != blueprint.blueprint_sha256
+            or previous_synthesis.blueprint_context_sha256
+            != blueprint_context_sha256(blueprint.context)
+            or previous_synthesis.status is not SynthesisStatus.BLOCKED
+        ):
+            raise DirectorMeshError(
+                "director.synthesis.predecessor",
+                "previous synthesis is not the blocked predecessor for this conflict session",
+            )
+        if previous_synthesis.rounds_used >= MAX_CONFLICT_ROUNDS:
+            raise DirectorMeshError(
+                "director.synthesis.round_limit",
+                "synthesis exceeds maximum conflict rounds",
+            )
+        rounds_used = previous_synthesis.rounds_used + 1
+        previous_synthesis_sha256 = previous_synthesis.synthesis_sha256
     charter_by_id = {str(item.director_id): item for item in charter_values}
     task_values = tuple(tasks)
     task_by_id = {str(item.director_id): item for item in task_values}
@@ -805,7 +955,8 @@ def synthesize_director_assessments(
     assessment_by_id = {str(item.director_id): item for item in assessment_values}
     active_ids = tuple(str(item) for item in activation.active_director_ids)
     if (
-        len(task_by_id) != len(task_values)
+        not active_ids
+        or len(task_by_id) != len(task_values)
         or len(assessment_by_id) != len(assessment_values)
         or tuple(sorted(task_by_id)) != active_ids
         or tuple(sorted(assessment_by_id)) != active_ids
@@ -813,6 +964,29 @@ def synthesize_director_assessments(
         raise DirectorMeshError(
             "director.synthesis.coverage", "exactly one task and assessment per active director is required"
         )
+    common_input_refs = task_values[0].input_refs
+    if any(item.input_refs != common_input_refs for item in task_values):
+        raise DirectorMeshError(
+            "director.synthesis.task_inputs",
+            "all Director tasks must share the exact canonical input references",
+        )
+    expected_tasks = plan_director_tasks(
+        blueprint=blueprint,
+        charters=charter_values,
+        activation=activation,
+        source_bundle=source_bundle,
+        input_refs=common_input_refs,
+    )
+    expected_task_by_id = {
+        str(item.director_id): item for item in expected_tasks
+    }
+    for director_id in active_ids:
+        director_task_plan_to_mapping(task_by_id[director_id])
+        if task_by_id[director_id] != expected_task_by_id[director_id]:
+            raise DirectorMeshError(
+                "director.synthesis.task_scope",
+                "Director task does not match the current registry-derived scope",
+            )
     for director_id in active_ids:
         validate_director_assessment(
             assessment_by_id[director_id],
@@ -907,6 +1081,8 @@ def synthesize_director_assessments(
             selected=selected,
             reason_code=reason,
             rounds_used=rounds_used,
+            conflict_session_id=conflict_session_id,
+            previous_synthesis_sha256=previous_synthesis_sha256,
         )
         conflicts.append(conflict)
         if selected is None:
@@ -954,6 +1130,8 @@ def synthesize_director_assessments(
         synthesis_sha256=HashDigest("0" * 64),
         base_blueprint_sha256=blueprint.blueprint_sha256,
         blueprint_context_sha256=blueprint_context_sha256(blueprint.context),
+        conflict_session_id=conflict_session_id,
+        previous_synthesis_sha256=previous_synthesis_sha256,
         assessment_sha256s=tuple(
             sorted((item.assessment_sha256 for item in assessment_values), key=str)
         ),

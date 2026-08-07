@@ -149,6 +149,8 @@ class ConflictResult:
     conflict_sha256: HashDigest
     base_blueprint_sha256: HashDigest
     blueprint_context_sha256: HashDigest
+    conflict_session_id: OpaqueId
+    previous_synthesis_sha256: HashDigest | None
     field_path: str
     proposal_assessment_ids: tuple[OpaqueId, ...]
     status: ConflictStatus
@@ -166,6 +168,8 @@ class DirectorSynthesis:
     synthesis_sha256: HashDigest
     base_blueprint_sha256: HashDigest
     blueprint_context_sha256: HashDigest
+    conflict_session_id: OpaqueId
+    previous_synthesis_sha256: HashDigest | None
     assessment_sha256s: tuple[HashDigest, ...]
     conflict_sha256s: tuple[HashDigest, ...]
     status: SynthesisStatus

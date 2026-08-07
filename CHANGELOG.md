@@ -14,6 +14,13 @@
   and parity comparisons have no authority effect, and current projection
   snapshots now fail the ArtifactGraph gate. Legacy authority paths are not cut
   over in W03.
+- Bound Blueprint task/projection references to exact canonical artifact bytes,
+  while retaining separate logical identity digests. Coherent promotion now
+  requires material typed detail and complete Director provenance; task and
+  synthesis consumers revalidate the exact Channel/Concept/EpisodeIntent chain
+  and re-derive conditional activation. Conflict round two carries an exact
+  blocked predecessor, and shadow comparison uses a byte-bound normalization
+  receipt with fixed rules.
 - Added the pure managed-mutation contract and guard plane: six packaged
   artifacts, deterministic exact-before planning, immutable revision and
   tombstone derivation, drift quarantine, strict cross-platform path policy,

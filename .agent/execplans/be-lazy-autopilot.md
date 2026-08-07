@@ -26,7 +26,7 @@ evidence and no external side effects.
 | W00 Bootstrap/Baseline | passed | BOOT-001..005 | `d00856550f7f66618e3d365725e6b2d9054380c1` |
 | W01 Trust Boundary | passed | P0-PKG-001, P0-JSON-001, P0-AUTH-001 | `47d968d3cf8014573b349ad858d6a04bdf724f94` |
 | W02 Managed Mutation | passed | MUT-001..004 | `17107e815996e18032132a739140aeeae0b2716e` |
-| W03 Director/Blueprint | pending | BP-001, DIR-001, DIR-002, BP-002 | pending |
+| W03 Director/Blueprint | reviewing | BP-001, DIR-001, DIR-002, BP-002 | pending evidence checkpoint |
 | W04 Workflow/Authority | pending | WF-001, AUTH-001, AUTH-002, WF-002 | pending |
 | W05 Automation/Quality/Release | pending | SEL-001, QA-001, REL-001 | pending |
 | W06 Runtime/Migration | pending | RUN-001, RUN-002, MIG-001, REL-002 | pending |
@@ -176,3 +176,61 @@ schema/semantics, and target containment before continuing.
 - Final fresh architecture, authority-boundary, and test/packaging reviews:
   Critical 0, High 0, Medium 0 on the exact final implementation commit/tree.
 - Source archive and handoff manifest post-checks remain byte-identical.
+
+## W03 decisions and evidence
+
+1. Channel Constitution, Concept Constitution, EpisodeIntent, and
+   ProductionBlueprint are immutable additive contracts. The actual validated
+   Channel -> Concept -> EpisodeIntent bundle, episode identity, and eight
+   material context digests must agree at every Director consumer.
+2. A general builder cannot create a coherent Blueprint. Coherent design is
+   derived only by deterministic Director synthesis and becomes a verified
+   promotion claim only after its complete source, registry, activation, task,
+   assessment, conflict, and antecedent evidence is recomputed.
+3. The target-owned Director registry contains twelve core and six conditional
+   charters. Production activation, ownership, planning, synthesis, and
+   promotion verification reject reduced, augmented, reversioned, or otherwise
+   co-tampered registries.
+4. Director work is logically parallel over one exact draft Blueprint. There
+   are no Director-to-Director workflow predecessors. Conflict synthesis is
+   deterministic, hard constraints win first, and only one exact blocked
+   predecessor permits a second and final round.
+5. Round two recomputes the complete round-one task and assessment evidence.
+   Every previous and current task input, execution receipt, top-level evidence,
+   patch evidence, and blocker evidence shares one cross-platform path identity
+   set. Only an exact `(path, sha256, artifact_version)` triple may be reused.
+6. Immutable reference paths are canonical relative POSIX NFC strings and
+   reject empty/dot/parent/repeated/trailing segments, platform aliases,
+   case/Unicode collisions, and every Unicode `Cc` control character.
+7. Legacy views are deterministic read-only Blueprint projections. Comparison
+   inputs remain explicitly unverified diagnostic observations until a
+   versioned semantic normalizer exists; no W03 output grants readiness,
+   dispatch, mutation, publish, release, parity, or cutover authority.
+8. W03 defines a Director runtime protocol only. No model/provider call,
+   credential use, network access, human approval, publication, or deployment
+   occurred.
+
+## W03 actual checks
+
+- Final implementation: `d0b2f5f4607bcfe76c28a0b8e33da2ae3407f02c`
+  (tree `5a265eb538b9a681307bdce1bacf011d53eddd5f`).
+- W03 target suite: 54 passed; security-focused eight-file suite: 156 passed;
+  architecture-focused contracts/compatibility suite: 76 passed.
+- Full suite: 584 passed in 75.74s on the exact implementation commit/tree.
+- Core purity 313, side-effect-free 103, repository isolation 223, and target
+  boundary 378 files/63 directories: PASS.
+- Schema resources: 61 packaged schemas and 57 registered versions; root and
+  package projections and the digest manifest are exact.
+- Target-owned Director resources: 18 charters (12 core, 6 conditional), six
+  conditional activation rules, and a two-round maximum; code/resource semantic
+  projection checks PASS.
+- Deterministic stdlib wheel: two identical 173-member, 311429-byte builds,
+  SHA-256 `ae1479bb61300087490876ef12f8fa810a31eb2504941d30f67cc41e5128ccc8`.
+- Isolated wheel verification: RECORD, unique metadata, schema manifest,
+  Director resources, imports, 61 schemas, and 57 versions PASS.
+- Standard backend command remains environment-blocked because `build`,
+  `setuptools`, and `wheel` are absent; the fallback is not represented as
+  backend verification.
+- Final fresh architecture, security/authority, and test/packaging reviews:
+  Critical 0, High 0, Medium 0 on the exact final implementation commit/tree.
+- Handoff 49/49 files and source archive 211 members/CRC/digest remain exact.

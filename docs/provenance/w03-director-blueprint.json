@@ -1,0 +1,142 @@
+{
+  "schema_version": "be-lazy-w03-director-blueprint/1.0",
+  "wave": "W03-DIRECTOR-BLUEPRINT",
+  "created_at": "2026-08-07T17:41:40.205Z",
+  "implementation": {
+    "commit": "d0b2f5f4607bcfe76c28a0b8e33da2ae3407f02c",
+    "tree": "5a265eb538b9a681307bdce1bacf011d53eddd5f",
+    "parent": "50d2f2baf0bbe09b7591a2c114b60565b845b06f",
+    "baseline_ancestor": "789756c24c9e501bb7f1708694638884b7459338",
+    "branch": "agent/autopilot-v4",
+    "candidate_chain": [
+      "f1ba96356243527a9424b993a99b87c4e740c8cb",
+      "110b450fdbedf8e359784c08fd42fb52a4d97fbc",
+      "acefde0a42f2e4bf30702ee7532126f5ab69cc69",
+      "7c7eefad23c6841be03a966b1a1c9083bea113e7",
+      "c48ef226e8abb226a6bbfe679972154fc9cd9f55",
+      "50d2f2baf0bbe09b7591a2c114b60565b845b06f",
+      "d0b2f5f4607bcfe76c28a0b8e33da2ae3407f02c"
+    ]
+  },
+  "inputs": {
+    "source_archive_sha256": "954325b77028bcf7d36a88136d8e1ed0ec2348ad15014623710614cced94034a",
+    "source_member_count": 211,
+    "handoff_manifest_sha256": "1bd3aa1687299c15f81539641afcd1563097b0ff8cebc9c24a793e132386244a"
+  },
+  "schema_resources": {
+    "manifest_path": "src/video_factory/resources/schemas/schema-manifest.json",
+    "manifest_sha256": "66e3095c23104b1ce368f5a65e62fc0497ed05c90be269e034db2c1c521360fc",
+    "schema_count": 61,
+    "registered_version_count": 57,
+    "w03_artifact_versions": [
+      "blueprint-conflict/1.0",
+      "blueprint-projection/1.0",
+      "channel-constitution/1.0",
+      "concept-constitution/1.0",
+      "director-assessment/1.0",
+      "director-charter/1.0",
+      "director-synthesis/1.0",
+      "episode-intent/1.0",
+      "production-blueprint/1.0"
+    ]
+  },
+  "director_resources": {
+    "manifest_path": "src/video_factory/resources/directors/director-resource-manifest.json",
+    "manifest_sha256": "62bfed6745cb72bf6997aa68d4ce5fa592b692efa98f983bded39d3f10bc0b56",
+    "registry_file_sha256": "94213073eb576684f4e5bd4321f75d0b751b8f858c1bea6060193fcf36bf27a6",
+    "registry_logical_sha256": "ad2ddadc59e30f361b11e86c9c2dff9c56d3c0ced143a9e4f004fa74f1153ce5",
+    "activation_policy_file_sha256": "f0af3280f5b30191400b40a9cda381d8f0c1acd5d24b19baa555a72be72cfb02",
+    "activation_policy_logical_sha256": "fb5bf5167a5675165da95863b0453bc9e99fb73d942b13768395ba94e1e9f233",
+    "charter_count": 18,
+    "core_count": 12,
+    "conditional_count": 6,
+    "conditional_rule_count": 6,
+    "maximum_conflict_rounds": 2
+  },
+  "blueprint_and_director_boundary": {
+    "exact_source_bundle_required": true,
+    "coherent_general_builder_forbidden": true,
+    "verified_promotion_recomputes_complete_evidence": true,
+    "target_owned_registry_required": true,
+    "active_field_owner_and_distinct_verifier_required": true,
+    "director_tasks_logically_parallel": true,
+    "second_round_requires_exact_blocked_predecessor": true,
+    "second_round_recomputes_previous_tasks_and_assessments": true,
+    "complete_cross_round_reference_identity_set": true,
+    "exact_reference_triple_reuse_only": true,
+    "canonical_relative_posix_nfc_paths": true,
+    "all_unicode_cc_controls_rejected": true,
+    "legacy_projection_authority_effect": "none",
+    "shadow_observation_trust": "unverified_diagnostic_only",
+    "director_pass_is_approval": false
+  },
+  "deferred_boundaries": {
+    "w04": [
+      "declarative workflow authority",
+      "durable approval authenticity revocation and ledger semantics",
+      "trusted lower-tier mutation classification"
+    ],
+    "w06": [
+      "concrete Director model or provider runtime execution",
+      "durable invocation and execution journals",
+      "legacy authoritative cutover and migration runtime"
+    ]
+  },
+  "manual_wheel": {
+    "role": "STDLIB_PEP427_ACCEPTANCE_FALLBACK_ONLY",
+    "filename": "video_production_core-0.3.1-py3-none-any.whl",
+    "sha256": "ae1479bb61300087490876ef12f8fa810a31eb2504941d30f67cc41e5128ccc8",
+    "size_bytes": 311429,
+    "member_count": 173,
+    "two_builds_identical": true,
+    "record_verified": true,
+    "isolated_registry_load": "61 schemas; 57 registered versions; 18 Director charters"
+  },
+  "test_evidence": {
+    "receipt": {
+      "path": "reports/autopilot/waves/W03/test-receipt.json",
+      "sha256": "f1ece7adc02616faff51759fde473f6f5f62649018fb13cf904e30507156c54c"
+    },
+    "w03_target": "54 passed on exact implementation commit",
+    "focused_security": "156 passed on exact implementation commit",
+    "full": "584 passed on exact implementation commit/tree",
+    "boundaries": "core_purity, side_effect_free, repo_isolation, target_boundary PASS",
+    "standard_build_backend": {
+      "status": "ENVIRONMENT_BLOCKED",
+      "observed": "build=false; setuptools=false; wheel=false",
+      "fallback_misrepresented_as_backend": false
+    }
+  },
+  "review_evidence": {
+    "discovery": {
+      "path": "reports/autopilot/waves/W03/discovery.md",
+      "sha256": "66d2365363717189bed2dd39c3f14720dd323608ca9e0331919cb34344c0fee7"
+    },
+    "rounds": [
+      {"round": 1, "path": "reports/autopilot/waves/W03/review-round-1.md", "sha256": "0ced49e0a2cbe01f74312aaadd5a47f2ccdadacdb8dbc33a82c55b38e7777547", "result": "CHANGES_REQUESTED"},
+      {"round": 2, "path": "reports/autopilot/waves/W03/review-round-2.md", "sha256": "4462f204927e92b887087d9018d58e8983d08bb7272c2272262d67faac1f07e9", "result": "CHANGES_REQUESTED"},
+      {"round": 3, "path": "reports/autopilot/waves/W03/review-round-3.md", "sha256": "29de106b795fb1ff690207b92e7659c154a52aebedfb3bbdfeacbd9251fcc3d9", "result": "CHANGES_REQUESTED"},
+      {"round": 4, "path": "reports/autopilot/waves/W03/review-round-4.md", "sha256": "1b3c030ba575ad5402f9bb3e989de8fb9b61608a614e7f0f68b39f02c681c8ea", "result": "CHANGES_REQUESTED"},
+      {"round": 5, "path": "reports/autopilot/waves/W03/review-round-5.md", "sha256": "cbb023c0ccc2846973e033aa211084559a98f32b304adaea6843dff31322d5fa", "result": "CHANGES_REQUESTED"},
+      {"round": 6, "path": "reports/autopilot/waves/W03/review-round-6.md", "sha256": "9e734fb819b5e2929bf0befee65022f6445776a89342a2d1048ba9f758bf6560", "result": "CHANGES_REQUESTED"},
+      {"round": 7, "path": "reports/autopilot/waves/W03/review-round-7.md", "sha256": "1e5972f415c9910402d3dfe397bebad1489fc91a64e3b7a7ca9d7f1a64640007", "result": "GO"}
+    ],
+    "final_reviewers": [
+      {"role": "architecture_contract", "critical": 0, "high": 0, "medium": 0, "result": "GO"},
+      {"role": "security_authority_boundary", "critical": 0, "high": 0, "medium": 0, "result": "GO"},
+      {"role": "test_compatibility_packaging", "critical": 0, "high": 0, "medium": 0, "result": "GO"}
+    ]
+  },
+  "execplan": {
+    "path": ".agent/execplans/be-lazy-autopilot.md",
+    "sha256": "0f9c729a1f846b3acfd4e3b4cbb18bb49cd9b6c2f5e05ec4e730d7dcb843a3a8"
+  },
+  "claims_not_made": [
+    "setuptools_backend_verification",
+    "Director_model_or_provider_execution",
+    "legacy_semantic_parity_or_authoritative_cutover",
+    "workflow_execution_authority_or_human_approval",
+    "provider_publication_or_deployment",
+    "public_identifier_migration"
+  ]
+}

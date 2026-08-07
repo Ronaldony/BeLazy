@@ -153,13 +153,20 @@ def inspect_wheel(path: Path) -> tuple[int, int, str]:
             for name in names
             if name.startswith(SCHEMA_PREFIX) and name.endswith(".schema.json")
         )
-        if len(schema_names) != 46:
-            raise ValueError(f"wheel must contain 46 schemas; found {len(schema_names)}")
         manifest_name = SCHEMA_PREFIX + "schema-manifest.json"
         manifest = _strict_object(archive.read(manifest_name), manifest_name)
         entries = manifest.get("schemas")
-        if not isinstance(entries, list) or len(entries) != 46:
-            raise ValueError("wheel schema manifest must contain 46 entries")
+        schema_count = manifest.get("schema_count")
+        version_count = manifest.get("registered_version_count")
+        if (
+            not isinstance(schema_count, int)
+            or isinstance(schema_count, bool)
+            or schema_count < 1
+            or len(schema_names) != schema_count
+        ):
+            raise ValueError("wheel schema count differs from its manifest")
+        if not isinstance(entries, list) or len(entries) != schema_count:
+            raise ValueError("wheel schema manifest entry count is invalid")
         versions = 0
         for entry in entries:
             if not isinstance(entry, Mapping):
@@ -172,8 +179,14 @@ def inspect_wheel(path: Path) -> tuple[int, int, str]:
                 raise ValueError(f"wheel schema digest mismatch: {filename}")
             if entry.get("artifact_version") is not None:
                 versions += 1
-        if versions != 42:
-            raise ValueError(f"wheel manifest must register 42 versions; found {versions}")
+        if (
+            not isinstance(version_count, int)
+            or isinstance(version_count, bool)
+            or versions != version_count
+        ):
+            raise ValueError(
+                "wheel registered version count differs from its manifest"
+            )
     return len(names), len(schema_names), hashlib.sha256(payload).hexdigest()
 
 
@@ -182,6 +195,17 @@ def install_and_probe(wheel: Path, python: Path, work_dir: Path) -> str:
         raise ValueError(f"verification work directory must not exist: {work_dir}")
     install_dir = work_dir / "installed"
     install_dir.mkdir(parents=True)
+    with zipfile.ZipFile(wheel) as archive:
+        manifest = _strict_object(
+            archive.read(SCHEMA_PREFIX + "schema-manifest.json"),
+            "installed probe schema manifest",
+        )
+    expected_schemas = manifest.get("schema_count")
+    expected_versions = manifest.get("registered_version_count")
+    if not isinstance(expected_schemas, int) or not isinstance(
+        expected_versions, int
+    ):
+        raise ValueError("installed probe schema counts are invalid")
     environment = dict(os.environ)
     environment.pop("PYTHONPATH", None)
     environment["PYTHONDONTWRITEBYTECODE"] = "1"
@@ -224,7 +248,9 @@ package_file = Path(video_factory.__file__).resolve()
 if not package_file.is_relative_to(install):
     raise SystemExit(f'package escaped isolated install: {package_file}')
 registry = ArtifactSchemaRegistry()
-if len(registry.all_schemas()) != 46 or len(registry.list_versions()) != 42:
+expected_schemas = int(sys.argv[2])
+expected_versions = int(sys.argv[3])
+if len(registry.all_schemas()) != expected_schemas or len(registry.list_versions()) != expected_versions:
     raise SystemExit('installed registry counts mismatch')
 valid = {'artifact_version': 'approval-requirement/1.0', 'rules_version': 'rules', 'episode_id': 'ep', 'requirement_id': 'req', 'capability_id': 'cap', 'bound_artifacts': [{'path': 'a.json', 'sha256': 'a'*64, 'artifact_version': 'brief/1.0'}], 'effective_config_sha256': 'b'*64, 'kind': 'packet', 'creates_evidence': False}
 if not validate_artifact_mapping(valid, registry=registry).ok:
@@ -232,10 +258,19 @@ if not validate_artifact_mapping(valid, registry=registry).ok:
 bad = dict(valid); bad['effective_config_sha256'] = 'bad'
 if validate_artifact_mapping(bad, registry=registry).ok:
     raise SystemExit('installed registry accepted an invalid artifact')
-print(json.dumps({'package_file': str(package_file), 'schemas': 46, 'versions': 42, 'manifest_sha256': registry.manifest_sha256}, sort_keys=True))
+print(json.dumps({'package_file': str(package_file), 'schemas': expected_schemas, 'versions': expected_versions, 'manifest_sha256': registry.manifest_sha256}, sort_keys=True))
 """
     probed = subprocess.run(
-        [str(python), "-I", "-B", "-c", probe, str(install_dir)],
+        [
+            str(python),
+            "-I",
+            "-B",
+            "-c",
+            probe,
+            str(install_dir),
+            str(expected_schemas),
+            str(expected_versions),
+        ],
         cwd=work_dir,
         env=environment,
         capture_output=True,

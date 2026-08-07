@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.video-factory.invalid/mutation/change-request.schema.json",
+  "title": "Managed mutation change request",
+  "type": "object",
+  "required": [
+    "artifact_version",
+    "request_id",
+    "workspace_id",
+    "requester_id",
+    "requested_at",
+    "before_revision_id",
+    "before_manifest_sha256",
+    "idempotency_key",
+    "risk_tier",
+    "operations"
+  ],
+  "properties": {
+    "artifact_version": { "const": "change-request/1.0" },
+    "request_id": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" },
+    "workspace_id": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" },
+    "requester_id": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" },
+    "requested_at": { "type": "string", "format": "date-time" },
+    "before_revision_id": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" },
+    "before_manifest_sha256": { "$ref": "artifact-common.schema.json#/$defs/sha256" },
+    "idempotency_key": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" },
+    "risk_tier": { "$ref": "artifact-common.schema.json#/$defs/mutationRiskTier" },
+    "operations": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "artifact-common.schema.json#/$defs/mutationIntent" }
+    }
+  },
+  "additionalProperties": false,
+  "x-artifact-migration": {
+    "id_pattern": "^change-request/[1-9][0-9]*-to-[1-9][0-9]*/[1-9][0-9]*$",
+    "single_major_step": true,
+    "in_place": false,
+    "automatic_downgrade": false
+  }
+}

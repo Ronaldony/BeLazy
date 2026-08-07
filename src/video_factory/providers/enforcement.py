@@ -19,6 +19,11 @@ from video_factory.domain import CapabilityId
 from video_factory.engine.contracts import ExecutionMode
 from video_factory.engine.mode import mode_is_within_limit
 from video_factory.json_boundary import parse_rfc3339_datetime
+from video_factory.mutation import (
+    WorkspaceObservation,
+    workspace_observation_sha256,
+    workspace_trust_blockers,
+)
 
 from .contracts import AdapterKind, CapabilityDescriptor, RequestEnvelope
 
@@ -47,6 +52,8 @@ class OrchestrationAuthorization:
     gate_context_sha256: str | None = None
     evaluated_at: str | None = None
     valid_until: str | None = None
+    workspace_revision_id: str | None = None
+    workspace_observation_sha256: str | None = None
 
 
 def _reject(message: str) -> None:
@@ -127,6 +134,8 @@ class OrchestrationGuard:
         *,
         current_context: GateContext | None = None,
         evaluated_at: datetime | None = None,
+        workspace_observation: WorkspaceObservation | None = None,
+        expected_workspace_revision_id: str | None = None,
     ) -> OrchestrationAuthorization:
         if request.capability_id != policy.capability_id:
             _reject("request capability does not match orchestration policy")
@@ -150,6 +159,7 @@ class OrchestrationGuard:
             _reject("required human evidence is missing")
 
         normalized_context: GateContext | None = None
+        normalized_workspace_sha256: str | None = None
         if request.effective_execution_mode is not ExecutionMode.PREVIEW_ONLY:
             if current_context is None:
                 _reject("current gate context is required for production authorization")
@@ -170,6 +180,20 @@ class OrchestrationGuard:
                 or evaluated_at.utcoffset() is None
             ):
                 _reject("timezone-aware evaluation time is required for authorization")
+            workspace_blockers = workspace_trust_blockers(
+                workspace_observation,
+                expected_revision_id=expected_workspace_revision_id,
+                expected_manifest_sha256=normalized_context.current_manifest_sha256,
+            )
+            if workspace_blockers:
+                _reject(
+                    "current workspace observation rejected: "
+                    + ", ".join(workspace_blockers)
+                )
+            assert workspace_observation is not None
+            normalized_workspace_sha256 = str(
+                workspace_observation_sha256(workspace_observation)
+            )
 
         evidence_id = None
         valid_until = None
@@ -199,6 +223,13 @@ class OrchestrationGuard:
                 evaluated_at.isoformat() if evaluated_at is not None else None
             ),
             valid_until=valid_until,
+            workspace_revision_id=(
+                str(workspace_observation.revision_id)
+                if workspace_observation is not None
+                and request.effective_execution_mode is not ExecutionMode.PREVIEW_ONLY
+                else None
+            ),
+            workspace_observation_sha256=normalized_workspace_sha256,
         )
 
 
@@ -210,6 +241,8 @@ def enforce_adapter_dispatch(
     authorization: OrchestrationAuthorization | None = None,
     current_context: GateContext | None = None,
     evaluated_at: datetime | None = None,
+    workspace_observation: WorkspaceObservation | None = None,
+    expected_workspace_revision_id: str | None = None,
 ) -> None:
     """ADR-004 point 4: recheck immediately before an external process."""
 
@@ -253,6 +286,23 @@ def enforce_adapter_dispatch(
         gate_context_sha256(normalized_context)
     ):
         _reject("executor authorization is bound to another gate context")
+    workspace_blockers = workspace_trust_blockers(
+        workspace_observation,
+        expected_revision_id=expected_workspace_revision_id,
+        expected_manifest_sha256=normalized_context.current_manifest_sha256,
+    )
+    if workspace_blockers:
+        _reject(
+            "executor current workspace observation rejected: "
+            + ", ".join(workspace_blockers)
+        )
+    assert workspace_observation is not None
+    if authorization.workspace_revision_id != str(workspace_observation.revision_id):
+        _reject("executor authorization is bound to another workspace revision")
+    if authorization.workspace_observation_sha256 != str(
+        workspace_observation_sha256(workspace_observation)
+    ):
+        _reject("executor authorization is bound to another workspace observation")
     if authorization.evaluated_at is None:
         _reject("executor authorization evaluation time is missing")
     try:

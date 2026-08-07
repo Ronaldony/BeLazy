@@ -19,7 +19,8 @@ Production planning is evidence-based, not presence-based:
    reviewer counts from workflow policy.
 4. Generation requires `generation-packet/2.0` or `2.1`, the version-specific
    complete independent feasibility pass, and exact human approval evidence in
-   Standard/Controlled.
+   Standard/Controlled. Production authorization also requires a complete,
+   trusted current `WorkspaceObservation` bound to the same revision/manifest.
 5. Every packet shot needs one current QC verdict of pass or warn. Failed or
    inconclusive QC cannot advance.
 6. Multi-shot packets additionally need one current pass/warn continuity QC
@@ -36,13 +37,14 @@ Production planning is evidence-based, not presence-based:
 | `video_factory.config` | four persisted config models, seven ordered merge layers, closed validation, extension registration, provenance, and effective snapshots |
 | `video_factory.engine` | workflow/execution modes, validated `ArtifactSnapshot` graph, hash-bound generation readiness, and deterministic plan-only orchestration; never transitions |
 | `video_factory.policy` | Rapid/Standard/Controlled workflow policy data, mode resolution (no silent default), and ADR-004 bridge helpers |
-| `video_factory.providers` | capability registry, shared descriptor/envelopes, injected constraint profiles, and separate media-provider/task-executor ports |
+| `video_factory.providers` | capability registry, shared descriptor/envelopes, injected constraint profiles, separate media-provider/task-executor ports, and managed-mutation authority/authenticator/executor Protocols with an immediate pre-side-effect guard |
 | `video_factory.approvals` | pending requirements and granted evidence as distinct contracts; deterministic requirement IDs and exact evidence binding |
 | `video_factory.feasibility` | pure checks for capability, minimum duration, first-frame aspect/before-state, continuity anchors, cross-shot first-frame state carryover, and unsupported render dependencies |
 | `video_factory.qc` | injected constraints with pass/warn/fail/inconclusive/not-applicable outcomes and fallback measurement hints |
 | `video_factory.continuity` | cross-shot comparison of one opaque element between two generated clips (relative-scale / orientation-shape / presence); plan-only, caller-supplied finite nonnegative tolerances, closed measurement serialization, and pure serialized-document rejudgment |
 | `video_factory.media` | pure observed-output matching, double-extension warning recovery, and caller-injected aspect validation |
-| `video_factory.storage` | no-overwrite artifact store ports, frozen-index guards, **plan-only** workspace init/export (`plan_materialize` / `plan_export` → Plan objects; never writes) |
+| `video_factory.mutation` | six strict managed-mutation artifacts, deterministic exact-before/CAS planner, canonical semantic diff, immutable revision/tombstone derivation, drift quarantine, and typed serialization; never writes |
+| `video_factory.storage` | no-overwrite artifact store ports, frozen-index guards, **planning-only and non-authorizing** workspace init/export; source trees containing links, reparse points, or special nodes are rejected |
 | `video_factory.review` | creator/reviewer-separated request, result, revision policy, and review port |
 | `video_factory.security` | path guard, secret reference, purity-scanner port, and in-process `scan_repository` / `RepositoryPurityScanner` |
 | `video_factory.artifacts` | artifact schema registry (`artifact_version` → schema), single-document and batch JSON Schema validation runner, structured field-path errors |
@@ -57,20 +59,24 @@ Production planning is evidence-based, not presence-based:
 
 Core **must not perform side effects**. Allowed: observe (read / existence checks), validate, compute, and
 **produce structured Plan objects**. Forbidden inside `src/`: file write/delete/move, archive creation, and
-child-process launches. Actual execution belongs to a human or a channel-workspace tool that consumes Plans.
+child-process launches. Actual managed mutation belongs to a trusted runtime
+service behind `ManagedMutationExecutorPort`; humans submit intent, review
+semantic diffs, and approve or deny authority, but do not normally edit managed
+files directly.
 
 This generalizes the existing `EncodeCommandPlan` pattern (`executed=False` always) and provider
 `human_only` → `AWAITING_HUMAN` outcomes.
 
 | Planner | Plan type | READY means | Rejected statuses (examples) |
 |---|---|---|---|
-| `plan_materialize` | `WorkspaceInitPlan` | validated copy operation list (source/dest relative paths + source sha256) | `rejected_target_nonempty`, `rejected_schema`, `rejected_frozen_index`, … |
-| `plan_export` | `WorkspaceExportPlan` | export file list + output kind (`directory`\|`zip`) after sensitive scan | `rejected_sensitive` (+findings), `rejected_target_exists`, `rejected_frozen_index`, … |
+| `plan_materialize` | `WorkspaceInitPlan` | planning-only copy operation list; never authorization-ready | `rejected_target_nonempty`, `rejected_schema`, `rejected_frozen_index`, `rejected_unsafe_tree` |
+| `plan_export` | `WorkspaceExportPlan` | planning-only export file list after sensitive scan; never authorization-ready | `rejected_sensitive`, `rejected_target_exists`, `rejected_frozen_index`, `rejected_unsafe_tree` |
+| `plan_mutation` | `MutationPlan` | exact request/revision/manifest/policy CAS, stable operation IDs, and structured semantic diff | stale revision/manifest/bytes, path alias/link/reparse, destination exists, untrusted/incomplete observation |
 | `build_encode_command` | `EncodeCommandPlan` | argv + command string | `rejected_output_exists`, `rejected_invalid` |
 | `build_qc_plan` / `judge_measurements` | `QCPlan` / `QCJudgment` | primary/fallback method hints and pass/warn/fail/inconclusive/not-applicable judgment | empty plan; unknown comparison |
 | `build_approval_requirement` | `ApprovalRequirement` | path+sha256-bound requirement document | empty artifacts; invalid sha256 |
 | `observe_episode_state` / `plan_next_step` | `EpisodeStateObservation` / `NextStepPlan` | validated current snapshot graph and deterministic next action | raw docs, mixed provenance, ambiguous current artifacts, missing mode |
-| `build_generation_readiness` | `GenerationReadinessPlan` | `ready` preserves structural legacy planning; only `authorization_ready` means exact reviews, feasibility, current `GateContext`, explicit evaluation time, and the aggregate approval window all bind | stale/missing/expired evidence or context; Rapid mode |
+| `build_generation_readiness` | `GenerationReadinessPlan` | `ready` preserves structural legacy planning; only `authorization_ready` means exact reviews, feasibility, current `GateContext`, trusted workspace revision/observation, explicit evaluation time, and the aggregate approval window all bind | stale/missing/expired evidence, context, or workspace trust; Rapid mode |
 | `draft_*_config` | validated config mapping | schema-valid channel/concept/episode draft | invalid scope id / settings |
 | `build_core_lock` | TOML `str` | deterministic lock document text (caller writes file) | invalid artifact / path escape |
 | `plan_wheel_build` | `WheelBuildPlan` | `python -m build --wheel` argv + vendor placement notes | invalid version |
@@ -78,6 +84,30 @@ This generalizes the existing `EncodeCommandPlan` pattern (`executed=False` alwa
 
 Gate: `tools/check_side_effect_free.py` statically scans `src/` (AST-first, regex backup) and exits 1 on
 write/process APIs. Complements `check_core_purity.py` and `check_repo_isolation.py`.
+
+## Managed mutation plane (W02)
+
+The normal flow is `ChangeRequest` → deterministic `MutationPlan` plus
+structured semantic diff → external authority evaluation → immediate
+`MutationPreSideEffectGuard` revalidation → runtime execution →
+`MutationReceipt` → immutable `WorkspaceRevision`. The core implements the
+contracts, pure planner, guard, and runtime Protocol only; it contains no
+filesystem executor or approval issuer.
+
+- Create requires observed absence. Replace/delete/move require the exact
+  current source digest; move also requires destination absence.
+- Every plan binds the workspace revision, before-manifest digest, serialized
+  base revision digest, policy digest, request digest, and idempotency key.
+- Managed paths are canonical relative POSIX NFC strings and reject absolute,
+  traversal, backslash, ADS/reserved-name, trailing-dot/space, case/Unicode
+  collision, symlink, and reparse aliases.
+- Out-of-band drift produces `drift-report/1.0`, sets trust to `UNTRUSTED`, and
+  invalidates dependent plans, authority, and QC while blocking generation and
+  publish until reconciliation.
+- R4 break-glass is input evidence only: exact plan/workspace/revision/manifest
+  scope, two distinct currently authenticated human principals, bounded
+  validity, pre-change snapshot, incident/session/audit references, and required
+  post-change validation/reconciliation. Core never creates that evidence.
 
 ### Breaking change (core 0.x — allowed under plan-only directive)
 

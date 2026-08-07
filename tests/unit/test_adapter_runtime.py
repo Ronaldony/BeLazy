@@ -36,6 +36,10 @@ from video_factory.domain import (
     RoleId,
 )
 from video_factory.engine import ExecutionMode, ExecutionModeLimits
+from video_factory.mutation import (
+    WorkspaceObservation,
+    WorkspaceTrustState,
+)
 from video_factory.providers import (
     AdapterBinding,
     AdapterContractError,
@@ -89,6 +93,17 @@ def _gate_context() -> GateContext:
         current_manifest_sha256=HashDigest("4" * 64),
         evidence_graph_sha256=HashDigest("5" * 64),
         executable_plan_sha256=HashDigest("6" * 64),
+    )
+
+
+def _workspace_observation() -> WorkspaceObservation:
+    return WorkspaceObservation(
+        workspace_id=OpaqueId("workspace-a"),
+        revision_id=OpaqueId("revision-a"),
+        manifest_sha256=HashDigest("4" * 64),
+        trust_state=WorkspaceTrustState.TRUSTED,
+        complete=True,
+        entries=(),
     )
 
 
@@ -287,6 +302,8 @@ def _executor_authorization(request: RequestEnvelope):
         ),
         current_context=_gate_context(),
         evaluated_at=_DISPATCH_TIME,
+        workspace_observation=_workspace_observation(),
+        expected_workspace_revision_id="revision-a",
     )
     assert authorization.request_envelope_sha256 == request_envelope_sha256(request)
     return authorization
@@ -302,6 +319,8 @@ def _authorized_dispatch(
         authorization=_executor_authorization(request),
         current_context=_gate_context(),
         evaluated_at=_DISPATCH_TIME,
+        workspace_observation=_workspace_observation(),
+        expected_workspace_revision_id="revision-a",
     )
 
 
@@ -314,6 +333,8 @@ def _authorized_reconcile(
         authorization=_executor_authorization(request),
         current_context=_gate_context(),
         evaluated_at=_DISPATCH_TIME,
+        workspace_observation=_workspace_observation(),
+        expected_workspace_revision_id="revision-a",
     )
 
 
@@ -459,6 +480,8 @@ def test_orchestration_guard_binds_evidence_to_current_context_and_expiry() -> N
         _approval_evidence(context),
         current_context=context,
         evaluated_at=evaluation,
+        workspace_observation=_workspace_observation(),
+        expected_workspace_revision_id="revision-a",
     )
     assert authorization.human_evidence_id == "evidence-adapter"
     assert authorization.gate_context_sha256 is not None
@@ -470,6 +493,8 @@ def test_orchestration_guard_binds_evidence_to_current_context_and_expiry() -> N
             _approval_evidence(context, expires_at="2026-07-21T01:00:00Z"),
             current_context=context,
             evaluated_at=evaluation,
+            workspace_observation=_workspace_observation(),
+            expected_workspace_revision_id="revision-a",
         )
 
 
@@ -524,6 +549,8 @@ def test_orchestration_guard_rejects_every_stale_context_digest(field: str) -> N
             evidence,
             current_context=current,
             evaluated_at=datetime(2026, 7, 21, 1, 0, tzinfo=timezone.utc),
+            workspace_observation=_workspace_observation(),
+            expected_workspace_revision_id="revision-a",
         )
 
 
@@ -657,6 +684,8 @@ def test_executor_side_effect_boundary_rejects_missing_or_mismatched_authorizati
             authorization=_executor_authorization(other_request),
             current_context=_gate_context(),
             evaluated_at=_DISPATCH_TIME,
+            workspace_observation=_workspace_observation(),
+            expected_workspace_revision_id="revision-a",
         )
     assert executor.external_calls == 0
 
@@ -670,6 +699,8 @@ def test_executor_side_effect_boundary_rejects_missing_or_mismatched_authorizati
             authorization=_executor_authorization(request),
             current_context=stale_context,
             evaluated_at=_DISPATCH_TIME,
+            workspace_observation=_workspace_observation(),
+            expected_workspace_revision_id="revision-a",
         )
     assert executor.external_calls == 0
 
@@ -701,6 +732,8 @@ def test_executor_rechecks_authorization_time_before_external_call() -> None:
             authorization=future,
             current_context=_gate_context(),
             evaluated_at=_DISPATCH_TIME,
+            workspace_observation=_workspace_observation(),
+            expected_workspace_revision_id="revision-a",
         )
     assert executor.external_calls == 0
 
@@ -716,6 +749,8 @@ def test_executor_rechecks_authorization_time_before_external_call() -> None:
             authorization=expired,
             current_context=_gate_context(),
             evaluated_at=_DISPATCH_TIME,
+            workspace_observation=_workspace_observation(),
+            expected_workspace_revision_id="revision-a",
         )
     assert executor.external_calls == 0
 
@@ -758,8 +793,83 @@ def test_executor_authorization_binds_the_full_request_envelope(mutate) -> None:
             authorization=authorization,
             current_context=_gate_context(),
             evaluated_at=_DISPATCH_TIME,
+            workspace_observation=_workspace_observation(),
+            expected_workspace_revision_id="revision-a",
         )
     assert executor.external_calls == 0
+
+
+def test_workspace_trust_is_revalidated_at_authorize_dispatch_and_reconcile() -> None:
+    request = _request(
+        TASK_CAPABILITY, ExecutionMode.AUTOMATED, key="workspace-binding"
+    )
+    policy = OrchestrationPolicy(
+        TASK_CAPABILITY,
+        AdapterKind.EXECUTOR,
+        ExecutionMode.AUTOMATED,
+        False,
+    )
+    with pytest.raises(ModeEnforcementError, match="observation_missing"):
+        OrchestrationGuard().authorize(
+            request,
+            policy,
+            current_context=_gate_context(),
+            evaluated_at=_DISPATCH_TIME,
+        )
+
+    untrusted = replace(
+        _workspace_observation(), trust_state=WorkspaceTrustState.UNTRUSTED
+    )
+    with pytest.raises(ModeEnforcementError, match="workspace.untrusted"):
+        OrchestrationGuard().authorize(
+            request,
+            policy,
+            current_context=_gate_context(),
+            evaluated_at=_DISPATCH_TIME,
+            workspace_observation=untrusted,
+            expected_workspace_revision_id="revision-a",
+        )
+
+    authorization = _executor_authorization(request)
+    executor = SyntheticExecutor()
+    with pytest.raises(ModeEnforcementError, match="observation_missing"):
+        executor.dispatch(
+            request,
+            _executor_context(request),
+            authorization=authorization,
+            current_context=_gate_context(),
+            evaluated_at=_DISPATCH_TIME,
+            expected_workspace_revision_id="revision-a",
+        )
+    assert executor.external_calls == 0
+
+    changed_observation = replace(_workspace_observation(), complete=False)
+    with pytest.raises(ModeEnforcementError, match="observation_incomplete"):
+        executor.dispatch(
+            request,
+            _executor_context(request),
+            authorization=authorization,
+            current_context=_gate_context(),
+            evaluated_at=_DISPATCH_TIME,
+            workspace_observation=changed_observation,
+            expected_workspace_revision_id="revision-a",
+        )
+    assert executor.external_calls == 0
+
+    uncertain = SyntheticExecutor(timeout=True)
+    first = _authorized_dispatch(uncertain, request)
+    assert first.outcome is Outcome.EXTERNAL_UNCERTAIN
+    with pytest.raises(ModeEnforcementError, match="workspace.untrusted"):
+        uncertain.reconcile(
+            request,
+            authorization=authorization,
+            current_context=_gate_context(),
+            evaluated_at=_DISPATCH_TIME,
+            workspace_observation=untrusted,
+            expected_workspace_revision_id="revision-a",
+        )
+    assert uncertain.timeout is True
+    assert _authorized_reconcile(uncertain, request).outcome is Outcome.SUCCEEDED
 
 def test_no_literal_opaque_adapter_id_comparison_exists_in_core_source() -> None:
     root = Path(__file__).resolve().parents[2] / "src"

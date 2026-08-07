@@ -43,6 +43,22 @@ def _git(root: Path, *arguments: str) -> str:
     return completed.stdout.strip().lower()
 
 
+def _git_bytes(root: Path, commit: str, relative_path: str) -> bytes:
+    completed = subprocess.run(
+        [
+            "git",
+            "-c",
+            f"safe.directory={root.as_posix()}",
+            "show",
+            f"{commit}:{relative_path}",
+        ],
+        cwd=root,
+        check=True,
+        capture_output=True,
+    )
+    return completed.stdout
+
+
 def _is_ancestor(root: Path, ancestor: str, descendant: str = "HEAD") -> bool:
     completed = subprocess.run(
         [
@@ -115,11 +131,13 @@ def validate_w01_provenance(root: Path) -> list[str]:
     if not isinstance(manifest_relative, str):
         errors.append("schema_manifest_path_invalid")
     else:
-        manifest_path = root / manifest_relative
         try:
-            if _sha256(manifest_path) != resources.get("manifest_sha256"):
+            manifest_bytes = _git_bytes(root, commit, manifest_relative)
+            if hashlib.sha256(manifest_bytes).hexdigest() != resources.get("manifest_sha256"):
                 errors.append("schema_manifest_digest_mismatch")
-            manifest = _load_object(manifest_path)
+            manifest = json.loads(manifest_bytes.decode("utf-8"))
+            if not isinstance(manifest, dict):
+                raise ValueError("manifest must be an object")
             entries = manifest["schemas"]
             if not isinstance(entries, list):
                 raise ValueError("schemas must be a list")
@@ -131,16 +149,25 @@ def validate_w01_provenance(root: Path) -> list[str]:
             filenames = [item.get("filename") for item in entries]
             if len(filenames) != len(set(filenames)):
                 errors.append("schema_filename_duplicate")
-            schema_root = manifest_path.parent
+            schema_root = Path(manifest_relative).parent.as_posix()
             for item in entries:
                 filename = item.get("filename")
                 digest = item.get("sha256")
                 if not isinstance(filename, str) or not isinstance(digest, str):
                     errors.append("schema_entry_invalid")
                     continue
-                if _sha256(schema_root / filename) != digest:
+                payload = _git_bytes(root, commit, f"{schema_root}/{filename}")
+                if hashlib.sha256(payload).hexdigest() != digest:
                     errors.append(f"schema_digest_mismatch:{filename}")
-        except (OSError, UnicodeError, json.JSONDecodeError, KeyError, TypeError, ValueError):
+        except (
+            OSError,
+            UnicodeError,
+            json.JSONDecodeError,
+            KeyError,
+            TypeError,
+            ValueError,
+            subprocess.SubprocessError,
+        ):
             errors.append("schema_manifest_unreadable")
 
     evidence = report.get("test_evidence", {})

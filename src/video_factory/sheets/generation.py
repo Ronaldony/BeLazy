@@ -13,6 +13,11 @@ from video_factory.artifacts import validate_artifact_mapping
 from video_factory.config import CanonicalizationError, canonical_json_bytes
 from video_factory.engine.orchestration import GenerationReadinessPlan
 from video_factory.json_boundary import parse_rfc3339_datetime
+from video_factory.mutation import (
+    WorkspaceObservation,
+    workspace_observation_sha256,
+    workspace_trust_blockers,
+)
 
 
 class GenerationSheetError(ValueError):
@@ -44,6 +49,7 @@ def render_generation_sheet(
     readiness: GenerationReadinessPlan | None = None,
     current_context: GateContext | None = None,
     evaluated_at: datetime | None = None,
+    workspace_observation: WorkspaceObservation | None = None,
 ) -> str:
     """Render a packet to deterministic human copy-paste Markdown.
 
@@ -113,6 +119,23 @@ def render_generation_sheet(
                 raise GenerationSheetError("generation readiness is not yet valid")
             if evaluated_at >= valid_until:
                 raise GenerationSheetError("generation readiness has expired")
+            workspace_blockers = workspace_trust_blockers(
+                workspace_observation,
+                expected_revision_id=readiness.workspace_revision_id,
+                expected_manifest_sha256=current_context.current_manifest_sha256,
+            )
+            if workspace_blockers:
+                raise GenerationSheetError(
+                    "generation readiness workspace observation rejected: "
+                    + ", ".join(workspace_blockers)
+                )
+            assert workspace_observation is not None
+            if readiness.workspace_observation_sha256 != str(
+                workspace_observation_sha256(workspace_observation)
+            ):
+                raise GenerationSheetError(
+                    "generation readiness is bound to another workspace observation"
+                )
             generation_authorized = True
     total_candidates = 0
     for index, shot in enumerate(shots):
@@ -148,6 +171,15 @@ def render_generation_sheet(
             lines.append(
                 f"- authorization_window: `{readiness.valid_from}` to "
                 f"`{readiness.valid_until}`"
+            )
+        if readiness.workspace_revision_id is not None:
+            lines.append(
+                f"- workspace_revision_id: `{readiness.workspace_revision_id}`"
+            )
+        if readiness.workspace_observation_sha256 is not None:
+            lines.append(
+                "- workspace_observation_sha256: "
+                f"`{readiness.workspace_observation_sha256}`"
             )
         if readiness.feasibility_review is not None:
             lines.append(

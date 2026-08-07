@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.video-factory.invalid/mutation/workspace-revision.schema.json",
+  "title": "Immutable managed workspace revision",
+  "type": "object",
+  "required": [
+    "artifact_version", "revision_id", "workspace_id", "parent_revision_id",
+    "manifest_sha256", "created_at", "plan_id", "receipt_id",
+    "trust_state", "entries"
+  ],
+  "properties": {
+    "artifact_version": { "const": "workspace-revision/1.0" },
+    "revision_id": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" },
+    "workspace_id": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" },
+    "parent_revision_id": {
+      "oneOf": [{ "type": "null" }, { "$ref": "artifact-common.schema.json#/$defs/opaqueId" }]
+    },
+    "manifest_sha256": { "$ref": "artifact-common.schema.json#/$defs/sha256" },
+    "created_at": { "type": "string", "format": "date-time" },
+    "plan_id": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" },
+    "receipt_id": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" },
+    "trust_state": { "type": "string", "enum": ["TRUSTED", "UNTRUSTED"] },
+    "entries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "path", "revision_ordinal", "content_sha256", "byte_length",
+          "tombstone", "source_operation_id"
+        ],
+        "properties": {
+          "path": { "$ref": "artifact-common.schema.json#/$defs/managedRelativePath" },
+          "revision_ordinal": { "type": "integer", "minimum": 1 },
+          "content_sha256": {
+            "oneOf": [{ "type": "null" }, { "$ref": "artifact-common.schema.json#/$defs/sha256" }]
+          },
+          "byte_length": { "type": ["integer", "null"], "minimum": 0 },
+          "tombstone": { "type": "boolean" },
+          "source_operation_id": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" }
+        },
+        "allOf": [
+          {
+            "if": { "properties": { "tombstone": { "const": true } } },
+            "then": {
+              "properties": {
+                "content_sha256": { "type": "null" },
+                "byte_length": { "type": "null" }
+              }
+            },
+            "else": {
+              "properties": {
+                "content_sha256": { "$ref": "artifact-common.schema.json#/$defs/sha256" },
+                "byte_length": { "type": "integer", "minimum": 0 }
+              }
+            }
+          }
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false,
+  "x-artifact-migration": {
+    "id_pattern": "^workspace-revision/[1-9][0-9]*-to-[1-9][0-9]*/[1-9][0-9]*$",
+    "single_major_step": true,
+    "in_place": false,
+    "automatic_downgrade": false
+  }
+}

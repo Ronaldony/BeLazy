@@ -25,6 +25,11 @@ from video_factory.storage.frozen_index import (
     assert_write_allowed,
     assert_write_paths_allowed,
 )
+from video_factory.storage.tree_safety import (
+    SafeTreeError,
+    iter_regular_files_no_follow,
+    require_safe_path_chain,
+)
 
 
 # Map artifact_version string values to persisted layers. Built without
@@ -48,6 +53,7 @@ class WorkspaceInitPlanStatus(StrEnum):
     REJECTED_EMPTY_TEMPLATE = "rejected_empty_template"
     REJECTED_SCHEMA = "rejected_schema"
     REJECTED_FROZEN_INDEX = "rejected_frozen_index"
+    REJECTED_UNSAFE_TREE = "rejected_unsafe_tree"
 
 
 @dataclass(frozen=True, slots=True)
@@ -69,11 +75,17 @@ class WorkspaceInitPlan:
     operations: tuple[CopyOperation, ...]
     configs_validated: int
     executed: bool = False
+    planning_only: bool = True
+    authorization_ready: bool = False
     rejection_reason: str | None = None
 
     def __post_init__(self) -> None:
         if self.executed is not False:
             object.__setattr__(self, "executed", False)
+        if self.planning_only is not True:
+            object.__setattr__(self, "planning_only", True)
+        if self.authorization_ready is not False:
+            object.__setattr__(self, "authorization_ready", False)
 
 
 def _is_nonempty_path(path: Path) -> bool:
@@ -89,11 +101,7 @@ def _is_nonempty_path(path: Path) -> bool:
 
 
 def _iter_template_files(template_dir: Path) -> list[Path]:
-    files: list[Path] = []
-    for path in sorted(template_dir.rglob("*")):
-        if path.is_file():
-            files.append(path)
-    return files
+    return list(iter_regular_files_no_follow(template_dir))
 
 
 def _sha256_bytes(payload: bytes) -> str:
@@ -121,18 +129,23 @@ def detect_config_layer(payload: bytes) -> ConfigLayer | None:
     return _ARTIFACT_VERSION_TO_LAYER.get(artifact_version)
 
 
-def validate_template_configs(template_dir: Path) -> int:
+def validate_template_configs(
+    template_dir: Path,
+    *,
+    _files: list[Path] | None = None,
+) -> int:
     """Validate every core config JSON under *template_dir*.
 
     Returns the number of documents validated. Raises ``WorkspaceInitError`` on
     the first schema or encoding failure without planning any write.
     """
 
-    if not template_dir.is_dir():
-        raise WorkspaceInitError(f"template_dir is not a directory: {template_dir}")
-
     validated = 0
-    for path in _iter_template_files(template_dir):
+    try:
+        files = _iter_template_files(template_dir) if _files is None else _files
+    except SafeTreeError as error:
+        raise WorkspaceInitError(str(error)) from error
+    for path in files:
         if path.suffix.lower() != ".json":
             continue
         payload = path.read_bytes()
@@ -193,12 +206,29 @@ def plan_materialize(
     template = Path(template_dir)
     target = Path(target_dir)
 
-    if not template.is_dir():
+    try:
+        files = _iter_template_files(template)
+    except SafeTreeError as error:
+        status = (
+            WorkspaceInitPlanStatus.REJECTED_INVALID_TEMPLATE
+            if error.code in {"tree.missing", "tree.not_directory"}
+            else WorkspaceInitPlanStatus.REJECTED_UNSAFE_TREE
+        )
         return _rejected(
-            WorkspaceInitPlanStatus.REJECTED_INVALID_TEMPLATE,
+            status,
             template,
             target,
-            f"template_dir is not a directory: {template}",
+            str(error),
+        )
+
+    try:
+        require_safe_path_chain(target, must_exist=False)
+    except SafeTreeError as error:
+        return _rejected(
+            WorkspaceInitPlanStatus.REJECTED_UNSAFE_TREE,
+            template,
+            target,
+            str(error),
         )
 
     if _is_nonempty_path(target):
@@ -210,7 +240,7 @@ def plan_materialize(
         )
 
     try:
-        configs_validated = validate_template_configs(template)
+        configs_validated = validate_template_configs(template, _files=files)
     except WorkspaceInitError as error:
         return _rejected(
             WorkspaceInitPlanStatus.REJECTED_SCHEMA,
@@ -219,7 +249,6 @@ def plan_materialize(
             str(error),
         )
 
-    files = _iter_template_files(template)
     if not files:
         return _rejected(
             WorkspaceInitPlanStatus.REJECTED_EMPTY_TEMPLATE,

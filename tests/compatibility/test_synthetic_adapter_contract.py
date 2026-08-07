@@ -23,6 +23,7 @@ from video_factory.domain import (
     RoleId,
 )
 from video_factory.engine import ExecutionMode
+from video_factory.mutation import WorkspaceObservation, WorkspaceTrustState
 from video_factory.providers import (
     AdapterBinding,
     AdapterKind,
@@ -248,6 +249,14 @@ def test_registry_resolves_synthetic_adapters_by_capability_and_kind() -> None:
         executable_plan_sha256=HashDigest("6" * 64),
     )
     evaluated_at = datetime(2026, 7, 21, 1, 0, tzinfo=timezone.utc)
+    workspace_observation = WorkspaceObservation(
+        workspace_id=OpaqueId("workspace-compat"),
+        revision_id=OpaqueId("revision-compat"),
+        manifest_sha256=HashDigest("4" * 64),
+        trust_state=WorkspaceTrustState.TRUSTED,
+        complete=True,
+        entries=(),
+    )
     authorization = OrchestrationGuard().authorize(
         request,
         OrchestrationPolicy(
@@ -258,6 +267,8 @@ def test_registry_resolves_synthetic_adapters_by_capability_and_kind() -> None:
         ),
         current_context=gate_context,
         evaluated_at=evaluated_at,
+        workspace_observation=workspace_observation,
+        expected_workspace_revision_id="revision-compat",
     )
     result = executor.dispatch(
         request,
@@ -265,6 +276,8 @@ def test_registry_resolves_synthetic_adapters_by_capability_and_kind() -> None:
         authorization=authorization,
         current_context=gate_context,
         evaluated_at=evaluated_at,
+        workspace_observation=workspace_observation,
+        expected_workspace_revision_id="revision-compat",
     )
     assert result.outcome is Outcome.SUCCEEDED
     assert executor.external_calls == 1

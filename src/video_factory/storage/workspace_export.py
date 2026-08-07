@@ -26,6 +26,11 @@ from video_factory.storage.frozen_index import (
     assert_write_allowed,
     assert_write_paths_allowed,
 )
+from video_factory.storage.tree_safety import (
+    SafeTreeError,
+    iter_regular_files_no_follow,
+    require_safe_path_chain,
+)
 
 
 # Pattern kinds mirror migration/baseline/sensitive_patterns.md categories
@@ -127,6 +132,7 @@ class WorkspaceExportPlanStatus(StrEnum):
     REJECTED_SENSITIVE = "rejected_sensitive"
     REJECTED_FROZEN_INDEX = "rejected_frozen_index"
     REJECTED_TARGET_EXISTS = "rejected_target_exists"
+    REJECTED_UNSAFE_TREE = "rejected_unsafe_tree"
 
 
 @dataclass(frozen=True, slots=True)
@@ -149,11 +155,17 @@ class WorkspaceExportPlan:
     pattern_kinds_checked: tuple[str, ...]
     findings: tuple[SensitiveFinding, ...]
     executed: bool = False
+    planning_only: bool = True
+    authorization_ready: bool = False
     rejection_reason: str | None = None
 
     def __post_init__(self) -> None:
         if self.executed is not False:
             object.__setattr__(self, "executed", False)
+        if self.planning_only is not True:
+            object.__setattr__(self, "planning_only", True)
+        if self.authorization_ready is not False:
+            object.__setattr__(self, "authorization_ready", False)
 
 
 def pattern_kind_ids() -> tuple[str, ...]:
@@ -167,13 +179,10 @@ def _should_skip_dir(name: str) -> bool:
 
 
 def _iter_source_files(source_dir: Path) -> Iterator[Path]:
-    for path in sorted(source_dir.rglob("*")):
-        if not path.is_file():
-            continue
-        relative = path.relative_to(source_dir)
-        if any(_should_skip_dir(part) for part in relative.parts):
-            continue
-        yield path
+    yield from iter_regular_files_no_follow(
+        source_dir,
+        skip_directory_names=_SKIP_DIR_NAMES,
+    )
 
 
 def _looks_like_text(path: Path, payload: bytes) -> bool:
@@ -192,15 +201,20 @@ def _looks_like_text(path: Path, payload: bytes) -> bool:
     return True
 
 
-def scan_for_sensitive_content(source_dir: Path) -> tuple[list[SensitiveFinding], int]:
+def scan_for_sensitive_content(
+    source_dir: Path,
+    *,
+    _files: tuple[Path, ...] | None = None,
+) -> tuple[list[SensitiveFinding], int]:
     """Scan *source_dir* text files; return findings and files-scanned count."""
-
-    if not source_dir.is_dir():
-        raise WorkspaceExportError(f"source_dir is not a directory: {source_dir}")
 
     findings: list[SensitiveFinding] = []
     scanned = 0
-    for path in _iter_source_files(source_dir):
+    try:
+        files = tuple(_iter_source_files(source_dir)) if _files is None else _files
+    except SafeTreeError as error:
+        raise WorkspaceExportError(str(error)) from error
+    for path in files:
         payload = path.read_bytes()
         if not _looks_like_text(path, payload):
             continue
@@ -282,17 +296,35 @@ def plan_export(
     destination = Path(target)
     output_kind = _plan_output_kind(destination)
 
-    if not source.is_dir():
+    try:
+        source_files = tuple(_iter_source_files(source))
+    except SafeTreeError as error:
+        status = (
+            WorkspaceExportPlanStatus.REJECTED_INVALID_SOURCE
+            if error.code in {"tree.missing", "tree.not_directory"}
+            else WorkspaceExportPlanStatus.REJECTED_UNSAFE_TREE
+        )
         return _rejected(
-            WorkspaceExportPlanStatus.REJECTED_INVALID_SOURCE,
+            status,
             source,
             destination,
-            f"source_dir is not a directory: {source}",
+            str(error),
             output_kind=output_kind,
         )
 
     try:
-        findings, scanned = scan_for_sensitive_content(source)
+        require_safe_path_chain(destination, must_exist=False)
+    except SafeTreeError as error:
+        return _rejected(
+            WorkspaceExportPlanStatus.REJECTED_UNSAFE_TREE,
+            source,
+            destination,
+            str(error),
+            output_kind=output_kind,
+        )
+
+    try:
+        findings, scanned = scan_for_sensitive_content(source, _files=source_files)
     except WorkspaceExportError as error:
         return _rejected(
             WorkspaceExportPlanStatus.REJECTED_INVALID_SOURCE,
@@ -318,9 +350,7 @@ def plan_export(
             output_kind=output_kind,
         )
 
-    relative_files = [
-        path.relative_to(source).as_posix() for path in _iter_source_files(source)
-    ]
+    relative_files = [path.relative_to(source).as_posix() for path in source_files]
     try:
         assert_write_paths_allowed(relative_files, frozen_index)
         if not destination.is_absolute():

@@ -12,6 +12,7 @@ import re
 from typing import final
 
 from video_factory.approvals import GateContext
+from video_factory.mutation import WorkspaceObservation
 from video_factory.domain import ArtifactReference, IdempotencyKey
 from video_factory.engine.contracts import ExecutionMode
 
@@ -375,6 +376,8 @@ class ExecutorAdapter(ABC):
         authorization: OrchestrationAuthorization | None = None,
         current_context: GateContext | None = None,
         evaluated_at: datetime | None = None,
+        workspace_observation: WorkspaceObservation | None = None,
+        expected_workspace_revision_id: str | None = None,
     ) -> ResultEnvelope:
         if request.idempotency_key in self._unresolved:
             raise AdapterContractError("reconcile is required before executor redispatch")
@@ -387,6 +390,8 @@ class ExecutorAdapter(ABC):
             authorization=authorization,
             current_context=current_context,
             evaluated_at=evaluated_at,
+            workspace_observation=workspace_observation,
+            expected_workspace_revision_id=expected_workspace_revision_id,
         )
 
         try:
@@ -443,6 +448,8 @@ class ExecutorAdapter(ABC):
         authorization: OrchestrationAuthorization | None = None,
         current_context: GateContext | None = None,
         evaluated_at: datetime | None = None,
+        workspace_observation: WorkspaceObservation | None = None,
+        expected_workspace_revision_id: str | None = None,
     ) -> ResultEnvelope:
         unresolved = self._unresolved.get(request.idempotency_key)
         if unresolved is None:
@@ -472,6 +479,8 @@ class ExecutorAdapter(ABC):
             authorization=authorization,
             current_context=current_context,
             evaluated_at=evaluated_at,
+            workspace_observation=workspace_observation,
+            expected_workspace_revision_id=expected_workspace_revision_id,
         )
         result = self._reconcile_external(request, reference)
         if result.request_id != request.request_id:

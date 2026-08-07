@@ -5,8 +5,11 @@ from __future__ import annotations
 import hashlib
 import json
 from pathlib import Path
+import stat
+from types import SimpleNamespace
 
 import pytest
+import video_factory.storage.workspace_init as workspace_init_module
 
 from video_factory.cli import handle_init
 from video_factory.policy import resolve_workflow_policy
@@ -15,6 +18,7 @@ from video_factory.storage import (
     plan_materialize,
 )
 from video_factory.storage.workspace_init import WorkspaceInitEngine
+from video_factory.storage import tree_safety
 
 
 def _write_channel_config(path: Path, *, channel_id: str = "synth-channel") -> None:
@@ -110,6 +114,8 @@ def test_plan_materialize_ready_lists_operations(tmp_path: Path) -> None:
 
     assert plan.status is WorkspaceInitPlanStatus.READY
     assert plan.executed is False
+    assert plan.planning_only is True
+    assert plan.authorization_ready is False
     assert plan.configs_validated == 3
     assert len(plan.operations) >= 4
     names = {item.destination_relative for item in plan.operations}
@@ -190,6 +196,8 @@ def test_engine_does_not_touch_workflow_mode(tmp_path: Path) -> None:
     assert handled.status == "ok"
     assert handled.payload is not None
     assert handled.payload["executed"] is False
+    assert handled.payload["planning_only"] is True
+    assert handled.payload["authorization_ready"] is False
     assert not target2.exists()
 
 
@@ -202,3 +210,65 @@ def test_handle_init_reports_rejection_without_writes(tmp_path: Path) -> None:
     assert result.status == "init_rejected"
     assert not target.exists()
     assert _snapshot_tree(tmp_path) == before
+
+
+def test_plan_materialize_rejects_symlinked_template_leaf(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    template = _build_valid_template(tmp_path)
+    outside = tmp_path / "outside.txt"
+    outside.write_text("outside\n", encoding="utf-8")
+    link = template / "linked.txt"
+    try:
+        link.symlink_to(outside)
+    except OSError:
+        def reject_tree(_root: Path):
+            raise tree_safety.SafeTreeError(
+                "tree.link_or_reparse", link, "synthetic unavailable-link probe"
+            )
+
+        monkeypatch.setattr(
+            workspace_init_module, "iter_regular_files_no_follow", reject_tree
+        )
+
+    plan = plan_materialize(template, tmp_path / "target")
+
+    assert plan.status is WorkspaceInitPlanStatus.REJECTED_UNSAFE_TREE
+    assert plan.operations == ()
+    assert plan.authorization_ready is False
+    assert "link_or_reparse" in (plan.rejection_reason or "")
+    assert not (tmp_path / "target").exists()
+
+
+def test_plan_materialize_rejects_symlinked_template_root(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    real = _build_valid_template(tmp_path)
+    linked = tmp_path / "linked-template"
+    try:
+        linked.symlink_to(real, target_is_directory=True)
+    except OSError:
+        def reject_tree(_root: Path):
+            raise tree_safety.SafeTreeError(
+                "tree.link_or_reparse", linked, "synthetic unavailable-link probe"
+            )
+
+        monkeypatch.setattr(
+            workspace_init_module, "iter_regular_files_no_follow", reject_tree
+        )
+
+    plan = plan_materialize(linked, tmp_path / "target")
+
+    assert plan.status is WorkspaceInitPlanStatus.REJECTED_UNSAFE_TREE
+    assert plan.operations == ()
+    assert not (tmp_path / "target").exists()
+
+
+def test_tree_safety_recognizes_windows_reparse_attribute() -> None:
+    reparse_flag = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400)
+    assert tree_safety._is_reparse_point(  # noqa: SLF001 - security regression
+        SimpleNamespace(st_file_attributes=reparse_flag)
+    )
+    assert not tree_safety._is_reparse_point(  # noqa: SLF001
+        SimpleNamespace(st_file_attributes=0)
+    )

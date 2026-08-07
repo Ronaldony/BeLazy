@@ -1,0 +1,84 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.video-factory.invalid/mutation/mutation-receipt.schema.json",
+  "title": "Managed mutation execution receipt",
+  "type": "object",
+  "required": [
+    "artifact_version", "receipt_id", "plan_id", "plan_sha256",
+    "workspace_id", "idempotency_key", "executor_identity", "started_at",
+    "completed_at", "status", "before_manifest_sha256",
+    "after_manifest_sha256", "operation_results",
+    "rollback_or_reconciliation_required"
+  ],
+  "properties": {
+    "artifact_version": { "const": "mutation-receipt/1.0" },
+    "receipt_id": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" },
+    "plan_id": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" },
+    "plan_sha256": { "$ref": "artifact-common.schema.json#/$defs/sha256" },
+    "workspace_id": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" },
+    "idempotency_key": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" },
+    "executor_identity": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" },
+    "started_at": { "type": "string", "format": "date-time" },
+    "completed_at": { "type": "string", "format": "date-time" },
+    "status": {
+      "type": "string",
+      "enum": ["SUCCEEDED", "PARTIALLY_APPLIED", "REJECTED", "FAILED"]
+    },
+    "before_manifest_sha256": { "$ref": "artifact-common.schema.json#/$defs/sha256" },
+    "after_manifest_sha256": { "$ref": "artifact-common.schema.json#/$defs/sha256" },
+    "operation_results": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "operation_id", "kind", "path", "destination_path", "outcome",
+          "before_sha256", "after_sha256", "after_byte_length", "reason_code"
+        ],
+        "properties": {
+          "operation_id": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" },
+          "kind": { "$ref": "artifact-common.schema.json#/$defs/mutationKind" },
+          "path": { "$ref": "artifact-common.schema.json#/$defs/managedRelativePath" },
+          "destination_path": {
+            "oneOf": [
+              { "type": "null" },
+              { "$ref": "artifact-common.schema.json#/$defs/managedRelativePath" }
+            ]
+          },
+          "outcome": { "type": "string", "enum": ["APPLIED", "REJECTED", "FAILED"] },
+          "before_sha256": {
+            "oneOf": [{ "type": "null" }, { "$ref": "artifact-common.schema.json#/$defs/sha256" }]
+          },
+          "after_sha256": {
+            "oneOf": [{ "type": "null" }, { "$ref": "artifact-common.schema.json#/$defs/sha256" }]
+          },
+          "after_byte_length": { "type": ["integer", "null"], "minimum": 0 },
+          "reason_code": { "type": "string", "minLength": 1 }
+        },
+        "additionalProperties": false
+      }
+    },
+    "rollback_or_reconciliation_required": { "type": "boolean" }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "status": { "const": "SUCCEEDED" } } },
+      "then": {
+        "properties": {
+          "after_manifest_sha256": { "$ref": "artifact-common.schema.json#/$defs/sha256" },
+          "rollback_or_reconciliation_required": { "const": false }
+        }
+      },
+      "else": {
+        "properties": { "rollback_or_reconciliation_required": { "const": true } }
+      }
+    }
+  ],
+  "additionalProperties": false,
+  "x-artifact-migration": {
+    "id_pattern": "^mutation-receipt/[1-9][0-9]*-to-[1-9][0-9]*/[1-9][0-9]*$",
+    "single_major_step": true,
+    "in_place": false,
+    "automatic_downgrade": false
+  }
+}

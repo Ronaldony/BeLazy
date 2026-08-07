@@ -54,6 +54,11 @@ def test_side_effect_guard_detects_injected_violations() -> None:
     zip_write = "ZipFile" + "(" + "path, " + "'w'" + ")"
     sub_mod = "sub" + "process"
     open_write = "open" + "(" + "path, " + "'w'" + ")"
+    os_replace = "os" + "." + "replace"
+    path_replace = "Path('a')" + "." + "replace"
+    path_open_update = "Path('a')" + "." + "open" + "('r+b')"
+    path_symlink = "Path('a')" + "." + "symlink_to"
+    handle_truncate = "handle" + "." + "truncate"
 
     blobs = {
         "probe_copy.py": f"import shutil\n{copy_name}('a', 'b')\n",
@@ -63,6 +68,16 @@ def test_side_effect_guard_detects_injected_violations() -> None:
         "probe_sub.py": f"import {sub_mod}\n{sub_mod}.run(['true'])\n",
         "probe_open_w.py": f"{open_write}\n",
         "probe_write_text.py": "Path('f').write_text('x')\n",
+        "probe_os_replace.py": f"import os\n{os_replace}('a', 'b')\n",
+        "probe_path_replace.py": f"from pathlib import Path\n{path_replace}('b')\n",
+        "probe_path_open_update.py": (
+            f"from pathlib import Path\nwith {path_open_update} as handle:\n"
+            "    handle.write(b'x')\n"
+        ),
+        "probe_path_symlink.py": (
+            f"from pathlib import Path\n{path_symlink}('b')\n"
+        ),
+        "probe_handle_truncate.py": f"{handle_truncate}(0)\n",
     }
 
     expected_rule_hits: set[str] = set()
@@ -77,6 +92,9 @@ def test_side_effect_guard_detects_injected_violations() -> None:
     assert any("zip" in rule.lower() or "Zip" in rule for rule in expected_rule_hits)
     assert any("sub" in rule for rule in expected_rule_hits)
     assert any("open" in rule or "write" in rule for rule in expected_rule_hits)
+    assert any("replace" in rule for rule in expected_rule_hits)
+    assert any("symlink" in rule for rule in expected_rule_hits)
+    assert any("truncate" in rule for rule in expected_rule_hits)
 
 
 def test_side_effect_scan_tree_on_temp_workspace(tmp_path: Path) -> None:

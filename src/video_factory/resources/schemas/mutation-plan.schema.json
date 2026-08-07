@@ -1,0 +1,156 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.video-factory.invalid/mutation/mutation-plan.schema.json",
+  "title": "Deterministic managed mutation plan",
+  "type": "object",
+  "required": [
+    "artifact_version",
+    "plan_id",
+    "plan_sha256",
+    "request_id",
+    "change_request_sha256",
+    "workspace_id",
+    "before_revision_id",
+    "before_workspace_revision_sha256",
+    "before_manifest_sha256",
+    "policy_bundle_sha256",
+    "idempotency_key",
+    "risk_tier",
+    "operations",
+    "semantic_diff"
+  ],
+  "properties": {
+    "artifact_version": { "const": "mutation-plan/1.0" },
+    "plan_id": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" },
+    "plan_sha256": { "$ref": "artifact-common.schema.json#/$defs/sha256" },
+    "request_id": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" },
+    "change_request_sha256": { "$ref": "artifact-common.schema.json#/$defs/sha256" },
+    "workspace_id": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" },
+    "before_revision_id": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" },
+    "before_workspace_revision_sha256": { "$ref": "artifact-common.schema.json#/$defs/sha256" },
+    "before_manifest_sha256": { "$ref": "artifact-common.schema.json#/$defs/sha256" },
+    "policy_bundle_sha256": { "$ref": "artifact-common.schema.json#/$defs/sha256" },
+    "idempotency_key": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" },
+    "risk_tier": { "$ref": "artifact-common.schema.json#/$defs/mutationRiskTier" },
+    "operations": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "operation_id",
+          "kind",
+          "path",
+          "destination_path",
+          "expected_before",
+          "new_content",
+          "rollback_strategy"
+        ],
+        "properties": {
+          "operation_id": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" },
+          "kind": { "$ref": "artifact-common.schema.json#/$defs/mutationKind" },
+          "path": { "$ref": "artifact-common.schema.json#/$defs/managedRelativePath" },
+          "destination_path": {
+            "oneOf": [
+              { "type": "null" },
+              { "$ref": "artifact-common.schema.json#/$defs/managedRelativePath" }
+            ]
+          },
+          "expected_before": { "$ref": "artifact-common.schema.json#/$defs/expectedBefore" },
+          "new_content": {
+            "oneOf": [
+              { "type": "null" },
+              { "$ref": "artifact-common.schema.json#/$defs/contentObject" }
+            ]
+          },
+          "rollback_strategy": { "const": "restore_previous_revision" }
+        },
+        "allOf": [
+          {
+            "if": { "properties": { "kind": { "const": "create" } } },
+            "then": {
+              "properties": {
+                "destination_path": { "type": "null" },
+                "expected_before": { "properties": { "exists": { "const": false } } },
+                "new_content": { "$ref": "artifact-common.schema.json#/$defs/contentObject" }
+              }
+            }
+          },
+          {
+            "if": { "properties": { "kind": { "const": "replace" } } },
+            "then": {
+              "properties": {
+                "destination_path": { "type": "null" },
+                "expected_before": { "properties": { "exists": { "const": true } } },
+                "new_content": { "$ref": "artifact-common.schema.json#/$defs/contentObject" }
+              }
+            }
+          },
+          {
+            "if": { "properties": { "kind": { "const": "delete" } } },
+            "then": {
+              "properties": {
+                "destination_path": { "type": "null" },
+                "expected_before": { "properties": { "exists": { "const": true } } },
+                "new_content": { "type": "null" }
+              }
+            }
+          },
+          {
+            "if": { "properties": { "kind": { "const": "move" } } },
+            "then": {
+              "properties": {
+                "destination_path": { "$ref": "artifact-common.schema.json#/$defs/managedRelativePath" },
+                "expected_before": { "properties": { "exists": { "const": true } } },
+                "new_content": { "type": "null" }
+              }
+            }
+          }
+        ],
+        "additionalProperties": false
+      }
+    },
+    "semantic_diff": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "operation_id", "kind", "path", "destination_path",
+          "before_sha256", "after_sha256"
+        ],
+        "properties": {
+          "operation_id": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" },
+          "kind": { "$ref": "artifact-common.schema.json#/$defs/mutationKind" },
+          "path": { "$ref": "artifact-common.schema.json#/$defs/managedRelativePath" },
+          "destination_path": {
+            "oneOf": [
+              { "type": "null" },
+              { "$ref": "artifact-common.schema.json#/$defs/managedRelativePath" }
+            ]
+          },
+          "before_sha256": {
+            "oneOf": [
+              { "type": "null" },
+              { "$ref": "artifact-common.schema.json#/$defs/sha256" }
+            ]
+          },
+          "after_sha256": {
+            "oneOf": [
+              { "type": "null" },
+              { "$ref": "artifact-common.schema.json#/$defs/sha256" }
+            ]
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false,
+  "x-artifact-migration": {
+    "id_pattern": "^mutation-plan/[1-9][0-9]*-to-[1-9][0-9]*/[1-9][0-9]*$",
+    "single_major_step": true,
+    "in_place": false,
+    "automatic_downgrade": false
+  }
+}

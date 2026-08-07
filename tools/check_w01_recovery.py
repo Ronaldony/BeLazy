@@ -62,6 +62,22 @@ def _git(root: Path, *arguments: str) -> str:
     return completed.stdout.strip()
 
 
+def _git_bytes(root: Path, commit: str, relative_path: str) -> bytes:
+    completed = subprocess.run(
+        [
+            "git",
+            "-c",
+            f"safe.directory={root.as_posix()}",
+            "show",
+            f"{commit}:{relative_path}",
+        ],
+        cwd=root,
+        check=True,
+        capture_output=True,
+    )
+    return completed.stdout
+
+
 def _is_ancestor(root: Path, ancestor: str, descendant: str) -> bool:
     completed = subprocess.run(
         [
@@ -146,8 +162,17 @@ def validate_w01_recovery(root: Path) -> list[str]:
         return ["anchor_object_id_invalid"]
 
     checkpoint_commit = checkpoint["commit"]
+    seal_commit: str | None = None
     try:
         head = _git(root, "rev-parse", "HEAD")
+        seal_commit = _git(
+            root,
+            "log",
+            "--diff-filter=A",
+            "--format=%H",
+            "--",
+            "reports/autopilot/waves/W01/recovery-anchor.json",
+        ).splitlines()[0]
         if _git(root, "rev-parse", f"{checkpoint_commit}^{{tree}}") != checkpoint["tree"]:
             errors.append("checkpoint_tree_mismatch")
         if _git(root, "rev-parse", f"{checkpoint_commit}^") != checkpoint["parent"]:
@@ -164,7 +189,11 @@ def validate_w01_recovery(root: Path) -> list[str]:
             errors.append("evidence_not_checkpoint_ancestor")
         if not _is_ancestor(root, checkpoint_commit, head):
             errors.append("checkpoint_not_head_ancestor")
-    except (OSError, subprocess.SubprocessError):
+        if not _is_ancestor(root, checkpoint_commit, seal_commit):
+            errors.append("checkpoint_not_seal_ancestor")
+        if not _is_ancestor(root, seal_commit, head):
+            errors.append("seal_not_head_ancestor")
+    except (OSError, IndexError, subprocess.SubprocessError):
         errors.append("anchor_git_lookup_failed")
 
     for path_key, digest_key in (
@@ -179,9 +208,15 @@ def validate_w01_recovery(root: Path) -> list[str]:
             errors.append(f"{path_key}_binding_invalid")
             continue
         try:
-            if _sha256(root / relative) != expected:
+            if path_key == "execplan_path" and seal_commit is not None:
+                observed = hashlib.sha256(
+                    _git_bytes(root, seal_commit, relative)
+                ).hexdigest()
+            else:
+                observed = _sha256(root / relative)
+            if observed != expected:
                 errors.append(f"{path_key}_digest_mismatch")
-        except OSError:
+        except (OSError, subprocess.SubprocessError):
             errors.append(f"{path_key}_unreadable")
 
     state_binding = anchor.get("state", {})

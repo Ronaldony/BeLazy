@@ -1,6 +1,6 @@
 # ADR-MUT-001 — Managed Mutation Plane and no direct human file mutation
 
-- Status: Proposed
+- Status: Accepted (W02 contract and guard; concrete runtime deferred to W06)
 - Decision owner: System architecture
 - Scope: production artifacts, channel/episode workspaces, policies, approvals, generated projections
 
@@ -15,6 +15,11 @@ Direct human mutation of managed production files is removed from the normal wor
 Humans submit high-level intent, review semantic diffs, grant or deny action authority, and resolve exceptional ambiguity. A trusted agent/runtime converts intent into a `MutationPlan`, validates exact-before state and path policy, obtains authority, executes under a service identity, and records a `MutationReceipt` and new `WorkspaceRevision`.
 
 The pure core plans and validates only. Concrete file mutation remains outside `src/video_factory` behind explicit runtime ports.
+
+W02 implements this boundary additively as `video_factory.mutation` plus
+`video_factory.providers.ManagedMutationExecutorPort`. It does not add a
+filesystem executor, durable journal implementation, authority ledger, or
+human-approval issuer. Those implementations remain W06/W04 responsibilities.
 
 ## Required contracts
 
@@ -32,6 +37,8 @@ The pure core plans and validates only. Concrete file mutation remains outside `
 - creates fail when the destination exists;
 - path traversal, workspace escape, links/reparse points, and normalization collisions are rejected;
 - runtime revalidates manifest, bytes, authority, and idempotency immediately before mutation;
+- runtime revalidates the exact `GateContext`, plan digest, policy digest,
+  workspace revision, observation digest, service identity, and kill switch;
 - out-of-band change sets workspace trust to `UNTRUSTED` and blocks generation/publish;
 - emergency manual mutation is R4 break-glass with two independent approvers, short expiry, snapshot, immutable audit, and reconciliation.
 

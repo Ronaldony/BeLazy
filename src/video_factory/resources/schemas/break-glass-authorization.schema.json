@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.video-factory.invalid/mutation/break-glass-authorization.schema.json",
+  "title": "Unverified R4 break-glass authorization document",
+  "description": "Schema validity never proves human identity, authenticity, grant state, or revocation status.",
+  "type": "object",
+  "required": [
+    "artifact_version", "authorization_id", "risk_tier", "standing_grant",
+    "plan_sha256", "workspace_id", "before_revision_id",
+    "before_manifest_sha256", "issued_at", "expires_at", "exact_paths",
+    "operation_kinds", "approvals", "pre_change_snapshot", "incident_id",
+    "audit_record", "session_id", "executor_identity", "reconciliation_required",
+    "post_change_validation_required"
+  ],
+  "properties": {
+    "artifact_version": { "const": "break-glass-authorization/1.0" },
+    "authorization_id": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" },
+    "risk_tier": { "const": "R4" },
+    "standing_grant": { "const": false },
+    "plan_sha256": { "$ref": "artifact-common.schema.json#/$defs/sha256" },
+    "workspace_id": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" },
+    "before_revision_id": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" },
+    "before_manifest_sha256": { "$ref": "artifact-common.schema.json#/$defs/sha256" },
+    "issued_at": { "type": "string", "format": "date-time" },
+    "expires_at": { "type": "string", "format": "date-time" },
+    "exact_paths": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "$ref": "artifact-common.schema.json#/$defs/managedRelativePath" }
+    },
+    "operation_kinds": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "$ref": "artifact-common.schema.json#/$defs/mutationKind" }
+    },
+    "approvals": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "items": {
+        "type": "object",
+        "required": ["principal_id", "actor_kind", "authentication_evidence", "approval_record", "approved_at"],
+        "properties": {
+          "principal_id": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" },
+          "actor_kind": { "const": "human" },
+          "authentication_evidence": { "$ref": "artifact-common.schema.json#/$defs/boundArtifact" },
+          "approval_record": { "$ref": "artifact-common.schema.json#/$defs/boundArtifact" },
+          "approved_at": { "type": "string", "format": "date-time" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "pre_change_snapshot": { "$ref": "artifact-common.schema.json#/$defs/boundArtifact" },
+    "incident_id": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" },
+    "audit_record": { "$ref": "artifact-common.schema.json#/$defs/boundArtifact" },
+    "session_id": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" },
+    "executor_identity": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" },
+    "reconciliation_required": { "const": true },
+    "post_change_validation_required": { "const": true }
+  },
+  "additionalProperties": false,
+  "x-artifact-migration": {
+    "id_pattern": "^break-glass-authorization/[1-9][0-9]*-to-[1-9][0-9]*/[1-9][0-9]*$",
+    "single_major_step": true,
+    "in_place": false,
+    "automatic_downgrade": false
+  }
+}

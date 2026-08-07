@@ -5,6 +5,9 @@ from __future__ import annotations
 import hashlib
 from pathlib import Path
 
+import pytest
+import video_factory.storage.workspace_export as workspace_export_module
+
 from video_factory.cli import handle_export
 from video_factory.storage import (
     WorkspaceExportPlanStatus,
@@ -13,6 +16,7 @@ from video_factory.storage import (
     scan_for_sensitive_content,
 )
 from video_factory.storage.workspace_export import WorkspaceExportEngine
+from video_factory.storage import tree_safety
 
 
 def _clean_workspace(root: Path) -> Path:
@@ -71,6 +75,8 @@ def test_plan_export_clean_workspace_to_directory(tmp_path: Path) -> None:
 
     assert plan.status is WorkspaceExportPlanStatus.READY
     assert plan.executed is False
+    assert plan.planning_only is True
+    assert plan.authorization_ready is False
     assert len(plan.files) == 2
     assert plan.files_scanned == 2
     assert plan.output_kind == "directory"
@@ -191,6 +197,8 @@ def test_handle_export_success_and_refusal(tmp_path: Path) -> None:
     assert ok.payload is not None
     assert ok.payload["file_count"] == 2
     assert ok.payload["executed"] is False
+    assert ok.payload["planning_only"] is True
+    assert ok.payload["authorization_ready"] is False
     assert not ok_target.exists()
 
     (source / "leak.md").write_text(_email_sample() + "\n", encoding="utf-8")
@@ -222,3 +230,33 @@ def test_scan_for_sensitive_content_still_read_only(tmp_path: Path) -> None:
     assert scanned == 2
     assert findings == []
     assert _snapshot_tree(tmp_path) == before
+
+
+def test_plan_export_rejects_symlink_or_reparse_leaf_without_reading_it(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = _clean_workspace(tmp_path)
+    outside = tmp_path / "outside-secret.txt"
+    outside.write_text(_api_key_sample() + "\n", encoding="utf-8")
+    link = source / "linked.txt"
+    try:
+        link.symlink_to(outside)
+    except OSError:
+        def reject_tree(_root: Path, **_kwargs: object):
+            raise tree_safety.SafeTreeError(
+                "tree.link_or_reparse", link, "synthetic unavailable-link probe"
+            )
+
+        monkeypatch.setattr(
+            workspace_export_module, "iter_regular_files_no_follow", reject_tree
+        )
+
+    target = tmp_path / "export"
+    plan = plan_export(source, target)
+
+    assert plan.status is WorkspaceExportPlanStatus.REJECTED_UNSAFE_TREE
+    assert plan.files == ()
+    assert plan.authorization_ready is False
+    assert "link_or_reparse" in (plan.rejection_reason or "")
+    assert not target.exists()

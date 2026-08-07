@@ -12,6 +12,7 @@ import base64
 import csv
 import hashlib
 import io
+import json
 from pathlib import Path, PurePosixPath
 import tomllib
 from typing import Iterable, Sequence
@@ -54,10 +55,18 @@ def _project_files(project_root: Path) -> dict[str, bytes]:
         for name in output
         if name.startswith(schema_prefix) and name.endswith(".schema.json")
     ]
-    if len(schemas) != 46:
-        raise ValueError(f"wheel input must contain 46 packaged schemas; found {len(schemas)}")
-    if schema_prefix + "schema-manifest.json" not in output:
+    manifest_name = schema_prefix + "schema-manifest.json"
+    if manifest_name not in output:
         raise ValueError("wheel input schema manifest is missing")
+    manifest = json.loads(output[manifest_name])
+    expected = manifest.get("schema_count") if isinstance(manifest, dict) else None
+    if not isinstance(expected, int) or isinstance(expected, bool) or expected < 1:
+        raise ValueError("wheel input schema manifest count is invalid")
+    if len(schemas) != expected:
+        raise ValueError(
+            f"wheel input schema count differs from manifest: "
+            f"expected {expected}; found {len(schemas)}"
+        )
     return output
 
 

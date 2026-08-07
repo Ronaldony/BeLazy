@@ -381,6 +381,128 @@
         }
       },
       "additionalProperties": false
+    },
+    "managedRelativePath": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?!/)(?![A-Za-z]:)(?!.*\\\\)(?!.*(?:^|/)(?:\\.|\\.\\.)(?:/|$))(?!.*//)(?!.*[:*?\\\"<>|\\u0000-\\u001f\\u007f])(?!.*(?:^|/)[^/]*[ .](?:/|$)).+$"
+    },
+    "mutationKind": {
+      "type": "string",
+      "enum": ["create", "replace", "delete", "move"]
+    },
+    "mutationRiskTier": {
+      "type": "string",
+      "enum": ["R1", "R2", "R3", "R4"]
+    },
+    "contentObject": {
+      "type": "object",
+      "required": ["object_id", "exact_sha256", "byte_length"],
+      "properties": {
+        "object_id": { "$ref": "#/$defs/opaqueId" },
+        "exact_sha256": { "$ref": "#/$defs/sha256" },
+        "byte_length": { "type": "integer", "minimum": 0 }
+      },
+      "additionalProperties": false
+    },
+    "expectedBefore": {
+      "type": "object",
+      "required": ["exists", "exact_sha256"],
+      "properties": {
+        "exists": { "type": "boolean" },
+        "exact_sha256": {
+          "oneOf": [
+            { "type": "null" },
+            { "$ref": "#/$defs/sha256" }
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "exists": { "const": true } } },
+          "then": { "properties": { "exact_sha256": { "$ref": "#/$defs/sha256" } } },
+          "else": { "properties": { "exact_sha256": { "type": "null" } } }
+        }
+      ],
+      "additionalProperties": false
+    },
+    "mutationIntent": {
+      "type": "object",
+      "required": [
+        "kind",
+        "path",
+        "destination_path",
+        "expected_before",
+        "new_content"
+      ],
+      "properties": {
+        "kind": { "$ref": "#/$defs/mutationKind" },
+        "path": { "$ref": "#/$defs/managedRelativePath" },
+        "destination_path": {
+          "oneOf": [
+            { "type": "null" },
+            { "$ref": "#/$defs/managedRelativePath" }
+          ]
+        },
+        "expected_before": { "$ref": "#/$defs/expectedBefore" },
+        "new_content": {
+          "oneOf": [
+            { "type": "null" },
+            { "$ref": "#/$defs/contentObject" }
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "kind": { "const": "create" } } },
+          "then": {
+            "properties": {
+              "destination_path": { "type": "null" },
+              "expected_before": {
+                "properties": { "exists": { "const": false } }
+              },
+              "new_content": { "$ref": "#/$defs/contentObject" }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "kind": { "const": "replace" } } },
+          "then": {
+            "properties": {
+              "destination_path": { "type": "null" },
+              "expected_before": {
+                "properties": { "exists": { "const": true } }
+              },
+              "new_content": { "$ref": "#/$defs/contentObject" }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "kind": { "const": "delete" } } },
+          "then": {
+            "properties": {
+              "destination_path": { "type": "null" },
+              "expected_before": {
+                "properties": { "exists": { "const": true } }
+              },
+              "new_content": { "type": "null" }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "kind": { "const": "move" } } },
+          "then": {
+            "properties": {
+              "destination_path": { "$ref": "#/$defs/managedRelativePath" },
+              "expected_before": {
+                "properties": { "exists": { "const": true } }
+              },
+              "new_content": { "type": "null" }
+            }
+          }
+        }
+      ],
+      "additionalProperties": false
     }
   }
 }

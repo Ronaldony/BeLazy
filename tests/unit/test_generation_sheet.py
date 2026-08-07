@@ -12,9 +12,15 @@ from video_factory.domain import (
     ArtifactReference,
     ArtifactVersion,
     HashDigest,
+    OpaqueId,
     RelativeArtifactPath,
 )
 from video_factory.engine import GenerationReadinessPlan, OrchestrationPlanError
+from video_factory.mutation import (
+    WorkspaceObservation,
+    WorkspaceTrustState,
+    workspace_observation_sha256,
+)
 from video_factory.sheets import (
     GenerationSheetError,
     packet_document_sha256,
@@ -31,6 +37,17 @@ def _context() -> GateContext:
         current_manifest_sha256=HashDigest("5" * 64),
         evidence_graph_sha256=HashDigest("6" * 64),
         executable_plan_sha256=HashDigest("7" * 64),
+    )
+
+
+def _workspace_observation() -> WorkspaceObservation:
+    return WorkspaceObservation(
+        workspace_id=OpaqueId("workspace-a"),
+        revision_id=OpaqueId("revision-a"),
+        manifest_sha256=HashDigest("5" * 64),
+        trust_state=WorkspaceTrustState.TRUSTED,
+        complete=True,
+        entries=(),
     )
 
 
@@ -144,6 +161,10 @@ def _readiness(packet: dict[str, object]) -> GenerationReadinessPlan:
         authorization_ready=True,
         valid_from="2026-07-21T00:00:00Z",
         valid_until="2026-07-21T02:00:00Z",
+        workspace_revision_id="revision-a",
+        workspace_observation_sha256=str(
+            workspace_observation_sha256(_workspace_observation())
+        ),
     )
 
 
@@ -161,11 +182,46 @@ def test_bound_readiness_authorizes_sheet() -> None:
         readiness=_readiness(packet),
         current_context=_context(),
         evaluated_at=datetime(2026, 7, 21, 1, 0, tzinfo=timezone.utc),
+        workspace_observation=_workspace_observation(),
     )
     assert "DO NOT GENERATE" not in sheet
     assert "generation_readiness: `ready`" in sheet
     assert "feasibility_evidence:" in sheet
     assert "approval_evidence:" in sheet
+
+
+def test_authorized_sheet_revalidates_current_workspace_observation() -> None:
+    packet = _sample_packet()
+    readiness = _readiness(packet)
+    with pytest.raises(GenerationSheetError, match="observation_missing"):
+        render_generation_sheet(
+            packet,
+            readiness=readiness,
+            current_context=_context(),
+            evaluated_at=datetime(2026, 7, 21, 1, 0, tzinfo=timezone.utc),
+        )
+
+    untrusted = replace(
+        _workspace_observation(), trust_state=WorkspaceTrustState.UNTRUSTED
+    )
+    with pytest.raises(GenerationSheetError, match="workspace.untrusted"):
+        render_generation_sheet(
+            packet,
+            readiness=readiness,
+            current_context=_context(),
+            evaluated_at=datetime(2026, 7, 21, 1, 0, tzinfo=timezone.utc),
+            workspace_observation=untrusted,
+        )
+
+    changed = replace(_workspace_observation(), workspace_id=OpaqueId("workspace-b"))
+    with pytest.raises(GenerationSheetError, match="another workspace observation"):
+        render_generation_sheet(
+            packet,
+            readiness=readiness,
+            current_context=_context(),
+            evaluated_at=datetime(2026, 7, 21, 1, 0, tzinfo=timezone.utc),
+            workspace_observation=changed,
+        )
 
 
 def test_stale_readiness_is_rejected() -> None:
@@ -212,6 +268,7 @@ def test_sheet_rejects_every_current_context_digest_change(field: str) -> None:
             readiness=_readiness(packet),
             current_context=changed,
             evaluated_at=datetime(2026, 7, 21, 1, 0, tzinfo=timezone.utc),
+            workspace_observation=_workspace_observation(),
         )
 
 
@@ -234,6 +291,7 @@ def test_sheet_rechecks_readiness_validity_window(
             readiness=_readiness(_sample_packet()),
             current_context=_context(),
             evaluated_at=evaluated_at,
+            workspace_observation=_workspace_observation(),
         )
 
 

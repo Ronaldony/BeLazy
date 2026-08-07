@@ -35,15 +35,15 @@ def test_packaged_manifest_loads_all_schemas_and_versions() -> None:
     registry = ArtifactSchemaRegistry()
     assert registry.manifest_validated is True
     assert registry.manifest_sha256 is not None
-    assert len(registry.all_schemas()) == 46
-    assert len(registry.list_versions()) == 42
+    assert len(registry.all_schemas()) == 52
+    assert len(registry.list_versions()) == 48
     assert set(registry.all_schemas()) - {
         registry.get(version).filename for version in registry.list_versions()
     } == NON_REGISTERED
     manifest = registry.manifest
     assert manifest is not None
-    assert manifest["schema_count"] == 46
-    assert manifest["registered_version_count"] == 42
+    assert manifest["schema_count"] == 52
+    assert manifest["registered_version_count"] == 48
 
 
 def test_root_schema_projection_matches_packaged_resources_byte_for_byte() -> None:
@@ -65,11 +65,11 @@ def test_manifest_entries_are_sorted_unique_and_digest_exact() -> None:
     assert isinstance(entries, list)
     filenames = [entry["filename"] for entry in entries]
     assert filenames == sorted(filenames)
-    assert len(filenames) == len(set(filenames)) == 46
+    assert len(filenames) == len(set(filenames)) == 52
     schema_ids = [entry["schema_id"] for entry in entries]
-    assert len(schema_ids) == len(set(schema_ids)) == 46
+    assert len(schema_ids) == len(set(schema_ids)) == 52
     versions = [entry["artifact_version"] for entry in entries if entry["artifact_version"]]
-    assert len(versions) == len(set(versions)) == 42
+    assert len(versions) == len(set(versions)) == 48
     for entry in entries:
         payload = resource_root.joinpath(entry["filename"]).read_bytes()
         assert hashlib.sha256(payload).hexdigest() == entry["sha256"]

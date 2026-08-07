@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from dataclasses import replace
 from datetime import datetime, timezone
 
 import pytest
 
 from video_factory.artifacts import validate_artifact
 from video_factory.approvals import GateContext, gate_context_to_mapping
-from video_factory.domain import HashDigest
+from video_factory.domain import HashDigest, OpaqueId
 from video_factory.engine import (
     ArtifactSnapshot,
     OrchestrationPlanError,
@@ -20,6 +21,7 @@ from video_factory.engine import (
     observe_episode_state,
     plan_next_step as _plan_next_step,
 )
+from video_factory.mutation import WorkspaceObservation, WorkspaceTrustState
 
 
 RULES = "rules-test"
@@ -47,6 +49,17 @@ CONTEXT_FIELDS = (
 )
 
 
+def _workspace_observation() -> WorkspaceObservation:
+    return WorkspaceObservation(
+        workspace_id=OpaqueId("workspace-a"),
+        revision_id=OpaqueId("revision-a"),
+        manifest_sha256=HashDigest("4" * 64),
+        trust_state=WorkspaceTrustState.TRUSTED,
+        complete=True,
+        entries=(),
+    )
+
+
 def plan_next_step(observation, workflow_mode):
     """W00-compatible, non-authorizing planning overload."""
 
@@ -65,6 +78,8 @@ def _strict_plan_next_step(observation, workflow_mode):
         workflow_mode,
         current_context=GATE_CONTEXT,
         evaluated_at=EVALUATED_AT,
+        workspace_observation=_workspace_observation(),
+        expected_workspace_revision_id="revision-a",
     )
 
 
@@ -74,6 +89,8 @@ def _strict_build_generation_readiness(observation, workflow_mode):
         workflow_mode,
         current_context=GATE_CONTEXT,
         evaluated_at=EVALUATED_AT,
+        workspace_observation=_workspace_observation(),
+        expected_workspace_revision_id="revision-a",
     )
 
 
@@ -615,8 +632,48 @@ def test_generation_readiness_requires_all_bound_pass_evidence() -> None:
     assert authorized.ready is True
     assert authorized.authorization_ready is True
     assert authorized.gate_context_sha256 is not None
+    assert authorized.workspace_revision_id == "revision-a"
+    assert authorized.workspace_observation_sha256 is not None
     assert authorized.valid_from == "2026-07-21T01:00:00Z"
     assert authorized.valid_until == "2026-07-21T06:00:00Z"
+
+
+def test_generation_and_publish_planning_fail_closed_without_trusted_workspace() -> None:
+    observation = observe_episode_state(_generation_gate_snapshots())
+    missing = _build_generation_readiness(
+        observation,
+        "standard",
+        current_context=GATE_CONTEXT,
+        evaluated_at=EVALUATED_AT,
+        expected_workspace_revision_id="revision-a",
+    )
+    assert missing.ready is False
+    assert missing.authorization_ready is False
+    assert "mutation.workspace.observation_missing" in missing.blockers
+
+    blocked_plan = _plan_next_step(
+        observation,
+        "standard",
+        current_context=GATE_CONTEXT,
+        evaluated_at=EVALUATED_AT,
+        expected_workspace_revision_id="revision-a",
+    )
+    assert blocked_plan.action_type == "reconcile_workspace"
+    assert "mutation.workspace.observation_missing" in blocked_plan.blockers
+
+    untrusted = replace(
+        _workspace_observation(), trust_state=WorkspaceTrustState.UNTRUSTED
+    )
+    untrusted_plan = _plan_next_step(
+        observation,
+        "standard",
+        current_context=GATE_CONTEXT,
+        evaluated_at=EVALUATED_AT,
+        workspace_observation=untrusted,
+        expected_workspace_revision_id="revision-a",
+    )
+    assert untrusted_plan.action_type == "reconcile_workspace"
+    assert "mutation.workspace.untrusted" in untrusted_plan.blockers
 
 
 def test_generation_readiness_accepts_packet_2_1_end_to_end() -> None:

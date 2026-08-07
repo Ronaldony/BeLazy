@@ -35,11 +35,26 @@ TEXT_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("os_makedirs", re.compile(r"\bos\.makedirs\b")),
     ("os_remove", re.compile(r"\bos\.remove\b")),
     ("os_rename", re.compile(r"\bos\.rename\b")),
+    ("os_replace", re.compile(r"\bos\.replace\b")),
+    ("os_link", re.compile(r"\bos\.link\b")),
+    ("os_symlink", re.compile(r"\bos\.symlink\b")),
+    ("os_write", re.compile(r"\bos\.write\b")),
     ("os_unlink", re.compile(r"\bos\.unlink\b")),
     ("path_mkdir_call", re.compile(r"\.mkdir\s*\(")),
     ("zipfile_write_mode", re.compile(r"\bZipFile\s*\([^)]*['\"]w['\"]")),
     ("write_text", re.compile(r"\.write_text\s*\(")),
     ("write_bytes", re.compile(r"\.write_bytes\s*\(")),
+    (
+        "path_replace",
+        re.compile(r"(?:\bPath\s*\([^\n]*\)|\b(?:path|target|source|destination))\.replace\s*\("),
+    ),
+    (
+        "path_rename",
+        re.compile(r"(?:\bPath\s*\([^\n]*\)|\b(?:path|target|source|destination))\.rename\s*\("),
+    ),
+    ("path_symlink", re.compile(r"\.symlink_to\s*\(")),
+    ("path_hardlink", re.compile(r"\.hardlink_to\s*\(")),
+    ("handle_write", re.compile(r"\.(?:write|writelines|truncate)\s*\(")),
     ("open_write_mode", re.compile(r"\bopen\s*\([^)]*mode\s*=\s*['\"][wa]")),
     ("open_write_positional", re.compile(r"\bopen\s*\([^,\n]+,\s*['\"][wa]")),
 )
@@ -78,7 +93,7 @@ def _is_write_open_mode(mode: object) -> bool:
     if not isinstance(mode, str):
         return False
     # Any mode containing w, a, or x is a write/create mode.
-    return any(flag in mode for flag in ("w", "a", "x"))
+    return any(flag in mode for flag in ("w", "a", "x", "+"))
 
 
 def scan_python_ast(relative_path: str, source: str) -> list[Violation]:
@@ -124,6 +139,12 @@ def scan_python_ast(relative_path: str, source: str) -> list[Violation]:
             "os.makedirs": "ast_os_makedirs",
             "os.remove": "ast_os_remove",
             "os.rename": "ast_os_rename",
+            "os.replace": "ast_os_replace",
+            "os.link": "ast_os_link",
+            "os.symlink": "ast_os_symlink",
+            "os.open": "ast_os_open",
+            "os.write": "ast_os_write",
+            "os.truncate": "ast_os_truncate",
             "os.unlink": "ast_os_unlink",
             "shutil.copy": "ast_shutil_copy",
             "shutil.copy2": "ast_shutil_copy2",
@@ -160,9 +181,15 @@ def scan_python_ast(relative_path: str, source: str) -> list[Violation]:
         if isinstance(node.func, ast.Attribute) and node.func.attr in {
             "write_text",
             "write_bytes",
+            "write",
+            "writelines",
+            "truncate",
             "unlink",
             "rmdir",
             "touch",
+            "symlink_to",
+            "hardlink_to",
+            "link_to",
         }:
             violations.append(
                 Violation(
@@ -172,6 +199,51 @@ def scan_python_ast(relative_path: str, source: str) -> list[Violation]:
                     detail=node.func.attr,
                 )
             )
+            continue
+
+        if (
+            isinstance(node.func, ast.Attribute)
+            and node.func.attr in {"rename", "replace"}
+            and (
+                (
+                    isinstance(node.func.value, ast.Call)
+                    and isinstance(node.func.value.func, ast.Name)
+                    and node.func.value.func.id == "Path"
+                )
+                or (
+                    isinstance(node.func.value, ast.Name)
+                    and node.func.value.id.casefold()
+                    in {"path", "target", "source", "destination", "file_path"}
+                )
+            )
+        ):
+            violations.append(
+                Violation(
+                    f"ast_path_{node.func.attr}",
+                    relative_path,
+                    lineno,
+                    detail=node.func.attr,
+                )
+            )
+            continue
+
+        # Path.open / file-like open in a write-capable mode.
+        if isinstance(node.func, ast.Attribute) and node.func.attr == "open":
+            mode_val = "r"
+            if node.args and isinstance(node.args[0], ast.Constant):
+                mode_val = node.args[0].value
+            for keyword in node.keywords:
+                if keyword.arg == "mode" and isinstance(keyword.value, ast.Constant):
+                    mode_val = keyword.value.value
+            if _is_write_open_mode(mode_val):
+                violations.append(
+                    Violation(
+                        "ast_path_open_write",
+                        relative_path,
+                        lineno,
+                        detail=f"open mode={mode_val!r}",
+                    )
+                )
             continue
 
         # open(..., "w"/"a"/...) 

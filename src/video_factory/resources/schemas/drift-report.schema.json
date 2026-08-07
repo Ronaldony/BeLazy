@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.video-factory.invalid/mutation/drift-report.schema.json",
+  "title": "Managed workspace drift quarantine report",
+  "type": "object",
+  "required": [
+    "artifact_version", "report_id", "workspace_id", "expected_revision_id",
+    "expected_manifest_sha256", "observed_manifest_sha256", "detected_at",
+    "trust_state", "findings", "generation_blocked", "publish_blocked",
+    "dependent_plans_invalidated", "authority_invalidated", "qc_invalidated",
+    "reconciliation_required"
+  ],
+  "properties": {
+    "artifact_version": { "const": "drift-report/1.0" },
+    "report_id": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" },
+    "workspace_id": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" },
+    "expected_revision_id": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" },
+    "expected_manifest_sha256": { "$ref": "artifact-common.schema.json#/$defs/sha256" },
+    "observed_manifest_sha256": { "$ref": "artifact-common.schema.json#/$defs/sha256" },
+    "detected_at": { "type": "string", "format": "date-time" },
+    "trust_state": { "const": "UNTRUSTED" },
+    "findings": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["path", "kind", "expected_sha256", "observed_sha256", "reason_code"],
+        "properties": {
+          "path": { "$ref": "artifact-common.schema.json#/$defs/managedRelativePath" },
+          "kind": {
+            "type": "string",
+            "enum": ["added", "missing", "modified", "type_changed", "path_alias", "link_or_reparse", "manifest_mismatch"]
+          },
+          "expected_sha256": {
+            "oneOf": [{ "type": "null" }, { "$ref": "artifact-common.schema.json#/$defs/sha256" }]
+          },
+          "observed_sha256": {
+            "oneOf": [{ "type": "null" }, { "$ref": "artifact-common.schema.json#/$defs/sha256" }]
+          },
+          "reason_code": { "type": "string", "minLength": 1 }
+        },
+        "additionalProperties": false
+      }
+    },
+    "generation_blocked": { "const": true },
+    "publish_blocked": { "const": true },
+    "dependent_plans_invalidated": { "const": true },
+    "authority_invalidated": { "const": true },
+    "qc_invalidated": { "const": true },
+    "reconciliation_required": { "const": true }
+  },
+  "additionalProperties": false,
+  "x-artifact-migration": {
+    "id_pattern": "^drift-report/[1-9][0-9]*-to-[1-9][0-9]*/[1-9][0-9]*$",
+    "single_major_step": true,
+    "in_place": false,
+    "automatic_downgrade": false
+  }
+}

@@ -44,6 +44,16 @@ from .enforcement import (
     request_envelope_sha256,
 )
 from .registry import AdapterBinding, InMemoryCapabilityRegistry, RegistryError
+from .mutation import (
+    BreakGlassPolicy,
+    HumanApprovalAuthenticator,
+    ManagedMutationExecutorPort,
+    MutationAuthorityVerifier,
+    MutationPreSideEffectGuard,
+    MutationRuntimeError,
+    require_trusted_workspace,
+    validate_break_glass_authorization,
+)
 
 __all__ = [
     "AdapterKind",
@@ -62,6 +72,12 @@ __all__ = [
     "HumanHandoff",
     "InMemoryCapabilityRegistry",
     "ModeEnforcementError",
+    "BreakGlassPolicy",
+    "HumanApprovalAuthenticator",
+    "ManagedMutationExecutorPort",
+    "MutationAuthorityVerifier",
+    "MutationPreSideEffectGuard",
+    "MutationRuntimeError",
     "NormalizedEvent",
     "Outcome",
     "OrchestrationAuthorization",
@@ -81,9 +97,11 @@ __all__ = [
     "ValidationReport",
     "enforce_adapter_dispatch",
     "request_envelope_sha256",
+    "require_trusted_workspace",
     "known_cost",
     "settled_uncertainty",
     "unknown_cost",
     "validate_descriptor",
     "validate_request_envelope",
+    "validate_break_glass_authorization",
 ]

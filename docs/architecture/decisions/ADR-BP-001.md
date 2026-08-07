@@ -46,7 +46,9 @@ A deserialized coherent artifact is structurally loadable for observation, but
 its promotion claim is trusted only after the same evidence is recomputed by
 `verify_coherent_blueprint_promotion`. Reference-lock lists use canonical path
 order, forbid duplicates/collisions, and cannot bind one path to different byte
-digests or artifact versions across root and per-shot fields.
+digests or artifact versions across root and per-shot fields. Paths must already
+be canonical relative POSIX NFC values; empty, `.`, `..`, repeated or trailing
+segments and case/Unicode aliases fail closed.
 
 Logical identity digests (`blueprint_sha256`, `projection_sha256`) and immutable
 artifact byte digests have different meanings. `ArtifactReference.sha256`

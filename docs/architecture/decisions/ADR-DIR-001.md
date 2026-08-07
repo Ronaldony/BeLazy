@@ -18,6 +18,12 @@ target-owned registry contains twelve core charters and six conditional
 specialists for factual, rights, compositing, dialogue/voice,
 localization/accessibility, and live-production needs.
 
+Production activation, ownership, planning, synthesis, and promotion
+verification require charter values from that exact target-owned registry. A
+caller cannot replace the registry, activation, ownership, tasks, and
+assessments as one self-consistent reduced set. Generic charter construction
+and low-level registry algorithms remain non-production helpers only.
+
 Activation is deterministic from a versioned policy and the exact validated
 EpisodeIntent in the current source bundle. Every task-planning and synthesis
 consumer re-derives the expected active set from that Intent and the current
@@ -36,11 +42,15 @@ every active field has exactly one selected owner and one or more distinct
 verifiers. An activated conditional specialist must own at least one concrete
 field.
 
-Conflicts use deterministic policy with hard constraints first, then the
+The W03 promotion base must be an unevaluated `draft`. Persisted `coherent`
+artifacts are observable and projectable but cannot start a new promotion chain
+until a later contract carries and recursively verifies their antecedent
+promotion evidence. Conflicts use deterministic policy with hard constraints first, then the
 primary owner, then charter priority. All decisions and rejected proposals are
 recorded. Synthesis is limited to two rounds. Round one has no predecessor;
 round two must carry the exact blocked round-one synthesis digest in the same
-deterministic conflict session, and no third transition is accepted. Unresolved
+deterministic conflict session, and its complete round-one task/assessment
+evidence is re-synthesized before acceptance. No third transition is accepted. Unresolved
 conflict, any blocker, uncertain verdict, or confidence below policy produces a
 blocked result.
 
@@ -54,6 +64,8 @@ Runtime adapters must return immutable assessments that the core validates.
 
 - Specialist work can run in parallel against one base digest.
 - Mixed, stale, incomplete, or out-of-scope assessments fail closed.
+- Every immutable input reference uses one shared canonical NFC relative-POSIX
+  path rule and cross-platform collision key.
 - A larger registry does not create additional human workflow stages.
 - Runtime model execution and durable evidence remain deferred.
 

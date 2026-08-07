@@ -69,14 +69,14 @@ def _rewrite(
 def _built_wheel(tmp_path: Path) -> Path:
     root = Path(__file__).resolve().parents[2]
     wheel, members = build_wheel(root, tmp_path / "wheel")
-    assert members == 172
+    assert members == 173
     return wheel
 
 
 def test_offline_wheel_record_metadata_and_tag_are_verified(tmp_path: Path) -> None:
     wheel = _built_wheel(tmp_path)
     members, schemas, digest = inspect_wheel(wheel)
-    assert members == 172
+    assert members == 173
     assert schemas == 61
     assert digest == hashlib.sha256(wheel.read_bytes()).hexdigest()
 

@@ -37,6 +37,7 @@ from .model import (
     production_blueprint_to_mapping,
     production_blueprint_artifact_sha256,
 )
+from .reference_paths import ReferencePathError, require_canonical_reference_path
 
 
 PROJECTION_COMPILER_ID = OpaqueId("blueprint-shadow-compiler")
@@ -108,16 +109,14 @@ _LEGACY_VERSIONS: dict[BlueprintProjectionKind, str] = {
 
 def _reference_mapping(value: ArtifactReference) -> dict[str, str]:
     path = str(value.path)
-    parts = path.split("/")
-    if (
-        not path
-        or path.startswith(("/", "\\"))
-        or re.match(r"^[A-Za-z]:", path)
-        or "\\" in path
-        or ".." in parts
-        or any(character in path for character in ("\r", "\n", "\x00"))
-        or not _SHA256.fullmatch(str(value.sha256))
-        or not _ARTIFACT_VERSION.fullmatch(str(value.artifact_version))
+    try:
+        require_canonical_reference_path(path)
+    except ReferencePathError as error:
+        raise BlueprintContractError(
+            "blueprint.reference.invalid", "invalid immutable artifact reference"
+        ) from error
+    if not _SHA256.fullmatch(str(value.sha256)) or not _ARTIFACT_VERSION.fullmatch(
+        str(value.artifact_version)
     ):
         raise BlueprintContractError(
             "blueprint.reference.invalid", "invalid immutable artifact reference"

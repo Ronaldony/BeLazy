@@ -229,6 +229,22 @@ def director_registry_sha256(charters: Iterable[DirectorCharter]) -> HashDigest:
     )
 
 
+def require_target_director_registry(
+    charters: Iterable[DirectorCharter],
+) -> tuple[DirectorCharter, ...]:
+    """Require the exact target-owned registry at production mesh boundaries."""
+
+    values = tuple(charters)
+    director_registry_sha256(values)
+    expected = default_director_charters()
+    if values != expected:
+        raise DirectorRegistryError(
+            "director.registry.target_mismatch",
+            "Director mesh requires the exact target-owned registry",
+        )
+    return values
+
+
 def activation_policy_sha256(charters: Iterable[DirectorCharter]) -> HashDigest:
     values = tuple(charters)
     return canonical_sha256(
@@ -290,7 +306,7 @@ def director_activation_to_mapping(value: DirectorActivation) -> dict[str, objec
     return identity
 
 
-def activate_directors(
+def _activate_directors_for_registry(
     *,
     episode_intent: blueprint_contracts.EpisodeIntent,
     profile: EpisodeNeedsProfile,
@@ -356,6 +372,22 @@ def activate_directors(
     )
 
 
+def activate_directors(
+    *,
+    episode_intent: blueprint_contracts.EpisodeIntent,
+    profile: EpisodeNeedsProfile,
+    charters: Iterable[DirectorCharter],
+) -> DirectorActivation:
+    """Activate Directors from the exact target-owned registry."""
+
+    values = require_target_director_registry(charters)
+    return _activate_directors_for_registry(
+        episode_intent=episode_intent,
+        profile=profile,
+        charters=values,
+    )
+
+
 def validate_director_activation(
     activation: DirectorActivation,
     *,
@@ -378,7 +410,7 @@ def validate_director_activation(
         )
 
 
-def build_field_ownership(
+def _build_field_ownership_for_registry(
     fields: Iterable[blueprint_contracts.BlueprintField],
     charters: Iterable[DirectorCharter],
     activation: DirectorActivation,
@@ -447,6 +479,17 @@ def build_field_ownership(
             f"active conditional directors lack Blueprint fields: {sorted(missing_conditional)}",
         )
     return tuple(ownership)
+
+
+def build_field_ownership(
+    fields: Iterable[blueprint_contracts.BlueprintField],
+    charters: Iterable[DirectorCharter],
+    activation: DirectorActivation,
+) -> tuple[blueprint_contracts.FieldOwnership, ...]:
+    """Build coverage only from the exact target-owned registry."""
+
+    values = require_target_director_registry(charters)
+    return _build_field_ownership_for_registry(fields, values, activation)
 
 
 def validate_field_ownership(

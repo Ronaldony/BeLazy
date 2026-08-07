@@ -5,7 +5,6 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping
 import hashlib
 import re
-import unicodedata
 
 from video_factory.config.canonical import canonical_json_bytes, canonical_sha256
 from video_factory.domain import HashDigest, OpaqueId
@@ -23,6 +22,7 @@ from .contracts import (
     FieldOwnership,
     ProductionBlueprint,
 )
+from .reference_paths import ReferencePathError, reference_path_collision_key
 
 
 FIELD_PATH = re.compile(r"^[a-z][a-z0-9_-]*(?:\.[a-z0-9][a-z0-9_-]*)+$")
@@ -191,20 +191,13 @@ def _validate_reference_locks(
                 f"{path} contains an invalid reference-lock object",
             )
         reference_path = item["path"]
-        if (
-            not isinstance(reference_path, str)
-            or not reference_path
-            or unicodedata.normalize("NFC", reference_path) != reference_path
-            or reference_path.startswith(("/", "\\"))
-            or "\\" in reference_path
-            or ".." in reference_path.split("/")
-            or re.match(r"^[A-Za-z]:", reference_path)
-            or any(ord(character) < 32 for character in reference_path)
-        ):
+        try:
+            collision_key = reference_path_collision_key(reference_path)
+        except ReferencePathError as error:
             raise BlueprintContractError(
                 "blueprint.coherent.reference_lock",
                 f"{path} contains an unsafe reference path",
-            )
+            ) from error
         if not isinstance(item["sha256"], str) or not SHA256.fullmatch(
             item["sha256"]
         ):
@@ -219,7 +212,6 @@ def _validate_reference_locks(
                 "blueprint.coherent.reference_lock",
                 f"{path} contains an invalid artifact version",
             )
-        collision_key = unicodedata.normalize("NFC", reference_path).casefold()
         if collision_key in seen:
             raise BlueprintContractError(
                 "blueprint.coherent.reference_lock_duplicate",

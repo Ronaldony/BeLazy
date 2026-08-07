@@ -106,8 +106,13 @@ opaque context digests alone are insufficient.
 Director work is logically parallel. Every task and assessment binds the exact
 base Blueprint, context, registry, activation policy, charter, immutable input
 references, model/prompt identity, request/response digests, and execution
-receipt. Conditional activation and policy digests are re-derived at every
-consumer, and unknown signals fail closed. Any blocker, uncertain result, low
+receipt. Production mesh entry points accept only the exact target-owned
+12-core/6-conditional registry and an unevaluated `draft` base; a loaded
+`coherent` artifact cannot begin another promotion chain without a future
+recursive evidence contract. Conditional activation and policy digests are
+re-derived at every consumer, and unknown signals fail closed. Round two also
+recomputes the complete round-one task and assessment evidence before accepting
+the blocked predecessor. Any blocker, uncertain result, low
 confidence, stale patch, incomplete
 coverage, or unresolved conflict blocks synthesis. Conflict resolution has a
 hard maximum of two rounds backed by a deterministic conflict-session ID and an
@@ -125,6 +130,9 @@ bytes. Equality means only that those asserted fields equal the projection; it
 is not parity, migration, cutover, readiness, or authorization evidence.
 `ArtifactReference.sha256` always means exact serialized bytes; logical
 Blueprint/projection identity digests remain separate fields.
+All W03 immutable references share one canonical relative POSIX/NFC path rule:
+empty, `.`, `..`, repeated-separator, trailing-separator, absolute, drive,
+backslash, control, case and Unicode aliases fail closed.
 
 ## Managed mutation plane (W02)
 

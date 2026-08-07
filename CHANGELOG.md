@@ -22,7 +22,10 @@
   and re-derive conditional activation. The general builder cannot mint a
   coherent state; persisted promotion claims require complete synthesis-evidence
   recomputation. Reference locks reject duplicate, colliding, or conflicting
-  identities. Conflict round two carries an exact blocked predecessor.
+  identities through a shared canonical path policy. Production mesh entry
+  points are anchored to the exact target-owned 12-core/6-conditional registry
+  and draft bases. Conflict round two re-synthesizes the complete task and
+  assessment evidence for its exact blocked predecessor.
 - Added the pure managed-mutation contract and guard plane: six packaged
   artifacts, deterministic exact-before planning, immutable revision and
   tombstone derivation, drift quarantine, strict cross-platform path policy,

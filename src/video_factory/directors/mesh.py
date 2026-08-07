@@ -8,6 +8,7 @@ import re
 
 from video_factory.blueprint.contracts import (
     BlueprintField,
+    BlueprintStatus,
     BlueprintSourceBundle,
     DirectorProvenance,
     ProductionBlueprint,
@@ -22,6 +23,11 @@ from video_factory.blueprint.model import (
     production_blueprint_to_mapping,
     production_blueprint_artifact_sha256,
     validate_blueprint_source_bundle,
+)
+from video_factory.blueprint.reference_paths import (
+    ReferencePathError,
+    reference_path_collision_key,
+    require_canonical_reference_path,
 )
 from video_factory.config.canonical import canonical_sha256
 from video_factory.domain import ArtifactReference, HashDigest, OpaqueId
@@ -69,16 +75,14 @@ class DirectorMeshError(ValueError):
 
 def _reference_mapping(reference: ArtifactReference) -> dict[str, str]:
     path = str(reference.path)
-    parts = path.split("/")
-    if (
-        not path
-        or path.startswith(("/", "\\"))
-        or re.match(r"^[A-Za-z]:", path)
-        or "\\" in path
-        or ".." in parts
-        or any(character in path for character in ("\r", "\n", "\x00"))
-        or not SHA256.fullmatch(str(reference.sha256))
-        or not ARTIFACT_VERSION.fullmatch(str(reference.artifact_version))
+    try:
+        require_canonical_reference_path(path)
+    except ReferencePathError as error:
+        raise DirectorMeshError(
+            "director.reference.invalid", "invalid artifact reference"
+        ) from error
+    if not SHA256.fullmatch(str(reference.sha256)) or not ARTIFACT_VERSION.fullmatch(
+        str(reference.artifact_version)
     ):
         raise DirectorMeshError("director.reference.invalid", "invalid artifact reference")
     return {
@@ -100,17 +104,18 @@ def _normalize_references(
         ): item
         for item in values
     }
-    identities_by_path: dict[str, tuple[str, str]] = {}
+    identities_by_path: dict[str, tuple[str, str, str]] = {}
     for item in values:
         _reference_mapping(item)
         path = str(item.path)
-        identity = (str(item.sha256), str(item.artifact_version))
-        if path in identities_by_path and identities_by_path[path] != identity:
+        collision_key = reference_path_collision_key(path)
+        identity = (path, str(item.sha256), str(item.artifact_version))
+        if collision_key in identities_by_path and identities_by_path[collision_key] != identity:
             raise DirectorMeshError(
                 "director.reference.path_conflict",
-                "one artifact path cannot carry multiple identities",
+                "one cross-platform artifact path cannot carry multiple identities",
             )
-        identities_by_path[path] = identity
+        identities_by_path[collision_key] = identity
     expected = tuple(keyed[key] for key in sorted(keyed))
     if values != expected or len(values) != len(keyed):
         raise DirectorMeshError(
@@ -197,6 +202,11 @@ def plan_director_tasks(
     input_refs: Iterable[ArtifactReference],
 ) -> tuple[DirectorTaskPlan, ...]:
     production_blueprint_to_mapping(blueprint)
+    if blueprint.status is not BlueprintStatus.DRAFT:
+        raise DirectorMeshError(
+            "director.task.base_status",
+            "Director planning requires an unevaluated draft Blueprint base",
+        )
     validate_blueprint_source_bundle(blueprint, source_bundle)
     values = tuple(charters)
     validate_director_activation(
@@ -892,8 +902,15 @@ def synthesize_director_assessments(
     tasks: Iterable[DirectorTaskPlan],
     assessments: Iterable[DirectorAssessment],
     previous_synthesis: DirectorSynthesis | None = None,
+    previous_tasks: Iterable[DirectorTaskPlan] | None = None,
+    previous_assessments: Iterable[DirectorAssessment] | None = None,
 ) -> SynthesisOutcome:
     production_blueprint_to_mapping(blueprint)
+    if blueprint.status is not BlueprintStatus.DRAFT:
+        raise DirectorMeshError(
+            "director.synthesis.base_status",
+            "Director synthesis requires an unevaluated draft Blueprint base",
+        )
     validate_blueprint_source_bundle(blueprint, source_bundle)
     charter_values = tuple(charters)
     validate_director_activation(
@@ -928,6 +945,13 @@ def synthesize_director_assessments(
     )
     previous_synthesis_sha256: HashDigest | None = None
     rounds_used = 1
+    if previous_synthesis is None and (
+        previous_tasks is not None or previous_assessments is not None
+    ):
+        raise DirectorMeshError(
+            "director.synthesis.predecessor_evidence",
+            "round-one synthesis cannot carry unused predecessor evidence",
+        )
     if previous_synthesis is not None:
         director_synthesis_to_mapping(previous_synthesis)
         if (
@@ -945,6 +969,27 @@ def synthesize_director_assessments(
             raise DirectorMeshError(
                 "director.synthesis.round_limit",
                 "synthesis exceeds maximum conflict rounds",
+            )
+        if previous_tasks is None or previous_assessments is None:
+            raise DirectorMeshError(
+                "director.synthesis.predecessor_evidence",
+                "round two requires the complete round-one task and assessment evidence",
+            )
+        expected_previous = synthesize_director_assessments(
+            blueprint=blueprint,
+            charters=charter_values,
+            activation=activation,
+            source_bundle=source_bundle,
+            tasks=tuple(previous_tasks),
+            assessments=tuple(previous_assessments),
+        )
+        if (
+            expected_previous.synthesis != previous_synthesis
+            or expected_previous.synthesis.status is not SynthesisStatus.BLOCKED
+        ):
+            raise DirectorMeshError(
+                "director.synthesis.predecessor_binding",
+                "previous synthesis does not match the complete round-one evidence",
             )
         rounds_used = previous_synthesis.rounds_used + 1
         previous_synthesis_sha256 = previous_synthesis.synthesis_sha256
@@ -1171,6 +1216,8 @@ def verify_coherent_blueprint_promotion(
     tasks: Iterable[DirectorTaskPlan],
     assessments: Iterable[DirectorAssessment],
     previous_synthesis: DirectorSynthesis | None = None,
+    previous_tasks: Iterable[DirectorTaskPlan] | None = None,
+    previous_assessments: Iterable[DirectorAssessment] | None = None,
 ) -> VerifiedBlueprintPromotion:
     """Recompute a promotion from the complete evidence bundle.
 
@@ -1189,6 +1236,12 @@ def verify_coherent_blueprint_promotion(
         tasks=tuple(tasks),
         assessments=tuple(assessments),
         previous_synthesis=previous_synthesis,
+        previous_tasks=(tuple(previous_tasks) if previous_tasks is not None else None),
+        previous_assessments=(
+            tuple(previous_assessments)
+            if previous_assessments is not None
+            else None
+        ),
     )
     if expected.blueprint is None or expected.synthesis.status is not SynthesisStatus.COHERENT:
         raise DirectorMeshError(

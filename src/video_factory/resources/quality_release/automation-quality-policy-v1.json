@@ -1,0 +1,67 @@
+{
+  "artifact_version": "quality-policy/1.0",
+  "policy_version": "be-lazy-quality-policy/1.0",
+  "required_dimensions": [
+    "technical_media",
+    "visual_conformance",
+    "cinematography",
+    "motion_naturalness",
+    "narrative_intent",
+    "continuity",
+    "audio",
+    "edit_rhythm",
+    "platform_compliance"
+  ],
+  "hard_dimensions": [
+    "technical_media",
+    "continuity",
+    "platform_compliance"
+  ],
+  "dimension_weights_bps": [
+    {
+      "dimension": "technical_media",
+      "weight_bps": 1500
+    },
+    {
+      "dimension": "visual_conformance",
+      "weight_bps": 1200
+    },
+    {
+      "dimension": "cinematography",
+      "weight_bps": 1000
+    },
+    {
+      "dimension": "motion_naturalness",
+      "weight_bps": 1000
+    },
+    {
+      "dimension": "narrative_intent",
+      "weight_bps": 1200
+    },
+    {
+      "dimension": "continuity",
+      "weight_bps": 1400
+    },
+    {
+      "dimension": "audio",
+      "weight_bps": 1000
+    },
+    {
+      "dimension": "edit_rhythm",
+      "weight_bps": 900
+    },
+    {
+      "dimension": "platform_compliance",
+      "weight_bps": 800
+    }
+  ],
+  "minimum_candidate_score_bps": 8000,
+  "minimum_confidence_bps": 8500,
+  "minimum_margin_bps": 500,
+  "maximum_remediation_retries": 2,
+  "minimum_progress_bps": 100,
+  "require_one_human_release_approval": true,
+  "unknown_state_fail_closed": true,
+  "policy_id": "quality-policy-74d7d35aef7eec943f7b",
+  "policy_sha256": "74d7d35aef7eec943f7b2bf5be1494c43606045ecdcd6a5e5607912c4f0bf1b6"
+}

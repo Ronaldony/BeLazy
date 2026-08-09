@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.video-factory.invalid/quality/quality-policy.schema.json",
+  "title": "Target-owned W05 quality and release policy",
+  "type": "object",
+  "required": [
+    "artifact_version", "policy_id", "policy_sha256", "policy_version",
+    "required_dimensions", "hard_dimensions", "dimension_weights_bps",
+    "minimum_candidate_score_bps", "minimum_confidence_bps",
+    "minimum_margin_bps", "maximum_remediation_retries",
+    "minimum_progress_bps", "require_one_human_release_approval",
+    "unknown_state_fail_closed"
+  ],
+  "properties": {
+    "artifact_version": { "const": "quality-policy/1.0" },
+    "policy_id": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" },
+    "policy_sha256": { "$ref": "artifact-common.schema.json#/$defs/sha256" },
+    "policy_version": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$"
+    },
+    "required_dimensions": {
+      "type": "array", "minItems": 9, "maxItems": 9, "uniqueItems": true,
+      "items": { "$ref": "#/$defs/dimension" }
+    },
+    "hard_dimensions": {
+      "type": "array", "minItems": 1, "uniqueItems": true,
+      "items": { "$ref": "#/$defs/dimension" }
+    },
+    "dimension_weights_bps": {
+      "type": "array", "minItems": 9, "maxItems": 9,
+      "items": {
+        "type": "object", "required": ["dimension", "weight_bps"],
+        "properties": {
+          "dimension": { "$ref": "#/$defs/dimension" },
+          "weight_bps": { "$ref": "artifact-common.schema.json#/$defs/basisPoints" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "minimum_candidate_score_bps": { "$ref": "artifact-common.schema.json#/$defs/basisPoints" },
+    "minimum_confidence_bps": { "$ref": "artifact-common.schema.json#/$defs/basisPoints" },
+    "minimum_margin_bps": { "$ref": "artifact-common.schema.json#/$defs/basisPoints" },
+    "maximum_remediation_retries": { "type": "integer", "minimum": 1 },
+    "minimum_progress_bps": { "$ref": "artifact-common.schema.json#/$defs/basisPoints" },
+    "require_one_human_release_approval": { "const": true },
+    "unknown_state_fail_closed": { "const": true }
+  },
+  "$defs": {
+    "dimension": {
+      "enum": [
+        "technical_media", "visual_conformance", "cinematography",
+        "motion_naturalness", "narrative_intent", "continuity", "audio",
+        "edit_rhythm", "platform_compliance"
+      ]
+    }
+  },
+  "additionalProperties": false
+}

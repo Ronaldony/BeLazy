@@ -22,6 +22,7 @@ import zipfile
 SCHEMA_PREFIX = "video_factory/resources/schemas/"
 DIRECTOR_PREFIX = "video_factory/resources/directors/"
 WORKFLOW_AUTHORITY_PREFIX = "video_factory/resources/workflow_authority/"
+QUALITY_RELEASE_PREFIX = "video_factory/resources/quality_release/"
 EXPECTED_WHEEL_TAG = "py3-none-any"
 DIRECTOR_RESOURCE_ROOT = (
     Path(__file__).resolve().parents[1]
@@ -36,6 +37,13 @@ WORKFLOW_AUTHORITY_RESOURCE_ROOT = (
     / "video_factory"
     / "resources"
     / "workflow_authority"
+)
+QUALITY_RELEASE_RESOURCE_ROOT = (
+    Path(__file__).resolve().parents[1]
+    / "src"
+    / "video_factory"
+    / "resources"
+    / "quality_release"
 )
 
 
@@ -386,6 +394,54 @@ def _validate_workflow_authority_resources(
         raise ValueError("wheel workflow authority manifest does not match code projection")
 
 
+def _validate_quality_release_resources(
+    archive: zipfile.ZipFile, names: list[str]
+) -> None:
+    manifest_leaf = "quality-release-resource-manifest.json"
+    manifest_name = QUALITY_RELEASE_PREFIX + manifest_leaf
+    documents = {"automation-quality-policy-v1.json"}
+    expected = {
+        QUALITY_RELEASE_PREFIX + "__init__.py",
+        manifest_name,
+        *(QUALITY_RELEASE_PREFIX + value for value in documents),
+    }
+    actual = {name for name in names if name.startswith(QUALITY_RELEASE_PREFIX)}
+    if actual != expected:
+        raise ValueError("wheel quality/release resource member set is invalid")
+    manifest = _strict_object(archive.read(manifest_name), manifest_name)
+    if (
+        set(manifest) != {"manifest_version", "resource_count", "resources"}
+        or manifest.get("manifest_version")
+        != "quality-release-resource-manifest/1.0"
+        or manifest.get("resource_count") != 1
+    ):
+        raise ValueError("wheel quality/release manifest shape/version is invalid")
+    entries = manifest.get("resources")
+    if not isinstance(entries, list) or len(entries) != 1:
+        raise ValueError("wheel quality/release manifest entries are invalid")
+    filenames: list[str] = []
+    for entry in entries:
+        if not isinstance(entry, Mapping) or set(entry) != {"filename", "sha256"}:
+            raise ValueError("wheel quality/release manifest entry is invalid")
+        filename = entry.get("filename")
+        if not isinstance(filename, str):
+            raise ValueError("wheel quality/release filename is invalid")
+        filenames.append(filename)
+        payload = archive.read(QUALITY_RELEASE_PREFIX + filename)
+        if hashlib.sha256(payload).hexdigest() != entry.get("sha256"):
+            raise ValueError(f"wheel quality/release digest mismatch: {filename}")
+        if payload != (QUALITY_RELEASE_RESOURCE_ROOT / filename).read_bytes():
+            raise ValueError(
+                f"wheel quality/release resource does not match code projection: {filename}"
+            )
+    if filenames != sorted(filenames) or set(filenames) != documents:
+        raise ValueError("wheel quality/release manifest set is invalid")
+    if archive.read(manifest_name) != (
+        QUALITY_RELEASE_RESOURCE_ROOT / manifest_leaf
+    ).read_bytes():
+        raise ValueError("wheel quality/release manifest does not match code projection")
+
+
 def inspect_wheel(path: Path) -> tuple[int, int, str]:
     payload = path.read_bytes()
     with zipfile.ZipFile(path) as archive:
@@ -399,6 +455,7 @@ def inspect_wheel(path: Path) -> tuple[int, int, str]:
         _validate_dist_info(archive, names, path)
         _validate_director_resources(archive, names)
         _validate_workflow_authority_resources(archive, names)
+        _validate_quality_release_resources(archive, names)
         schema_names = sorted(
             name
             for name in names
@@ -495,9 +552,10 @@ import sys
 install = Path(sys.argv[1]).resolve()
 sys.path.insert(0, str(install))
 import video_factory
-from video_factory import authority, blueprint, directors, workflow
+from video_factory import authority, blueprint, directors, quality, release, selection, workflow
 from video_factory.artifacts import ArtifactSchemaRegistry, validate_artifact_mapping
 from video_factory.workflow.resources import validate_packaged_workflow_resources
+from video_factory.quality.resources import validate_packaged_quality_resources
 package_file = Path(video_factory.__file__).resolve()
 if not package_file.is_relative_to(install):
     raise SystemExit(f'package escaped isolated install: {package_file}')
@@ -519,6 +577,11 @@ if workflow.default_workflow_definition().workflow_version != 'episode-productio
 if authority.target_policy_bundle().policy_version != 'authority-policy/2.1':
     raise SystemExit('installed authority policy missing')
 validate_packaged_workflow_resources()
+validate_packaged_quality_resources()
+if quality.target_quality_policy().artifact_version != 'quality-policy/1.0':
+    raise SystemExit('installed quality policy missing')
+if not hasattr(selection, 'CandidateDecision') or not hasattr(release, 'ReleaseAssessment'):
+    raise SystemExit('installed W05 public contracts missing')
 valid = {'artifact_version': 'approval-requirement/1.0', 'rules_version': 'rules', 'episode_id': 'ep', 'requirement_id': 'req', 'capability_id': 'cap', 'bound_artifacts': [{'path': 'a.json', 'sha256': 'a'*64, 'artifact_version': 'brief/1.0'}], 'effective_config_sha256': 'b'*64, 'kind': 'packet', 'creates_evidence': False}
 if not validate_artifact_mapping(valid, registry=registry).ok:
     raise SystemExit('installed registry could not validate a valid artifact')

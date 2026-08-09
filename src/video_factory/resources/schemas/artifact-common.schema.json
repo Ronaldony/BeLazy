@@ -108,6 +108,45 @@
       },
       "additionalProperties": false
     },
+    "basisPoints": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 10000
+    },
+    "canonicalReasonCodes": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/canonicalReasonCode" }
+    },
+    "mediaSubject": {
+      "type": "object",
+      "required": [
+        "shot_id",
+        "component_id",
+        "reference",
+        "byte_length",
+        "workspace_observation_sha256",
+        "observation_receipt_ref"
+      ],
+      "properties": {
+        "shot_id": { "$ref": "#/$defs/opaqueId" },
+        "component_id": { "$ref": "#/$defs/opaqueId" },
+        "reference": { "$ref": "#/$defs/boundArtifact" },
+        "byte_length": { "type": "integer", "minimum": 0 },
+        "workspace_observation_sha256": { "$ref": "#/$defs/sha256" },
+        "observation_receipt_ref": {
+          "allOf": [
+            { "$ref": "#/$defs/boundArtifact" },
+            {
+              "properties": {
+                "artifact_version": { "const": "quality-observation-receipt/1.0" }
+              }
+            }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
     "blueprintFieldPath": {
       "type": "string",
       "pattern": "^[a-z][a-z0-9_-]*(?:\\.[a-z0-9][a-z0-9_-]*)+$"

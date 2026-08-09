@@ -30,6 +30,17 @@ from video_factory.directors import (
     DirectorTaskPlan,
     VerifiedBlueprintPromotion,
 )
+from video_factory.quality import (
+    CurrentQualityEvaluationVerifier,
+    CurrentQualityEvidenceResolver,
+    QualityBundle,
+    QualityEvaluatorPort,
+    RemediationAttemptLedger,
+    RemediationPlan,
+)
+from video_factory.release import ReleaseAssessment, ReleaseCandidate
+from video_factory.selection import CandidateDecision
+import video_factory.release as release_api
 
 
 def _field_names(contract: type[object]) -> tuple[str, ...]:
@@ -184,3 +195,18 @@ def test_blueprint_and_director_contract_shapes_are_explicit() -> None:
     assert "execution_receipt" in _field_names(DirectorAssessment)
     assert "assess" in DirectorRuntimePort.__dict__
     assert "execute" not in DirectorRuntimePort.__dict__
+
+
+def test_w05_contracts_keep_observation_and_execution_behind_ports() -> None:
+    assert "resolve_current" in CurrentQualityEvidenceResolver.__dict__
+    assert "verify_current" in CurrentQualityEvaluationVerifier.__dict__
+    assert "evaluate" in QualityEvaluatorPort.__dict__
+    assert "reserve_current" in RemediationAttemptLedger.__dict__
+    assert "execute" not in CurrentQualityEvidenceResolver.__dict__
+    assert "execute" not in CurrentQualityEvaluationVerifier.__dict__
+    assert not any("publisher" in name.casefold() for name in release_api.__all__)
+    assert "authority_effect" in _field_names(QualityBundle)
+    assert "full_pipeline_rerun" in _field_names(RemediationPlan)
+    assert "authority_effect" in _field_names(CandidateDecision)
+    assert "publish_performed" in _field_names(ReleaseAssessment)
+    assert "authority_effect" in _field_names(ReleaseCandidate)

@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.video-factory.invalid/release/destination-binding.schema.json",
+  "title": "Non-secret exact release destination binding",
+  "type": "object",
+  "required": [
+    "artifact_version", "destination_id", "destination_sha256", "platform",
+    "channel_account_id", "visibility", "locale", "region",
+    "scheduled_for", "policy_sha256", "authority_effect"
+  ],
+  "properties": {
+    "artifact_version": { "const": "destination-binding/1.0" },
+    "destination_id": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" },
+    "destination_sha256": { "$ref": "artifact-common.schema.json#/$defs/sha256" },
+    "platform": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" },
+    "channel_account_id": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" },
+    "visibility": { "enum": ["private", "unlisted", "public"] },
+    "locale": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" },
+    "region": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" },
+    "scheduled_for": {
+      "oneOf": [
+        { "type": "null" },
+        { "type": "string", "format": "date-time" }
+      ]
+    },
+    "policy_sha256": { "$ref": "artifact-common.schema.json#/$defs/sha256" },
+    "authority_effect": { "const": "none" }
+  },
+  "additionalProperties": false
+}

@@ -69,15 +69,15 @@ def _rewrite(
 def _built_wheel(tmp_path: Path) -> Path:
     root = Path(__file__).resolve().parents[2]
     wheel, members = build_wheel(root, tmp_path / "wheel")
-    assert members == 203
+    assert members == 230
     return wheel
 
 
 def test_offline_wheel_record_metadata_and_tag_are_verified(tmp_path: Path) -> None:
     wheel = _built_wheel(tmp_path)
     members, schemas, digest = inspect_wheel(wheel)
-    assert members == 203
-    assert schemas == 73
+    assert members == 230
+    assert schemas == 80
     assert digest == hashlib.sha256(wheel.read_bytes()).hexdigest()
 
 
@@ -183,6 +183,45 @@ def test_wheel_rejects_coherently_rehashed_authority_policy_tamper(
             entry["sha256"] = hashlib.sha256(policy_bytes).hexdigest()
     manifest_bytes = _render(manifest)
     damaged = tmp_path / "authority-policy-coherent-tamper" / wheel.name
+    damaged.parent.mkdir()
+    _rewrite(
+        wheel,
+        damaged,
+        {policy_name: policy_bytes, manifest_name: manifest_bytes},
+        refresh_record=True,
+    )
+    with pytest.raises(ValueError, match="code projection"):
+        inspect_wheel(damaged)
+
+
+def test_wheel_rejects_coherently_rehashed_quality_policy_tamper(
+    tmp_path: Path,
+) -> None:
+    wheel = _built_wheel(tmp_path)
+    policy_name = (
+        "video_factory/resources/quality_release/"
+        "automation-quality-policy-v1.json"
+    )
+    manifest_name = (
+        "video_factory/resources/quality_release/"
+        "quality-release-resource-manifest.json"
+    )
+    with zipfile.ZipFile(wheel) as archive:
+        policy = json.loads(archive.read(policy_name))
+        manifest = json.loads(archive.read(manifest_name))
+    policy["minimum_candidate_score_bps"] = 1
+    policy_identity = {
+        key: value
+        for key, value in policy.items()
+        if key not in {"policy_id", "policy_sha256"}
+    }
+    policy_sha = _canonical_sha256(policy_identity)
+    policy["policy_id"] = f"quality-policy-{policy_sha[:20]}"
+    policy["policy_sha256"] = policy_sha
+    policy_bytes = _render(policy)
+    manifest["resources"][0]["sha256"] = hashlib.sha256(policy_bytes).hexdigest()
+    manifest_bytes = _render(manifest)
+    damaged = tmp_path / "quality-policy-coherent-tamper" / wheel.name
     damaged.parent.mkdir()
     _rewrite(
         wheel,

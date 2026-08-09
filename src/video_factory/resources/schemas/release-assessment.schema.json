@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.video-factory.invalid/release/release-assessment.schema.json",
+  "title": "Non-publishing W05 release assessment",
+  "type": "object",
+  "required": [
+    "artifact_version", "assessment_id", "assessment_sha256",
+    "release_candidate_ref", "release_candidate_sha256", "gate_context",
+    "destination_sha256", "evaluated_at", "authority_request_sha256",
+    "risk_assessment_sha256", "authority_decision_sha256",
+    "authority_receipt_sha256", "approval_request", "status", "reason_codes",
+    "required_independent_humans", "publish_performed", "authority_effect"
+  ],
+  "properties": {
+    "artifact_version": { "const": "release-assessment/1.0" },
+    "assessment_id": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" },
+    "assessment_sha256": { "$ref": "artifact-common.schema.json#/$defs/sha256" },
+    "release_candidate_ref": { "$ref": "artifact-common.schema.json#/$defs/boundArtifact" },
+    "release_candidate_sha256": { "$ref": "artifact-common.schema.json#/$defs/sha256" },
+    "gate_context": { "$ref": "artifact-common.schema.json#/$defs/gateContext" },
+    "destination_sha256": { "$ref": "artifact-common.schema.json#/$defs/sha256" },
+    "evaluated_at": { "type": "string", "format": "date-time" },
+    "authority_request_sha256": { "$ref": "#/$defs/nullableSha" },
+    "risk_assessment_sha256": { "$ref": "#/$defs/nullableSha" },
+    "authority_decision_sha256": { "$ref": "#/$defs/nullableSha" },
+    "authority_receipt_sha256": { "$ref": "#/$defs/nullableSha" },
+    "approval_request": {
+      "oneOf": [
+        { "type": "null" },
+        { "$ref": "approval-request.schema.json" }
+      ]
+    },
+    "status": { "enum": ["ready", "approval_required", "denied"] },
+    "reason_codes": { "$ref": "artifact-common.schema.json#/$defs/canonicalReasonCodes" },
+    "required_independent_humans": { "const": 1 },
+    "publish_performed": { "const": false },
+    "authority_effect": { "const": "none" }
+  },
+  "$defs": {
+    "nullableSha": {
+      "oneOf": [
+        { "type": "null" },
+        { "$ref": "artifact-common.schema.json#/$defs/sha256" }
+      ]
+    }
+  },
+  "additionalProperties": false
+}

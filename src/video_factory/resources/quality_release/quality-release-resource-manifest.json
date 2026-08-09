@@ -1,0 +1,10 @@
+{
+  "manifest_version": "quality-release-resource-manifest/1.0",
+  "resource_count": 1,
+  "resources": [
+    {
+      "filename": "automation-quality-policy-v1.json",
+      "sha256": "cd249c6b7bf54129379ea32c55bb277425361e19f001161d3c1e04d7a05696d7"
+    }
+  ]
+}

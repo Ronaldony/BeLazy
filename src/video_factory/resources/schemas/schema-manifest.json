@@ -1,7 +1,7 @@
 {
   "manifest_version": "video-factory-schema-manifest/1.0",
-  "schema_count": 73,
-  "registered_version_count": 68,
+  "schema_count": 80,
+  "registered_version_count": 75,
   "schemas": [
     {
       "filename": "action-risk-assessment.schema.json",
@@ -29,7 +29,7 @@
     },
     {
       "filename": "artifact-common.schema.json",
-      "sha256": "14f0b540e96d52165c9841d6950dfaa009931e6543374fb887778f25f3d1b81e",
+      "sha256": "076fd2944de3d9e1d5078c5271d078e2c7c2785dba58572c8e21ce352270f05e",
       "schema_id": "https://schemas.video-factory.invalid/artifact/artifact-common.schema.json",
       "artifact_version": null
     },
@@ -74,6 +74,12 @@
       "sha256": "52d153a0282c5bc4ab29c221c9e41dec1503383432349bafd459e4b889919ef8",
       "schema_id": "https://schemas.video-factory.invalid/artifact/brief.schema.json",
       "artifact_version": "brief/1.0"
+    },
+    {
+      "filename": "candidate-decision.schema.json",
+      "sha256": "93bb87c6ca812c7a97b8edd05c39141c64f7f98196ad078efb3d506a8a842e46",
+      "schema_id": "https://schemas.video-factory.invalid/selection/candidate-decision.schema.json",
+      "artifact_version": "candidate-decision/1.0"
     },
     {
       "filename": "candidate-ranking.schema.json",
@@ -122,6 +128,12 @@
       "sha256": "1e66faa4f4d698b121e79655196a3be1b4899bd8348909b3b18ef9b5afd46a6a",
       "schema_id": "https://schemas.video-factory.invalid/artifact/continuity-qc.schema.json",
       "artifact_version": "continuity-qc/1.0"
+    },
+    {
+      "filename": "destination-binding.schema.json",
+      "sha256": "1645a03a2e97f46efd10a888a96d8a65769d9c56ca0e83f8f0f25bdaf0582f14",
+      "schema_id": "https://schemas.video-factory.invalid/release/destination-binding.schema.json",
+      "artifact_version": "destination-binding/1.0"
     },
     {
       "filename": "director-assessment.schema.json",
@@ -340,6 +352,18 @@
       "artifact_version": "publish-metadata-draft/1.0"
     },
     {
+      "filename": "quality-bundle.schema.json",
+      "sha256": "45ab19b62cc7d0470bdc6573168b69f51223070335d0b67166db333abf84fce7",
+      "schema_id": "https://schemas.video-factory.invalid/quality/quality-bundle.schema.json",
+      "artifact_version": "quality-bundle/1.0"
+    },
+    {
+      "filename": "quality-policy.schema.json",
+      "sha256": "0aee5978bc0b59330d3375230e58dc17c990cbb787caed6d32cf529ff92ff646",
+      "schema_id": "https://schemas.video-factory.invalid/quality/quality-policy.schema.json",
+      "artifact_version": "quality-policy/1.0"
+    },
+    {
       "filename": "reference-manifest.schema.json",
       "sha256": "504c955671ead3b37d7bce0c7e832029b84aea03d5fb8f9b9e4cafd2be71b1b6",
       "schema_id": "https://schemas.video-factory.invalid/artifact/reference-manifest.schema.json",
@@ -350,6 +374,24 @@
       "sha256": "7f4844a5d907afcce79631137fdc2cbe1544048ce1bfaab50a775c7197da8860",
       "schema_id": "https://schemas.video-factory.invalid/artifact/reference-review.schema.json",
       "artifact_version": "reference-review/1.0"
+    },
+    {
+      "filename": "release-assessment.schema.json",
+      "sha256": "b502e40d4806c7950003e767a48ba8e70b3af7d492258e4334d95b9991ff29c5",
+      "schema_id": "https://schemas.video-factory.invalid/release/release-assessment.schema.json",
+      "artifact_version": "release-assessment/1.0"
+    },
+    {
+      "filename": "release-candidate.schema.json",
+      "sha256": "82489ba88d8a1f10b52e43b268fb49ec139395d19168ae0ca2800ce5f3e3b384",
+      "schema_id": "https://schemas.video-factory.invalid/release/release-candidate.schema.json",
+      "artifact_version": "release-candidate/1.0"
+    },
+    {
+      "filename": "remediation-plan.schema.json",
+      "sha256": "6c270f7dc8f0ec00497f5c3e5ab773b29903e0b48137b606bf5e5f6971262145",
+      "schema_id": "https://schemas.video-factory.invalid/quality/remediation-plan.schema.json",
+      "artifact_version": "remediation-plan/1.0"
     },
     {
       "filename": "retro-report.schema.json",

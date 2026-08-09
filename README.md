@@ -40,9 +40,28 @@ forbids standing grants. Managed mutation remains fixed R4 and requires both
 the W04 dual-human decision and its existing exact break-glass evidence.
 
 The repository packages the workflow, authority policy, parity normalization,
-73 schemas (68 registered artifact versions), and their exact manifests in the
+quality/release policy, 80 schemas (75 registered artifact versions), and their
+exact manifests in the
 offline wheel. Concrete persistent ledger, executor, and crash-recovery
 implementations remain deferred to the runtime wave.
+
+## Automated selection, quality, and release boundary
+
+W05 adds a non-side-effect automation plane. A QualityBundle covers nine
+independent dimensions for exact current media; hard, safety, continuity, and
+platform failures cannot be hidden by averages. CandidateDecision selects
+automatically only with current media/evaluator evidence, a unique winner at
+all score/confidence/margin thresholds, and current W04 trusted-ledger
+authority. Otherwise it records a stable escalation or denial reason.
+
+ReleaseCandidate binds final media, metadata, subtitle/accessibility,
+thumbnail, integrated quality, selection provenance, destination, context, and
+workspace observation without creating an authority digest cycle. A later
+ReleaseAssessment requires exactly one current one-shot human release
+approval. It can make the package eligible for handoff, but never publishes:
+there is no publisher API and every W05 artifact has `authority_effect=none`.
+Legacy ranking/edit artifacts remain unchanged and their projection is
+read-only and non-current; runtime cutover remains W06 work.
 
 ## 0.3 continuity
 

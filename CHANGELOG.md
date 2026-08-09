@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+- Added W05 exact-media quality, automatic selection, and release-handoff
+  contracts. QualityBundle requires nine independent dimensions and trusted
+  current media/evaluator receipts; hard and safety failures dominate scores,
+  while remediation remains affected-target-only with receipt-bound bounded
+  history.
+- Added confidence/score/margin-bound CandidateDecision with current W04
+  trusted-ledger verification. Legacy candidate-ranking/edit-selection truth
+  semantics remain unchanged; the compatibility projection is read-only,
+  non-current, and never claims human selection.
+- Added cycle-free DestinationBinding, ReleaseCandidate, and ReleaseAssessment.
+  Initial release retains exactly one current human approval, creates no human
+  evidence, performs no publish action, and leaves campaign activation and all
+  runtime upload/reconciliation work to W06. Added seven closed schemas and an
+  exact packaged quality-policy resource, bringing the wheel registry to 80
+  schemas and 75 registered artifact versions.
 - Bound W04 incremental invalidation to sealed, mode-material adapter inputs:
   Rapid skips irrelevant review/approval/time changes, while current Standard
   and Controlled approvals invalidate their exact dependent claims. Replaced

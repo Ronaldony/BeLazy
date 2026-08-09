@@ -35,6 +35,9 @@ where = ["src"]
 "video_factory.resources.workflow_authority" = [
     "*.json",
 ]
+"video_factory.resources.quality_release" = [
+    "*.json",
+]
 
 [tool.pytest.ini_options]
 # Default runs every registered tier. Filter with -m when needed, e.g.

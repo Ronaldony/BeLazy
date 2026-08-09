@@ -43,6 +43,9 @@ Production planning is evidence-based, not presence-based:
 | `video_factory.approvals` | pending requirements and granted evidence as distinct contracts; deterministic requirement IDs and exact evidence binding |
 | `video_factory.workflow` | target-owned versioned claims/gates/actions DAG, complete blocker and parallel-frontier evaluation, incremental invalidation, per-action executable plan identities, and non-authorizing legacy parity reports |
 | `video_factory.authority` | separate assurance/autonomy/risk contracts, exact action requests, parse-only standing grants, non-authorizing approval requests, target policy classification, authority decisions, and trusted ledger verification/revalidation ports |
+| `video_factory.quality` | exact-media nine-dimension QualityBundle aggregation, target-owned hard gates, current media/evaluator-receipt verification ports, and bounded affected-target-only remediation plans |
+| `video_factory.selection` | confidence/score/margin-bound CandidateDecision with current W04 authority and a read-only non-current legacy ranking projection |
+| `video_factory.release` | non-secret destination binding, cycle-free ReleaseCandidate identity, and exactly-one-human non-publishing ReleaseAssessment handoff |
 | `video_factory.feasibility` | pure checks for capability, minimum duration, first-frame aspect/before-state, continuity anchors, cross-shot first-frame state carryover, and unsupported render dependencies |
 | `video_factory.qc` | injected constraints with pass/warn/fail/inconclusive/not-applicable outcomes and fallback measurement hints |
 | `video_factory.continuity` | cross-shot comparison of one opaque element between two generated clips (relative-scale / orientation-shape / presence); plan-only, caller-supplied finite nonnegative tolerances, closed measurement serialization, and pure serialized-document rejudgment |
@@ -85,6 +88,9 @@ This generalizes the existing `EncodeCommandPlan` pattern (`executed=False` alwa
 | `build_generation_readiness` | `GenerationReadinessPlan` | `ready` preserves structural legacy planning and diagnostics; `authorization_ready` is always false in W04 and a separate authority decision is required | stale/missing/expired evidence, context, or workspace trust; Rapid mode |
 | `build_declarative_gate_run` / `evaluate_declarative_gate_run` / `build_executable_production_plan` | `DeclarativeGateRun` / `WorkflowEvaluation` / `ExecutableProductionPlan` | only mode-material gate helpers run; sealed input digests drive transitive invalidation, every blocker/frontier item is preserved, and each action gets its own material-context/plan digest; `authority_effect=none` | unknown/cyclic definition, missing gate, stale context, invalid incremental reuse |
 | `evaluate_authority` / `revalidate_authority_for_side_effect` | `ActionRiskAssessment` / `AuthorityDecision` / `AuthorityVerificationReceipt` | target policy recomputes risk and a trusted ledger proves current scope, signature/ledger state, revocation, limits, identity, and purpose immediately before a side effect | unknown action, stale context, insufficient source, revoked/expired grant, kill switch, budget/idempotency mismatch |
+| `build_quality_bundle` / `verify_quality_bundle` / `plan_targeted_remediation` | `QualityBundle` / `RemediationPlan` | exact nine-dimension coverage, current media and evaluator receipts, hard-failure dominance, and only affected targets within bounded lineage | missing/duplicate/stale evaluation, hard/safety failure, replay, no progress, regression, oscillation, exhausted retries |
+| `build_candidate_decision` / `verify_candidate_decision` | `CandidateDecision` | unique winner meets score/confidence/margin thresholds and exact W04 authority is current | tie, low score/confidence/margin, stale quality, missing or rebound authority |
+| `build_release_candidate` / `assess_release_candidate` | `ReleaseCandidate` / `ReleaseAssessment` | exact release constituents are current and one current human approval makes the handoff eligible; never publishes | stale constituent/context/destination, failed quality, unverified selection, missing or invalid human authority |
 | `draft_*_config` | validated config mapping | schema-valid channel/concept/episode draft | invalid scope id / settings |
 | `build_core_lock` | TOML `str` | deterministic lock document text (caller writes file) | invalid artifact / path escape |
 | `plan_wheel_build` | `WheelBuildPlan` | `python -m build --wheel` argv + vendor placement notes | invalid version |
@@ -259,6 +265,50 @@ W04 request must match it, and that requester cannot appear in either human
 approver set. Concrete durable ledger storage, signatures, clocks, budget settlement,
 executor/journal persistence, and crash/TOCTOU recovery remain W06 runtime
 implementations behind the completed W04 ports.
+
+## Automated selection, integrated quality, and release handoff (W05)
+
+W05 is an additive, non-side-effect automation plane. It does not reinterpret
+legacy `candidate-ranking/1.0` or `edit-manifest/1.0`, alter the W04
+characterization corpus, or cut the legacy orchestration path over before W06.
+
+`quality-bundle/1.0` covers exactly nine target-owned dimensions for every
+exact `MediaSubject`. A media subject binds path, byte SHA-256, byte length,
+workspace-observation SHA-256, and an immutable observation receipt. Each
+dimension binds a distinct evaluator identity and receipt. Stored fields are
+structural only: production verification re-resolves the media and verifies
+every evaluation receipt through trusted runtime ports. Technical media,
+continuity, platform compliance, explicit hard failures, and safety failures
+cannot be averaged away. Remediation is limited to the exact failed
+shot/component/dimension set, records immutable attempt receipts and
+cumulative use, and stops on replay, no progress, regression, oscillation, or
+the target two-retry ceiling.
+
+`candidate-decision/1.0` requires at least two unique candidates per shot.
+Auto-selection requires a passed current QualityBundle, current trusted-ledger
+W04 authority for `rank_generation_candidates`, score at least 8000,
+confidence at least 8500, and a unique top margin at least 500 basis points.
+Threshold equality passes; ties and lower values escalate. A downstream
+consumer receives the original verification inputs and cleanly recomputes a
+persisted decision. The legacy projection is diagnostic-only,
+`current_eligible=false`, `authority_effect=none`, and never claims a human
+selection.
+
+Release identity is cycle-free. `release-candidate/1.0` is built before its
+authority request and binds exact final media, metadata, subtitle,
+accessibility, thumbnail, release QualityBundle, CandidateDecision,
+DestinationBinding, policy, GateContext, and workspace observation. W04
+`approve_publish` then consumes that exact candidate and constituent set, and
+`release-assessment/1.0` binds the result. Initial W05 policy requires exactly
+one current one-shot human principal; release campaign remains disabled.
+Missing approval yields only a non-authorizing `ApprovalRequest`. Even a ready
+assessment has `publish_performed=false` and `authority_effect=none`; there is
+no W05 publisher API.
+
+The seven W05 artifact schemas and exact quality-policy resource are packaged
+with semantic wheel verification. Concrete evaluators/resolvers, durable
+attempt ledgers, execution, upload, publication, and migration cutover remain
+W06 responsibilities.
 
 ## Managed mutation plane (W02)
 

@@ -28,7 +28,7 @@ evidence and no external side effects.
 | W02 Managed Mutation | passed | MUT-001..004 | `17107e815996e18032132a739140aeeae0b2716e` |
 | W03 Director/Blueprint | passed | BP-001, DIR-001, DIR-002, BP-002 | `254e20fdb63c77d6e84d746664a5f1a0a9524c03` |
 | W04 Workflow/Authority | passed | WF-001, AUTH-001, AUTH-002, WF-002 | `5bc36f63d51e0a78c42603fa13946b691ed67585` |
-| W05 Automation/Quality/Release | reviewing | SEL-001, QA-001, REL-001 | pending |
+| W05 Automation/Quality/Release | passed | SEL-001, QA-001, REL-001 | this checkpoint commit; exact hash recorded by recovery seal |
 | W06 Runtime/Migration | pending | RUN-001, RUN-002, MIG-001, REL-002 | pending |
 | W07 Final Audit | pending | AUDIT-001..003 | pending |
 

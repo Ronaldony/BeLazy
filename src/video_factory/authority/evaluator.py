@@ -1439,8 +1439,13 @@ def validate_initial_authority_decision_binding(
         != _authority_basis_sha256(receipt.authority_source, receipt)
         or decision.verification_receipt_id != receipt.receipt_id
         or decision.verification_receipt_sha256 != receipt.receipt_sha256
-        or decision.evaluated_at != receipt.evaluated_at
-        or decision.valid_until != receipt.valid_until
+        or parse_rfc3339_datetime(decision.evaluated_at)
+        != parse_rfc3339_datetime(receipt.evaluated_at)
+        or (
+            decision.valid_until is None
+            or parse_rfc3339_datetime(decision.valid_until)
+            != parse_rfc3339_datetime(receipt.valid_until)
+        )
         or decision.predispatch_required is not request.side_effect
         or decision.authority_effect != "execution_authority"
     ):

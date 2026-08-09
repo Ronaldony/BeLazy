@@ -48,8 +48,10 @@ from video_factory.authority import (
     target_policy_bundle,
     validate_action_authority_request,
     validate_approval_request,
+    validate_initial_authority_decision_binding,
     validate_standing_authorization,
 )
+from video_factory.config import canonical_sha256
 from video_factory.domain import (
     ArtifactReference,
     ArtifactVersion,
@@ -1355,6 +1357,148 @@ def test_policy_workflow_authority_requires_trusted_evaluation_receipt() -> None
     assert granted.source is AuthoritySource.POLICY
     assert granted.verification_receipt_sha256 is not None
     assert granted.authority_basis_sha256 is not None
+
+
+@pytest.mark.parametrize(
+    ("evaluated_at_text", "valid_until_text"),
+    (
+        ("2026-08-08T00:00:00Z", "2026-08-08T00:05:00Z"),
+        ("2026-08-08T09:00:00+09:00", "2026-08-08T09:05:00+09:00"),
+    ),
+)
+def test_initial_authority_accepts_equivalent_rfc3339_instants(
+    evaluated_at_text: str,
+    valid_until_text: str,
+) -> None:
+    class EquivalentTimestampLedger(FakeLedger):
+        def _receipt(self, *args, **kwargs):
+            receipt = super()._receipt(*args, **kwargs)
+            provisional = replace(
+                receipt,
+                receipt_id=OpaqueId("pending"),
+                receipt_sha256=HashDigest("0" * 64),
+                evaluated_at=evaluated_at_text,
+                valid_until=valid_until_text,
+            )
+            digest = authority_verification_receipt_sha256(provisional)
+            return replace(
+                provisional,
+                receipt_id=OpaqueId(f"authority-receipt-{str(digest)[:20]}"),
+                receipt_sha256=digest,
+            )
+
+    request = _request("create_storyboard")
+    risk, granted = evaluate_authority(
+        request,
+        target_policy_bundle(),
+        ledger=EquivalentTimestampLedger(AuthoritySource.POLICY, ()),
+        evaluated_at=NOW,
+    )
+    assert risk.effective_risk is ActionRisk.R1
+    assert granted.status is AuthorityDecisionStatus.AUTHORIZED
+    assert granted.evaluated_at == NOW.isoformat()
+    assert granted.valid_until == valid_until_text
+
+
+def test_initial_authority_rejects_different_evaluated_at_instant() -> None:
+    class ReboundTimestampLedger(FakeLedger):
+        def _receipt(self, *args, **kwargs):
+            receipt = super()._receipt(*args, **kwargs)
+            provisional = replace(
+                receipt,
+                receipt_id=OpaqueId("pending"),
+                receipt_sha256=HashDigest("0" * 64),
+                evaluated_at="2026-08-08T00:00:01Z",
+            )
+            digest = authority_verification_receipt_sha256(provisional)
+            return replace(
+                provisional,
+                receipt_id=OpaqueId(f"authority-receipt-{str(digest)[:20]}"),
+                receipt_sha256=digest,
+            )
+
+    request = _request("create_storyboard")
+    with pytest.raises(AuthorityContractError):
+        evaluate_authority(
+            request,
+            target_policy_bundle(),
+            ledger=ReboundTimestampLedger(AuthoritySource.POLICY, ()),
+            evaluated_at=NOW,
+        )
+
+
+@pytest.mark.parametrize(
+    ("receipt_valid_until", "accepted"),
+    (
+        ("2026-08-08T00:05:00Z", True),
+        ("2026-08-08T09:05:00+09:00", True),
+        ("2026-08-08T00:05:01Z", False),
+    ),
+)
+def test_initial_authority_compares_valid_until_as_an_instant(
+    receipt_valid_until: str,
+    accepted: bool,
+) -> None:
+    request = _request("create_storyboard")
+    ledger = FakeLedger(AuthoritySource.POLICY, ())
+    risk, decision = evaluate_authority(
+        request,
+        target_policy_bundle(),
+        ledger=ledger,
+        evaluated_at=NOW,
+    )
+    receipt = ledger._receipt(
+        request,
+        risk.assessment_sha256,
+        purpose=VerificationPurpose.INITIAL_DECISION,
+        evaluated_at=NOW,
+    )
+    provisional_receipt = replace(
+        receipt,
+        receipt_id=OpaqueId("pending"),
+        receipt_sha256=HashDigest("0" * 64),
+        valid_until=receipt_valid_until,
+    )
+    receipt_digest = authority_verification_receipt_sha256(provisional_receipt)
+    rebound_receipt = replace(
+        provisional_receipt,
+        receipt_id=OpaqueId(f"authority-receipt-{str(receipt_digest)[:20]}"),
+        receipt_sha256=receipt_digest,
+    )
+    provisional_decision = replace(
+        decision,
+        decision_id=OpaqueId("pending"),
+        decision_sha256=HashDigest("0" * 64),
+        authority_basis_sha256=authority_evaluator._authority_basis_sha256(
+            rebound_receipt.authority_source,
+            rebound_receipt,
+        ),
+        verification_receipt_id=rebound_receipt.receipt_id,
+        verification_receipt_sha256=rebound_receipt.receipt_sha256,
+    )
+    decision_digest = canonical_sha256(
+        authority_evaluator._decision_identity(provisional_decision)
+    )
+    rebound_decision = replace(
+        provisional_decision,
+        decision_id=OpaqueId(f"authority-decision-{str(decision_digest)[:20]}"),
+        decision_sha256=decision_digest,
+    )
+    if accepted:
+        assert validate_initial_authority_decision_binding(
+            rebound_decision,
+            request,
+            risk,
+            rebound_receipt,
+        ) is rebound_decision
+    else:
+        with pytest.raises(AuthorityContractError, match="not canonically derived"):
+            validate_initial_authority_decision_binding(
+                rebound_decision,
+                request,
+                risk,
+                rebound_receipt,
+            )
 
 
 def test_incremental_workflow_authority_preserves_exact_predecessor_chain() -> None:

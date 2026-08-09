@@ -21,6 +21,7 @@ from video_factory.authority import (
     target_policy_bundle,
     validate_action_authority_request,
     validate_authority_decision,
+    validate_initial_authority_decision_binding,
     validate_initial_authority_receipt_binding,
     validate_authority_verification_receipt,
     validate_risk_assessment,
@@ -107,6 +108,12 @@ def validate_initial_authority_evidence_structure(
             risk,
             target_policy_bundle(),
             parse_rfc3339_datetime(receipt.evaluated_at),
+        )
+        validate_initial_authority_decision_binding(
+            decision,
+            request,
+            risk,
+            receipt,
         )
         issued = parse_rfc3339_datetime(receipt.evaluated_at)
         valid_until = parse_rfc3339_datetime(receipt.valid_until)

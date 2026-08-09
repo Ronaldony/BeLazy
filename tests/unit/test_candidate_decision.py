@@ -704,6 +704,35 @@ def test_candidate_authority_evidence_rejects_missing_internal_components() -> N
                 receipt=rebound_receipt,
             )
 
+    decision_rebounds = (
+        {"matched_limit_sha256": HashDigest("e" * 64)},
+        {"authority_basis_sha256": HashDigest("f" * 64)},
+        {"predispatch_required": not evidence.decision.predispatch_required},
+        {"reason_codes": ("authority.ledger.rebound",)},
+    )
+    for decision_rebound in decision_rebounds:
+        provisional_decision = replace(
+            evidence.decision,
+            decision_id=OpaqueId("pending"),
+            decision_sha256=HashDigest("0" * 64),
+            **decision_rebound,
+        )
+        decision_digest = canonical_sha256(
+            _authority_decision_identity(provisional_decision)
+        )
+        rebound_decision = replace(
+            provisional_decision,
+            decision_id=OpaqueId(f"authority-decision-{str(decision_digest)[:20]}"),
+            decision_sha256=decision_digest,
+        )
+        with pytest.raises(QualityContractError, match="canonically bound"):
+            InitialAuthorityEvidence(
+                request=evidence.request,
+                risk=evidence.risk,
+                decision=rebound_decision,
+                receipt=evidence.receipt,
+            )
+
     forged = object.__new__(InitialAuthorityEvidence)
     object.__setattr__(
         forged,

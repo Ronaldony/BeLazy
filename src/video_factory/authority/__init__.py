@@ -50,6 +50,7 @@ from .evaluator import (
     validate_action_authority_request,
     validate_approval_request,
     validate_authority_decision,
+    validate_initial_authority_decision_binding,
     validate_initial_authority_receipt_binding,
     validate_authority_verification_receipt,
     validate_standing_authorization,

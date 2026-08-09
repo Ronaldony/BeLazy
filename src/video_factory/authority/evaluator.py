@@ -941,6 +941,18 @@ def _authority_basis_sha256(
     )
 
 
+def _matched_limit_sha256(request: ActionAuthorityRequest) -> HashDigest:
+    return canonical_sha256(
+        {
+            "scope": _scope_mapping(request.scope),
+            "profiles": {
+                "assurance": request.profiles.assurance.value,
+                "autonomy": request.profiles.autonomy.value,
+            },
+        }
+    )
+
+
 def validate_authority_verification_receipt(
     receipt: AuthorityVerificationReceipt,
 ) -> AuthorityVerificationReceipt:
@@ -1225,15 +1237,7 @@ def _build_decision(
 ) -> AuthorityDecision:
     valid_until = receipt.valid_until if receipt is not None else None
     matched = (
-        canonical_sha256(
-            {
-                "scope": _scope_mapping(request.scope),
-                "profiles": {
-                    "assurance": request.profiles.assurance.value,
-                    "autonomy": request.profiles.autonomy.value,
-                },
-            }
-        )
+        _matched_limit_sha256(request)
         if status is AuthorityDecisionStatus.AUTHORIZED
         else None
     )
@@ -1396,6 +1400,57 @@ def _effective_authority_requirement(
     )
 
 
+def validate_initial_authority_decision_binding(
+    decision: AuthorityDecision,
+    request: ActionAuthorityRequest,
+    risk: ActionRiskAssessment,
+    receipt: AuthorityVerificationReceipt,
+) -> AuthorityDecision:
+    """Validate every derived field of an authorized initial decision."""
+
+    validate_action_authority_request(request)
+    validate_risk_assessment(risk)
+    validate_authority_verification_receipt(receipt)
+    validate_authority_decision(decision)
+    required = _effective_authority_requirement(request, risk)
+    principals = tuple(
+        item.principal_id for item in receipt.principal_verifications
+    )
+    if (
+        not risk.supported
+        or request.requester_principal_id in principals
+        or not _source_allowed(
+            required,
+            risk.effective_risk,
+            receipt.authority_source,
+            receipt.principal_verifications,
+            request.requester_principal_id,
+        )
+        or decision.action_request_sha256 != request.request_sha256
+        or decision.gate_context_sha256 != gate_context_sha256(request.gate_context)
+        or decision.risk_assessment_sha256 != risk.assessment_sha256
+        or decision.effective_risk is not risk.effective_risk
+        or decision.required_authority is not required
+        or decision.status is not AuthorityDecisionStatus.AUTHORIZED
+        or decision.source is not receipt.authority_source
+        or decision.reason_codes != ("authority.ledger.current",)
+        or decision.matched_limit_sha256 != _matched_limit_sha256(request)
+        or decision.authority_basis_sha256
+        != _authority_basis_sha256(receipt.authority_source, receipt)
+        or decision.verification_receipt_id != receipt.receipt_id
+        or decision.verification_receipt_sha256 != receipt.receipt_sha256
+        or decision.evaluated_at != receipt.evaluated_at
+        or decision.valid_until != receipt.valid_until
+        or decision.predispatch_required is not request.side_effect
+        or decision.authority_effect != "execution_authority"
+    ):
+        raise AuthorityContractError(
+            "authority.decision.rebound",
+            "initial decision is not canonically derived from its request and receipt",
+        )
+    return decision
+
+
 def evaluate_authority(
     request: ActionAuthorityRequest,
     policy: PolicyBundle,
@@ -1507,10 +1562,16 @@ def evaluate_authority(
     if receipt.authority_source is AuthoritySource.STANDING_GRANT:
         if presented_grant is None or receipt.grant_sha256 != presented_grant.authorization_sha256:
             raise AuthorityContractError("authority.receipt.grant", "ledger receipt is not bound to the presented grant")
-    return risk, _build_decision(
+    decision = _build_decision(
         request, risk, status=AuthorityDecisionStatus.AUTHORIZED,
         source=receipt.authority_source, reasons=("authority.ledger.current",),
         evaluated_at=evaluated_at, required_authority=required, receipt=receipt,
+    )
+    return risk, validate_initial_authority_decision_binding(
+        decision,
+        request,
+        risk,
+        receipt,
     )
 
 
@@ -1640,15 +1701,7 @@ def revalidate_authority_for_side_effect(
             "current risk assessment is unsupported for side-effect authorization",
         )
     required = _effective_authority_requirement(request, risk)
-    expected_limit = canonical_sha256(
-        {
-            "scope": _scope_mapping(request.scope),
-            "profiles": {
-                "assurance": request.profiles.assurance.value,
-                "autonomy": request.profiles.autonomy.value,
-            },
-        }
-    )
+    expected_limit = _matched_limit_sha256(request)
     if (
         decision.risk_assessment_sha256 != risk.assessment_sha256
         or decision.effective_risk is not risk.effective_risk

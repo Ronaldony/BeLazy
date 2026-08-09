@@ -97,6 +97,7 @@ class ReleaseCandidateVerificationInputs:
     concept_id: str
     episode_id: str
     created_at: str
+    quality_origin_evaluated_at: str
     final_media: MediaSubject
     metadata_ref: ArtifactReference
     subtitle_accessibility_refs: tuple[ArtifactReference, ...]

@@ -244,6 +244,7 @@ def _decision(
         channel_id=str(base.scope.channel_id),
         concept_id=str(base.scope.concept_id),
         episode_id="episode-a",
+        quality_origin_evaluated_at=bundle.evaluated_at,
         quality_bundle_ref=bundle_ref,
         quality_bundle=bundle,
         candidate_sets=(candidate_set,),
@@ -269,12 +270,14 @@ def test_candidate_auto_selects_only_at_all_thresholds_with_current_authority() 
         channel_id=str(value.channel_id),
         concept_id=str(value.concept_id),
         episode_id=str(value.episode_id),
+        quality_origin_evaluated_at=bundle.evaluated_at,
         quality_bundle_ref=bundle_ref,
         quality_bundle=bundle,
         candidate_sets=(candidates,),
         policy=target_quality_policy(),
         current_context=value.gate_context,
         verified_at=NOW,
+        origin_evaluated_at=NOW,
         origin_authority=evidence,
         origin_authority_ledger=ledger,
         authority=evidence,
@@ -322,6 +325,7 @@ def test_exact_thresholds_pass_and_current_evidence_failures_deny() -> None:
         channel_id=str(value.channel_id),
         concept_id=str(value.concept_id),
         episode_id="episode-a",
+        quality_origin_evaluated_at=bundle.evaluated_at,
         quality_bundle_ref=bundle_ref,
         quality_bundle=bundle,
         candidate_sets=(candidates,),
@@ -342,6 +346,7 @@ def test_exact_thresholds_pass_and_current_evidence_failures_deny() -> None:
         channel_id=str(value.channel_id),
         concept_id=str(value.concept_id),
         episode_id="episode-a",
+        quality_origin_evaluated_at=bundle.evaluated_at,
         quality_bundle_ref=bundle_ref,
         quality_bundle=bundle,
         candidate_sets=(candidates,),
@@ -393,6 +398,7 @@ def test_every_confidence_receipt_is_current_and_authority_binds_full_input() ->
         channel_id=str(value.channel_id),
         concept_id=str(value.concept_id),
         episode_id="episode-a",
+        quality_origin_evaluated_at=bundle.evaluated_at,
         quality_bundle_ref=bundle_ref,
         quality_bundle=bundle,
         candidate_sets=(modified,),
@@ -468,6 +474,7 @@ def test_every_confidence_receipt_is_current_and_authority_binds_full_input() ->
         channel_id=str(value.channel_id),
         concept_id=str(value.concept_id),
         episode_id="episode-a",
+        quality_origin_evaluated_at=bundle.evaluated_at,
         quality_bundle_ref=bundle_ref,
         quality_bundle=bundle,
         candidate_sets=(candidates,),
@@ -510,12 +517,14 @@ def test_candidate_decision_reverifies_authority_at_current_time() -> None:
         channel_id=str(value.channel_id),
         concept_id=str(value.concept_id),
         episode_id=str(value.episode_id),
+        quality_origin_evaluated_at=bundle.evaluated_at,
         quality_bundle_ref=bundle_ref,
         quality_bundle=bundle,
         candidate_sets=(candidates,),
         policy=target_quality_policy(),
         current_context=value.gate_context,
         verified_at=later,
+        origin_evaluated_at=NOW,
         origin_authority=evidence,
         origin_authority_ledger=ledger,
         authority=current_evidence,
@@ -549,6 +558,7 @@ def test_candidate_authority_requires_exact_production_scope(scope_field: str) -
         channel_id=str(value.channel_id),
         concept_id=str(value.concept_id),
         episode_id=str(value.episode_id),
+        quality_origin_evaluated_at=bundle.evaluated_at,
         quality_bundle_ref=bundle_ref,
         quality_bundle=bundle,
         candidate_sets=(candidates,),
@@ -585,12 +595,14 @@ def test_candidate_origin_authority_and_timestamp_are_immutable() -> None:
         channel_id=str(value.channel_id),
         concept_id=str(value.concept_id),
         episode_id=str(value.episode_id),
+        quality_origin_evaluated_at=bundle.evaluated_at,
         quality_bundle_ref=bundle_ref,
         quality_bundle=bundle,
         candidate_sets=(candidates,),
         policy=target_quality_policy(),
         current_context=value.gate_context,
         verified_at=later,
+        origin_evaluated_at=NOW,
         origin_authority=evidence,
         origin_authority_ledger=ledger,
         authority=InitialAuthorityEvidence(
@@ -627,6 +639,51 @@ def test_candidate_origin_authority_and_timestamp_are_immutable() -> None:
             verify_candidate_decision(forged, verification)
 
 
+@pytest.mark.parametrize("hard_fail", [False, True])
+def test_candidate_origin_timestamp_is_immutable_without_authority(
+    hard_fail: bool,
+) -> None:
+    value, bundle_ref, bundle, candidates, _, _ = _decision(
+        authority=False,
+        hard_fail=hard_fail,
+    )
+    verification = CandidateDecisionVerificationInputs(
+        workspace_id=str(value.workspace_id),
+        channel_id=str(value.channel_id),
+        concept_id=str(value.concept_id),
+        episode_id=str(value.episode_id),
+        quality_origin_evaluated_at=bundle.evaluated_at,
+        quality_bundle_ref=bundle_ref,
+        quality_bundle=bundle,
+        candidate_sets=(candidates,),
+        policy=target_quality_policy(),
+        current_context=value.gate_context,
+        verified_at=NOW + timedelta(seconds=1),
+        origin_evaluated_at=NOW,
+        origin_authority=None,
+        origin_authority_ledger=None,
+        authority=None,
+        authority_ledger=None,
+        quality_resolver=_CurrentMediaResolver(),
+        evaluation_verifier=_CurrentEvaluationVerifier(),
+        confidence_verifier=_CurrentConfidenceVerifier(),
+    )
+    provisional = replace(
+        value,
+        decision_id=OpaqueId("pending"),
+        decision_sha256=HashDigest("0" * 64),
+        evaluated_at=(NOW + timedelta(milliseconds=500)).isoformat(),
+    )
+    digest = canonical_sha256(_selection_identity(provisional))
+    forged = replace(
+        provisional,
+        decision_id=OpaqueId(f"candidate-decision-{str(digest)[:20]}"),
+        decision_sha256=digest,
+    )
+    with pytest.raises(SelectionContractError, match="origin"):
+        verify_candidate_decision(forged, verification)
+
+
 def test_candidate_rejects_quality_bundle_from_the_future() -> None:
     value, bundle_ref, bundle, candidates, evidence, ledger = _decision()
     future_bundle = build_quality_bundle(
@@ -646,6 +703,7 @@ def test_candidate_rejects_quality_bundle_from_the_future() -> None:
             channel_id=str(value.channel_id),
             concept_id=str(value.concept_id),
             episode_id=str(value.episode_id),
+            quality_origin_evaluated_at=future_bundle.evaluated_at,
             quality_bundle_ref=future_ref,
             quality_bundle=future_bundle,
             candidate_sets=(candidates,),

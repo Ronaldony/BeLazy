@@ -22,9 +22,11 @@ Add a target-owned `quality-policy/1.0`, `quality-bundle/1.0`, and
 - Each subject has exactly one evaluation for each of the nine closed quality
   dimensions. Evaluator identities and immutable evaluator-receipt references
   are distinct.
-- A production verification call independently re-resolves current media and
-  verifies every evaluator receipt through injected trusted runtime ports.
-  Structural parsing and self-hashes never establish currentness.
+- A production verification call receives the bundle's origin evaluation time
+  independently, re-resolves current media, and verifies every evaluator
+  receipt at both the origin and current verification boundaries through an
+  injected trusted runtime port. Structural parsing, a claimed timestamp, and
+  self-hashes never establish origin or currentness.
 - Technical media, continuity, and platform compliance are hard dimensions.
   A hard or safety failure dominates weighted aggregation.
 - Remediation contains only the exact failed shot/component/dimension targets,

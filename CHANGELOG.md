@@ -3,13 +3,15 @@
 ## Unreleased
 
 - Added W05 exact-media quality, automatic selection, and release-handoff
-  contracts. QualityBundle requires nine independent dimensions and trusted
-  current media/evaluator receipts; hard and safety failures dominate scores,
+  contracts. QualityBundle requires nine independent dimensions, an
+  independently bound origin time, and trusted origin/current evaluator
+  receipts plus current media; hard and safety failures dominate scores,
   while remediation remains affected-target-only with receipt-bound bounded
   history.
 - Added confidence-receipt/score/margin-bound CandidateDecision with exact
-  workspace/channel/concept/episode scope, immutable origin-authority lineage,
-  separate current authority verification, future-QualityBundle rejection,
+  workspace/channel/concept/episode scope, independently bound immutable
+  origin time and authority lineage, separate current authority verification,
+  future-QualityBundle rejection,
   and exact `auto_select_candidates` W04 trusted-ledger verification. Legacy
   candidate-ranking/edit-selection truth
   semantics remain unchanged; the compatibility projection is read-only,

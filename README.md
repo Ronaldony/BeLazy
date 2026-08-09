@@ -48,12 +48,15 @@ implementations remain deferred to the runtime wave.
 ## Automated selection, quality, and release boundary
 
 W05 adds a non-side-effect automation plane. A QualityBundle covers nine
-independent dimensions for exact current media; hard, safety, continuity, and
-platform failures cannot be hidden by averages. CandidateDecision selects
+independent dimensions for exact current media and binds an independently
+supplied origin time; every evaluator receipt is verified at origin and again
+at the current consumer time. Hard, safety, continuity, and platform failures
+cannot be hidden by averages. CandidateDecision selects
 automatically only with current media/evaluator evidence, a trusted confidence
 receipt for every candidate, a unique winner at all score/confidence/margin
-thresholds, exact workspace/channel/concept/episode scope, and both original
-and current W04 `auto_select_candidates` trusted-ledger authority.
+thresholds, exact workspace/channel/concept/episode scope, an independently
+supplied immutable origin evaluation time, and both original and current W04
+`auto_select_candidates` trusted-ledger authority.
 Otherwise it records a stable escalation or denial reason.
 
 ReleaseCandidate binds final media, metadata, subtitle/accessibility,

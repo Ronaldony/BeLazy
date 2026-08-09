@@ -552,6 +552,7 @@ def validate_quality_bundle(value: QualityBundle) -> QualityBundle:
 def verify_quality_bundle(
     value: QualityBundle,
     *,
+    origin_evaluated_at: str,
     current_context: GateContext,
     policy: QualityPolicy,
     resolver: CurrentQualityEvidenceResolver,
@@ -563,7 +564,13 @@ def verify_quality_bundle(
     validate_quality_bundle(value)
     require_target_quality_policy(policy)
     require_gate_context(current_context)
-    parse_rfc3339_datetime(evaluated_at)
+    origin_time = parse_rfc3339_datetime(origin_evaluated_at)
+    current_time = parse_rfc3339_datetime(evaluated_at)
+    if origin_time > current_time:
+        raise QualityContractError(
+            "quality.bundle.time",
+            "current verification cannot predate the bundle origin",
+        )
     if value.gate_context != current_context or value.policy_sha256 != policy.policy_sha256:
         raise QualityContractError(
             "quality.bundle.stale",
@@ -589,29 +596,35 @@ def verify_quality_bundle(
                     "quality.bundle.media_stale",
                     "quality evidence is not bound to current exact media bytes",
                 )
-        try:
-            verified_evaluation = evaluation_verifier.verify_current(
-                evaluation,
-                gate_context=current_context,
-                policy=policy,
-                evaluated_at=evaluated_at,
-            )
-        except Exception as error:
-            raise QualityContractError(
-                "quality.bundle.evaluation_verifier_unavailable",
-                "current evaluator-receipt verification failed",
-            ) from error
-        if verified_evaluation != evaluation:
-            raise QualityContractError(
-                "quality.bundle.evaluation_stale",
-                "quality evaluation receipt is missing, stale, revoked, or rebound",
-            )
+        verification_times = (
+            (origin_evaluated_at, evaluated_at)
+            if origin_evaluated_at != evaluated_at
+            else (evaluated_at,)
+        )
+        for verification_time in verification_times:
+            try:
+                verified_evaluation = evaluation_verifier.verify_current(
+                    evaluation,
+                    gate_context=current_context,
+                    policy=policy,
+                    evaluated_at=verification_time,
+                )
+            except Exception as error:
+                raise QualityContractError(
+                    "quality.bundle.evaluation_verifier_unavailable",
+                    "origin or current evaluator-receipt verification failed",
+                ) from error
+            if verified_evaluation != evaluation:
+                raise QualityContractError(
+                    "quality.bundle.evaluation_stale",
+                    "quality evaluation receipt is missing, stale, revoked, or rebound",
+                )
     expected = build_quality_bundle(
         episode_id=str(value.episode_id),
         gate_context=current_context,
         evaluations=value.evaluations,
         policy=policy,
-        evaluated_at=value.evaluated_at,
+        evaluated_at=origin_evaluated_at,
     )
     if value != expected:
         raise QualityContractError(

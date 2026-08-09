@@ -317,10 +317,12 @@ def test_production_verifier_reresolves_current_exact_media() -> None:
     class CountingVerifier(_CurrentEvaluationVerifier):
         def __init__(self, stale_call: int | None = None) -> None:
             self.calls = 0
+            self.times: list[str] = []
             self.stale_call = stale_call
 
         def verify_current(self, evaluation, **kwargs):
             self.calls += 1
+            self.times.append(kwargs["evaluated_at"])
             if self.calls == self.stale_call:
                 return replace(evaluation, evaluator_version="stale")
             return evaluation
@@ -328,16 +330,20 @@ def test_production_verifier_reresolves_current_exact_media() -> None:
     verifier = CountingVerifier()
     assert verify_quality_bundle(
         bundle,
+        origin_evaluated_at="2026-08-09T10:00:00+00:00",
         current_context=_context(),
         policy=policy,
         resolver=Resolver(False),
         evaluation_verifier=verifier,
         evaluated_at="2026-08-09T10:01:00+00:00",
     ) is bundle
-    assert verifier.calls == len(tuple(QualityDimension)) == 9
+    assert verifier.calls == len(tuple(QualityDimension)) * 2 == 18
+    assert verifier.times.count("2026-08-09T10:00:00+00:00") == 9
+    assert verifier.times.count("2026-08-09T10:01:00+00:00") == 9
     with pytest.raises(QualityContractError, match="current exact media"):
         verify_quality_bundle(
             bundle,
+            origin_evaluated_at="2026-08-09T10:00:00+00:00",
             current_context=_context(),
             policy=policy,
             resolver=Resolver(True),
@@ -352,6 +358,7 @@ def test_production_verifier_reresolves_current_exact_media() -> None:
     with pytest.raises(QualityContractError, match="missing, stale, revoked"):
         verify_quality_bundle(
             bundle,
+            origin_evaluated_at="2026-08-09T10:00:00+00:00",
             current_context=_context(),
             policy=policy,
             resolver=Resolver(False),
@@ -359,14 +366,33 @@ def test_production_verifier_reresolves_current_exact_media() -> None:
             evaluated_at="2026-08-09T10:01:00+00:00",
         )
 
-    non_first = CountingVerifier(stale_call=8)
+    non_first = CountingVerifier(stale_call=17)
     with pytest.raises(QualityContractError, match="missing, stale, revoked"):
         verify_quality_bundle(
             bundle,
+            origin_evaluated_at="2026-08-09T10:00:00+00:00",
             current_context=_context(),
             policy=policy,
             resolver=Resolver(False),
             evaluation_verifier=non_first,
             evaluated_at="2026-08-09T10:01:00+00:00",
         )
-    assert non_first.calls == 8
+    assert non_first.calls == 17
+
+    forged_time = build_quality_bundle(
+        episode_id=str(bundle.episode_id),
+        gate_context=bundle.gate_context,
+        evaluations=bundle.evaluations,
+        policy=policy,
+        evaluated_at="2026-08-09T10:00:30+00:00",
+    )
+    with pytest.raises(QualityContractError, match="differs from clean"):
+        verify_quality_bundle(
+            forged_time,
+            origin_evaluated_at="2026-08-09T10:00:00+00:00",
+            current_context=_context(),
+            policy=policy,
+            resolver=Resolver(False),
+            evaluation_verifier=_CurrentEvaluationVerifier(),
+            evaluated_at="2026-08-09T10:01:00+00:00",
+        )

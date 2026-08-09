@@ -88,7 +88,7 @@ This generalizes the existing `EncodeCommandPlan` pattern (`executed=False` alwa
 | `build_generation_readiness` | `GenerationReadinessPlan` | `ready` preserves structural legacy planning and diagnostics; `authorization_ready` is always false in W04 and a separate authority decision is required | stale/missing/expired evidence, context, or workspace trust; Rapid mode |
 | `build_declarative_gate_run` / `evaluate_declarative_gate_run` / `build_executable_production_plan` | `DeclarativeGateRun` / `WorkflowEvaluation` / `ExecutableProductionPlan` | only mode-material gate helpers run; sealed input digests drive transitive invalidation, every blocker/frontier item is preserved, and each action gets its own material-context/plan digest; `authority_effect=none` | unknown/cyclic definition, missing gate, stale context, invalid incremental reuse |
 | `evaluate_authority` / `revalidate_authority_for_side_effect` | `ActionRiskAssessment` / `AuthorityDecision` / `AuthorityVerificationReceipt` | target policy recomputes risk and a trusted ledger proves current scope, signature/ledger state, revocation, limits, identity, and purpose immediately before a side effect | unknown action, stale context, insufficient source, revoked/expired grant, kill switch, budget/idempotency mismatch |
-| `build_quality_bundle` / `verify_quality_bundle` / `plan_targeted_remediation` | `QualityBundle` / `RemediationPlan` | exact nine-dimension coverage, current media and evaluator receipts, hard-failure dominance, and only affected targets within bounded lineage | missing/duplicate/stale evaluation, hard/safety failure, replay, no progress, regression, oscillation, exhausted retries |
+| `build_quality_bundle` / `verify_quality_bundle` / `plan_targeted_remediation` | `QualityBundle` / `RemediationPlan` | exact nine-dimension coverage, independently supplied origin time, every evaluator receipt at origin and current verification, current media, hard-failure dominance, and only affected targets within bounded lineage | missing/duplicate/stale evaluation, rebound origin time, hard/safety failure, replay, no progress, regression, oscillation, exhausted retries |
 | `build_candidate_decision` / `verify_candidate_decision` | `CandidateDecision` | unique winner meets score/confidence/margin thresholds, every confidence receipt is current, exact four-ID scope matches, and original plus current W04 authority are independently verified | tie, low score/confidence/margin, future/stale quality, stale confidence, scope mismatch, missing or rebound authority |
 | `build_release_candidate` / `verify_release_candidate` / `assess_release_candidate` | `ReleaseCandidate` / `ReleaseAssessment` | exact release constituents, four-ID scope, and independently supplied creation time are freshly reverified; one current human approval makes the handoff eligible; never publishes | stale constituent/context/destination, scope mismatch, invalid causal time, failed quality, unverified selection, missing or invalid human authority |
 | `draft_*_config` | validated config mapping | schema-valid channel/concept/episode draft | invalid scope id / settings |
@@ -276,8 +276,9 @@ characterization corpus, or cut the legacy orchestration path over before W06.
 exact `MediaSubject`. A media subject binds path, byte SHA-256, byte length,
 workspace-observation SHA-256, and an immutable observation receipt. Each
 dimension binds a distinct evaluator identity and receipt. Stored fields are
-structural only: production verification re-resolves the media and verifies
-every evaluation receipt through trusted runtime ports. Technical media,
+structural only: production verification receives the bundle origin time
+independently, re-resolves the media, and verifies every evaluation receipt at
+origin and current consumer times through trusted runtime ports. Technical media,
 continuity, platform compliance, explicit hard failures, and safety failures
 cannot be averaged away. Remediation is limited to the exact failed
 shot/component/dimension set, records immutable attempt receipts and
@@ -292,8 +293,10 @@ for the separate `auto_select_candidates` action/capability, score at least
 points. The authority request envelope binds the complete selection input,
 including workspace/channel/concept/episode, and its scope binds the same four
 IDs plus every candidate media and confidence receipt. Verification first
-reconstructs the complete original authority/timestamp lineage, then performs a
-separate current-authority check; current evidence cannot rewrite origin.
+reconstructs the complete original authority/timestamp lineage from an
+independently supplied origin evaluation time, then performs a separate
+current-authority check; current evidence cannot rewrite origin, including for
+escalation or denied decisions that never carried authority.
 Threshold equality passes; ties and lower values escalate. A downstream
 consumer receives the original verification inputs and cleanly recomputes a
 persisted decision at a separate trusted current-verification time. The legacy

@@ -37,8 +37,9 @@ Add the separate `candidate-decision/1.0` contract.
   original QualityBundle, candidate set, original ledger authority evidence,
   and current resolvers. Only after the complete original artifact matches may
   it separately apply freshly evaluated authority evidence. The immutable
-  decision timestamp is separate from the trusted current-verification
-  timestamp, and selection cannot predate its QualityBundle.
+  decision timestamp is supplied independently to verification and remains
+  separate from the trusted current-verification timestamp even when no
+  authority was issued; selection cannot predate its QualityBundle.
 - The legacy projection is read-only, non-current, and non-authorizing. It
   never emits an edit manifest or `selected_by_human=true`.
 

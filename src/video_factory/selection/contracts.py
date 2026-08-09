@@ -97,12 +97,14 @@ class CandidateDecisionVerificationInputs:
     channel_id: str
     concept_id: str
     episode_id: str
+    quality_origin_evaluated_at: str
     quality_bundle_ref: ArtifactReference
     quality_bundle: QualityBundle
     candidate_sets: tuple[ShotCandidateSet, ...]
     policy: QualityPolicy
     current_context: GateContext
     verified_at: datetime
+    origin_evaluated_at: datetime
     origin_authority: InitialAuthorityEvidence | None
     origin_authority_ledger: TrustedAuthorizationLedger | None
     authority: InitialAuthorityEvidence | None

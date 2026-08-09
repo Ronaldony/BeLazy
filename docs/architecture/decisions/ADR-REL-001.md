@@ -26,8 +26,9 @@ Use three additive contracts: `destination-binding/1.0`,
    no authority decision digest, avoiding a cycle. CandidateDecision,
    QualityBundle, media, and evaluator evidence are reverified at candidate
    creation and again at every ReleaseAssessment time. Verification receives
-   the expected original creation time independently instead of trusting the
-   persisted candidate's own value. The causal order is
+   both the QualityBundle origin time and the expected candidate creation time
+   independently instead of trusting either persisted value. Evaluator
+   receipts are checked at origin and current boundaries. The causal order is
    decision evaluation, release quality evaluation, candidate creation, then
    assessment.
 3. A W04 `approve_publish` / `publish_approval` request consumes the exact

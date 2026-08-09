@@ -343,6 +343,7 @@ def build_candidate_decision(
     channel_id: str,
     concept_id: str,
     episode_id: str,
+    quality_origin_evaluated_at: str,
     quality_bundle_ref: ArtifactReference,
     quality_bundle: QualityBundle,
     candidate_sets: Sequence[ShotCandidateSet],
@@ -368,7 +369,12 @@ def build_candidate_decision(
     channel = require_token(channel_id, "channel_id")
     concept = require_token(concept_id, "concept_id")
     episode = require_token(episode_id, "episode_id")
-    quality_evaluated_at = parse_rfc3339_datetime(quality_bundle.evaluated_at)
+    quality_evaluated_at = parse_rfc3339_datetime(quality_origin_evaluated_at)
+    if quality_bundle.evaluated_at != quality_origin_evaluated_at:
+        raise SelectionContractError(
+            "selection.bundle_origin",
+            "QualityBundle origin time does not match independent evidence",
+        )
     if quality_evaluated_at > evaluated_at:
         raise SelectionContractError(
             "selection.time",
@@ -424,6 +430,7 @@ def build_candidate_decision(
         try:
             verify_quality_bundle(
                 quality_bundle,
+                origin_evaluated_at=quality_origin_evaluated_at,
                 current_context=current_context,
                 policy=policy,
                 resolver=quality_resolver,
@@ -870,15 +877,17 @@ def verify_candidate_decision(
     verification: CandidateDecisionVerificationInputs,
 ) -> CandidateDecision:
     validate_candidate_decision_structure(value)
-    persisted_at = parse_rfc3339_datetime(value.evaluated_at)
+    origin_at = verification.origin_evaluated_at
     if (
         verification.verified_at.tzinfo is None
         or verification.verified_at.utcoffset() is None
-        or persisted_at > verification.verified_at
+        or origin_at.tzinfo is None
+        or origin_at.utcoffset() is None
+        or origin_at > verification.verified_at
     ):
         raise SelectionContractError(
             "selection.verification_time",
-            "current verification must be timezone-aware and not predate the decision",
+            "origin and current verification times must be aware and causal",
         )
     origin_has_authority = value.authority_request_sha256 is not None
     origin_evidence_present = verification.origin_authority is not None
@@ -896,12 +905,13 @@ def verify_candidate_decision(
         channel_id=verification.channel_id,
         concept_id=verification.concept_id,
         episode_id=verification.episode_id,
+        quality_origin_evaluated_at=verification.quality_origin_evaluated_at,
         quality_bundle_ref=verification.quality_bundle_ref,
         quality_bundle=verification.quality_bundle,
         candidate_sets=verification.candidate_sets,
         policy=verification.policy,
         current_context=verification.current_context,
-        evaluated_at=persisted_at,
+        evaluated_at=origin_at,
         authority=verification.origin_authority,
         authority_ledger=verification.origin_authority_ledger,
         quality_resolver=verification.quality_resolver,
@@ -919,6 +929,7 @@ def verify_candidate_decision(
         channel_id=verification.channel_id,
         concept_id=verification.concept_id,
         episode_id=verification.episode_id,
+        quality_origin_evaluated_at=verification.quality_origin_evaluated_at,
         quality_bundle_ref=verification.quality_bundle_ref,
         quality_bundle=verification.quality_bundle,
         candidate_sets=verification.candidate_sets,

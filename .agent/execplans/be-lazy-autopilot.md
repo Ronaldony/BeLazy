@@ -28,7 +28,7 @@ evidence and no external side effects.
 | W02 Managed Mutation | passed | MUT-001..004 | `17107e815996e18032132a739140aeeae0b2716e` |
 | W03 Director/Blueprint | passed | BP-001, DIR-001, DIR-002, BP-002 | `254e20fdb63c77d6e84d746664a5f1a0a9524c03` |
 | W04 Workflow/Authority | passed | WF-001, AUTH-001, AUTH-002, WF-002 | `5bc36f63d51e0a78c42603fa13946b691ed67585` |
-| W05 Automation/Quality/Release | pending | SEL-001, QA-001, REL-001 | pending |
+| W05 Automation/Quality/Release | reviewing | SEL-001, QA-001, REL-001 | pending |
 | W06 Runtime/Migration | pending | RUN-001, RUN-002, MIG-001, REL-002 | pending |
 | W07 Final Audit | pending | AUDIT-001..003 | pending |
 
@@ -302,3 +302,64 @@ schema/semantics, and target containment before continuing.
   Critical 0, High 0, Medium 0 on the exact final implementation commit/tree.
 - A clean manifest projection verifies all 49 handoff files; the source archive
   remains exact at 211 members and its mandated digest.
+
+## W05 decisions and evidence
+
+1. Automatic candidate choice uses the additive `candidate-decision/1.0`
+   contract and dedicated `auto_select_candidates` authority action. Legacy
+   ranking remains advisory and the legacy projection is non-current and
+   non-authorizing.
+2. Selection binds the complete candidate set, exact media, immutable
+   confidence receipts, adapter identities, quality, policy, material context,
+   and workspace/channel/concept/episode scope. Score, confidence, and margin
+   thresholds are integer basis points; ties and every unmet condition produce
+   stable escalation reasons.
+3. The target QualityBundle covers nine closed dimensions for every exact media
+   subject. Each evaluator receipt is independently verified at both the
+   externally supplied origin time and current verification time. Hard and
+   safety failures cannot be averaged away.
+4. Remediation is bounded to two retries and only exact failed
+   shot/component/dimension targets. Replay, no progress, regression,
+   oscillation, and exhaustion escalate. W05 does not implement a remediation
+   executor.
+5. ReleaseCandidate binds final media, metadata, subtitles/accessibility,
+   thumbnail, quality, candidate decision, destination, policy, material
+   context, workspace observation, and exact production scope. Candidate and
+   quality lineage is reverified at creation and assessment.
+6. ReleaseAssessment requires exactly one current one-shot human under the
+   initial policy. Missing approval creates only a non-authorizing request;
+   campaign and self approval remain disabled. Ready is a handoff state only:
+   publication is false and no publisher exists in W05.
+7. Complete invalid authority attempts retain exact non-authorizing audit
+   provenance. Partial, malformed, self-rehashed, cross-bound, stale, revoked,
+   or semantically rebound evidence is rejected before it can authorize or be
+   misrepresented as a different origin.
+8. Authority receipt and decision derivation share W04 canonical validators.
+   RFC 3339 timestamps are compared as timezone-aware instants, so equivalent
+   encodings interoperate while any real time change fails closed.
+9. Concrete resolvers, durable authority and attempt ledgers, provider work,
+   publication, settlement, credentials, crash recovery, and legacy cutover
+   remain explicitly assigned to W06.
+
+## W05 actual checks
+
+- Final implementation: `a241fe300676c0fcd8d31615534c2e728e02dbcb`
+  (tree `bec97b6def4fec9a7c0e0316e04b5f4c0ff160cb`).
+- Final RFC 3339 delta: 6 passed. Authority and CandidateDecision focused suite:
+  187 passed. Full suite: 1004 passed in 618.26s.
+- Core purity 408, side-effect-free 135, repository isolation 289, and target
+  boundary 493 files/72 directories: PASS. W00/W01 provenance and W01-W04 plus
+  generic recovery anchors remain PASS.
+- Schema resources: 80 root/package byte-identical schemas and 75 registered
+  versions. Quality-release policy resource manifest and semantic validation:
+  PASS. Public version `0.3.1`, CLI 17, and prior identifiers are unchanged.
+- Deterministic stdlib wheel: two identical 230-member, 442916-byte builds,
+  SHA-256 `ce70c7ce6a8eeea6eb4948df5fec8144f670a4a36bbc2413bceba5beeb694076`.
+- Isolated wheel verification: RECORD, unique metadata, 80/75 schema resources,
+  workflow, Director, quality-release resources, and imports PASS.
+- Standard backend remains environment-blocked because `build`, `setuptools`,
+  and `wheel` are absent; the fallback is not represented as backend
+  verification.
+- A first direct handoff post-check correctly rejected scratch verification
+  directories. A clean manifest projection then verified all 49 listed files;
+  the source archive verified 211 members and its exact mandated digest.

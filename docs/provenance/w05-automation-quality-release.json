@@ -1,0 +1,161 @@
+{
+  "schema_version": "be-lazy-w05-automation-quality-release/1.0",
+  "wave": "W05-AUTOMATION-QUALITY-RELEASE",
+  "created_at": "2026-08-09T17:52:28.409Z",
+  "implementation": {
+    "commit": "a241fe300676c0fcd8d31615534c2e728e02dbcb",
+    "tree": "bec97b6def4fec9a7c0e0316e04b5f4c0ff160cb",
+    "parent": "51913286aead038b02474f654409f15913f39b6d",
+    "baseline_ancestor": "d10d5b83c297acac8030411e20980cedf06fcd71",
+    "branch": "agent/autopilot-v4",
+    "candidate_chain": [
+      "1b9b413b16719b7c865e3804c8d9fc27c512dbaa",
+      "cd75fdd26a7541ba0567900b6a2788854b0a9760",
+      "5bb83e8f639422773414c22b7ac02e7ddd4c708f",
+      "4f30d9b8b0db5d34dd4a6a19f81de49fca15552d",
+      "4d6b3ed6e1622d9055cc95c8c7508741d802f626",
+      "c2c29f1af2fc4a1ed18d21218b3dc660cf76e98e",
+      "f7a0704416c91d8ddc84ff860d8595b42821e4bc",
+      "51913286aead038b02474f654409f15913f39b6d",
+      "a241fe300676c0fcd8d31615534c2e728e02dbcb"
+    ],
+    "change_summary": "65 files changed; 9662 insertions; 54 deletions from the sealed W04 ancestor"
+  },
+  "inputs": {
+    "source_archive_sha256": "954325b77028bcf7d36a88136d8e1ed0ec2348ad15014623710614cced94034a",
+    "source_member_count": 211,
+    "handoff_manifest_sha256": "1bd3aa1687299c15f81539641afcd1563097b0ff8cebc9c24a793e132386244a",
+    "handoff_file_count": 49,
+    "postcheck_method": "clean manifest projection plus exact source archive verification"
+  },
+  "schema_resources": {
+    "manifest_path": "src/video_factory/resources/schemas/schema-manifest.json",
+    "manifest_sha256": "fff4e4ef0f35113ce914ffc9ea297f5a252fbfdc422a23cdf78f6f18ef147f5c",
+    "schema_count": 80,
+    "registered_version_count": 75,
+    "w05_artifact_versions": [
+      "candidate-decision/1.0",
+      "destination-binding/1.0",
+      "quality-bundle/1.0",
+      "quality-policy/1.0",
+      "release-assessment/1.0",
+      "release-candidate/1.0",
+      "remediation-plan/1.0"
+    ]
+  },
+  "quality_release_resources": {
+    "manifest_path": "src/video_factory/resources/quality_release/quality-release-resource-manifest.json",
+    "manifest_sha256": "320e48cdb5b2f36436e416b0d0a93c73565e9c94ae98767527dcd30da37a28aa",
+    "resource_count": 1,
+    "policy_file_sha256": "cd249c6b7bf54129379ea32c55bb277425361e19f001161d3c1e04d7a05696d7",
+    "policy_logical_sha256": "74d7d35aef7eec943f7b2bf5be1494c43606045ecdcd6a5e5607912c4f0bf1b6",
+    "required_dimension_count": 9,
+    "hard_dimensions": ["technical_media", "continuity", "platform_compliance"],
+    "minimum_candidate_score_bps": 8000,
+    "minimum_confidence_bps": 8500,
+    "minimum_margin_bps": 500,
+    "maximum_remediation_retries": 2,
+    "one_human_release_approval": true
+  },
+  "selection_boundary": {
+    "dedicated_auto_selection_action": true,
+    "legacy_ranking_is_authority": false,
+    "exact_media_and_confidence_receipts_bound": true,
+    "four_production_scope_ids_bound": true,
+    "complete_selection_input_bound_to_authority": true,
+    "hard_failure_can_auto_select": false,
+    "origin_and_current_authority_reverified": true,
+    "invalid_complete_authority_is_nonauthorizing_audit_provenance": true,
+    "malformed_or_partial_authority_rejected": true
+  },
+  "quality_boundary": {
+    "dimensions": 9,
+    "evaluator_receipt_verified_per_dimension": true,
+    "origin_and_current_receipt_boundaries": true,
+    "exact_media_reverified": true,
+    "hard_failure_dominates_aggregation": true,
+    "targeted_remediation_only": true,
+    "bounded_retries": 2,
+    "authority_effect": "none"
+  },
+  "release_boundary": {
+    "exact_candidate_constituents_bound": true,
+    "candidate_quality_and_authority_reverified_at_creation_and_assessment": true,
+    "causal_timeline_bound": true,
+    "destination_context_workspace_and_production_scope_bound": true,
+    "required_independent_humans": 1,
+    "campaign_authority_enabled": false,
+    "missing_approval_synthesizes_evidence": false,
+    "publish_performed": false,
+    "authority_effect": "none"
+  },
+  "deferred_boundaries": {
+    "w06": [
+      "concrete media evaluator and confidence resolver implementations",
+      "durable authority remediation and execution journals",
+      "provider generation remediation and publication side effects",
+      "pre-publication reservation settlement and crash recovery",
+      "legacy authoritative cutover and migration runtime"
+    ]
+  },
+  "manual_wheel": {
+    "role": "STDLIB_PEP427_ACCEPTANCE_FALLBACK_ONLY",
+    "filename": "video_production_core-0.3.1-py3-none-any.whl",
+    "sha256": "ce70c7ce6a8eeea6eb4948df5fec8144f670a4a36bbc2413bceba5beeb694076",
+    "size_bytes": 442916,
+    "member_count": 230,
+    "two_builds_identical": true,
+    "record_verified": true,
+    "isolated_registry_load": "80 schemas; 75 registered versions; workflow, Director and quality-release resources"
+  },
+  "test_evidence": {
+    "receipt": {
+      "path": "reports/autopilot/waves/W05/test-receipt.json",
+      "sha256": "e46aab187df84da351559e1d36a56e0618aeefe45372eb5378f111dd455d85c7"
+    },
+    "final_delta": "6 passed on exact implementation commit",
+    "authority_selection": "187 passed on byte-identical final implementation files",
+    "full": "1004 passed in 618.26s on exact implementation tree; independent acceptance rerun 1004 passed in 657.10s",
+    "boundaries": "core_purity, side_effect_free, repo_isolation, target_boundary PASS",
+    "prior_recovery": "W00/W01 provenance and W01/W02/W03/W04 plus generic recovery PASS",
+    "standard_build_backend": {
+      "status": "ENVIRONMENT_BLOCKED",
+      "observed": "build=false; setuptools=false; wheel=false",
+      "fallback_misrepresented_as_backend": false
+    }
+  },
+  "review_evidence": {
+    "discovery": {
+      "path": "reports/autopilot/waves/W05/discovery.md",
+      "sha256": "d835b308d4de12dfca432dfe90e224485dbe7bc19b886ef6f5a405af5a32b40f"
+    },
+    "rounds": [
+      {"round": 1, "path": "reports/autopilot/waves/W05/review-round-1.md", "sha256": "63157ec271bc7e998e7eef6ee08822af417d48b57a0e2ac589fa136916264ebb", "result": "CHANGES_REQUESTED"},
+      {"round": 2, "path": "reports/autopilot/waves/W05/review-round-2.md", "sha256": "282a28359817c6bf5a6714e1adb043acbdd72e83383da63daf0de7513a86efd1", "result": "CHANGES_REQUESTED"},
+      {"round": 3, "path": "reports/autopilot/waves/W05/review-round-3.md", "sha256": "b59c9af21093a5ae5c0d3f03bed5744449f21a377773853f88f0330fcf84d658", "result": "CHANGES_REQUESTED"},
+      {"round": 4, "path": "reports/autopilot/waves/W05/review-round-4.md", "sha256": "7bb1f3a341e2ae0e1c22dd9b9a63e95e2df155d70f743db3269bb4c82e47af5b", "result": "CHANGES_REQUESTED"},
+      {"round": 5, "path": "reports/autopilot/waves/W05/review-round-5.md", "sha256": "32ce11b92462c0328bb1bf7ad59297d46cd8b55184419c60b6e34706234fc0c9", "result": "CHANGES_REQUESTED"},
+      {"round": 6, "path": "reports/autopilot/waves/W05/review-round-6.md", "sha256": "143895de33312b88bd88c3c056cf6c22a403c368d6d6654e3ed7e7dd36df7cc0", "result": "CHANGES_REQUESTED"},
+      {"round": 7, "path": "reports/autopilot/waves/W05/review-round-7.md", "sha256": "8384773702b41996840b474c10faf125996525997d79609e94bb1d24d58f2773", "result": "CHANGES_REQUESTED"},
+      {"round": 8, "path": "reports/autopilot/waves/W05/review-round-8.md", "sha256": "56ff6fa8c9441be566aae644ef8a0047fe9a78189672c6373e9db38d27b072d1", "result": "CHANGES_REQUESTED"},
+      {"round": 9, "path": "reports/autopilot/waves/W05/review-round-9.md", "sha256": "bbd8832d7be298a8f22c61055e3fc937c9df8b799f25ae1b5542b579a771f609", "result": "GO"}
+    ],
+    "final_reviewers": [
+      {"role": "architecture_contract", "critical": 0, "high": 0, "medium": 0, "result": "GO"},
+      {"role": "security_authority_boundary", "critical": 0, "high": 0, "medium": 0, "result": "GO"},
+      {"role": "test_compatibility_packaging", "critical": 0, "high": 0, "medium": 0, "result": "GO"}
+    ]
+  },
+  "execplan": {
+    "path": ".agent/execplans/be-lazy-autopilot.md",
+    "sha256": "3f92515e00c645b716759f46e4a18ee540dc4a0fccede974bff267b566b11533"
+  },
+  "claims_not_made": [
+    "setuptools_backend_verification",
+    "durable_authority_attempt_confidence_evaluator_or_media_infrastructure",
+    "human_approval_or_signature_synthesis",
+    "provider_execution_remediation_publication_or_deployment",
+    "legacy_authoritative_cutover",
+    "public_identifier_migration"
+  ]
+}

@@ -1,0 +1,85 @@
+{
+  "receipt_version": "be-lazy-wave-test-receipt/1.1",
+  "wave": "W05-AUTOMATION-QUALITY-RELEASE",
+  "recorded_at": "2026-08-09T17:52:28.409Z",
+  "subject": {
+    "source": {
+      "archive_sha256": "954325b77028bcf7d36a88136d8e1ed0ec2348ad15014623710614cced94034a",
+      "member_count": 211,
+      "handoff_manifest_sha256": "1bd3aa1687299c15f81539641afcd1563097b0ff8cebc9c24a793e132386244a"
+    },
+    "target": {
+      "repository": "be-lazy",
+      "branch": "agent/autopilot-v4",
+      "baseline_ancestor": "d10d5b83c297acac8030411e20980cedf06fcd71",
+      "implementation_commit": "a241fe300676c0fcd8d31615534c2e728e02dbcb",
+      "implementation_tree": "bec97b6def4fec9a7c0e0316e04b5f4c0ff160cb",
+      "implementation_parent": "51913286aead038b02474f654409f15913f39b6d"
+    },
+    "schema_resources": {
+      "manifest_path": "src/video_factory/resources/schemas/schema-manifest.json",
+      "manifest_sha256": "fff4e4ef0f35113ce914ffc9ea297f5a252fbfdc422a23cdf78f6f18ef147f5c",
+      "schema_count": 80,
+      "registered_version_count": 75
+    },
+    "quality_release_resources": {
+      "manifest_path": "src/video_factory/resources/quality_release/quality-release-resource-manifest.json",
+      "manifest_sha256": "320e48cdb5b2f36436e416b0d0a93c73565e9c94ae98767527dcd30da37a28aa",
+      "resource_count": 1,
+      "policy_file_sha256": "cd249c6b7bf54129379ea32c55bb277425361e19f001161d3c1e04d7a05696d7",
+      "policy_logical_sha256": "74d7d35aef7eec943f7b2bf5be1494c43606045ecdcd6a5e5607912c4f0bf1b6",
+      "quality_dimension_count": 9,
+      "maximum_remediation_retries": 2
+    },
+    "manual_wheel": {
+      "sha256": "ce70c7ce6a8eeea6eb4948df5fec8144f670a4a36bbc2413bceba5beeb694076",
+      "size_bytes": 442916,
+      "member_count": 230,
+      "classification": "STDLIB_PEP427_ACCEPTANCE_FALLBACK_ONLY"
+    }
+  },
+  "environment": {
+    "host_os": "Windows",
+    "python": "CPython 3.12.10 AMD64",
+    "test_runner_role": "PREEXISTING_READ_ONLY_TEST_RUNNER",
+    "test_runner_sha256": "0b471133e110cfb53a061cad528ce8e517d7b9ac41a0a396c39ad795a487fc14",
+    "pytest": "9.1.1",
+    "jsonschema": "4.26.0",
+    "network_used": false,
+    "packages_installed": false,
+    "target_environment_modified": false,
+    "variables": {
+      "PYTHONDONTWRITEBYTECODE": "1",
+      "PYTHONNOUSERSITE": "1",
+      "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
+      "basetemp": "UNIQUE_EXTERNAL_TEMP_DIRECTORY"
+    }
+  },
+  "commands": [
+    {"id": "w05-final-delta", "cwd_role": "TARGET_ROOT", "exit_code": 0, "result": "6 passed; equivalent RFC3339 instants accepted and real time differences rejected"},
+    {"id": "w05-authority-selection", "cwd_role": "VERIFIED_WORKING_COPY", "exit_code": 0, "result": "187 passed across authority and CandidateDecision on byte-identical final files"},
+    {"id": "w05-full", "cwd_role": "TARGET_ROOT", "exit_code": 0, "result": "1004 passed in 618.26s on exact implementation tree"},
+    {"id": "w05-boundaries", "cwd_role": "TARGET_ROOT", "exit_code": 0, "result": "core_purity PASS 408; side_effect_free PASS 135; repo_isolation PASS 289; target_boundary PASS 493 files/72 directories"},
+    {"id": "w05-prior-recovery", "cwd_role": "TARGET_ROOT", "exit_code": 0, "result": "W00/W01 provenance, W01/W02/W03/W04 recovery and generic recovery anchor all PASS"},
+    {"id": "w05-schema-quality-resources", "cwd_role": "TARGET_ROOT", "exit_code": 0, "result": "80 root/package schemas, 75 registered versions, quality-release manifest and target policy verified"},
+    {"id": "w05-deterministic-wheel", "cwd_role": "TARGET_ROOT", "exit_code": 0, "result": "two independent builds matched; 230 members; 442916 bytes; sha256 ce70c7ce6a8eeea6eb4948df5fec8144f670a4a36bbc2413bceba5beeb694076"},
+    {"id": "w05-isolated-wheel-probe", "cwd_role": "EXTERNAL_TEMP_INSTALL", "exit_code": 0, "result": "RECORD, metadata, schemas, workflow, Director and quality-release resources verified; 80 schemas and 75 versions loaded from each wheel"},
+    {"id": "w05-input-postcheck", "cwd_role": "HANDOFF_MANIFEST_PROJECTION", "exit_code": 0, "result": "direct scratch-bearing handoff root correctly rejected; clean manifest projection verified 49 files and source archive verified 211 members with exact digest"}
+  ],
+  "final_reviews": [
+    {"round": 9, "role": "architecture_contract", "critical": 0, "high": 0, "medium": 0, "result": "GO"},
+    {"round": 9, "role": "security_authority_boundary", "critical": 0, "high": 0, "medium": 0, "result": "GO"},
+    {"round": 9, "role": "test_compatibility_packaging", "critical": 0, "high": 0, "medium": 0, "result": "GO"}
+  ],
+  "not_executed": [
+    {"command": "python -m build --wheel --no-isolation", "status": "ENVIRONMENT_BLOCKED", "observed_result": "build=false; setuptools=false; wheel=false", "reason": "The offline host has no build frontend, setuptools, or wheel package. No download is authorized; the stdlib fallback is not represented as backend verification."}
+  ],
+  "claims_not_made": [
+    "setuptools backend verification",
+    "durable authority, attempt, confidence, evaluator or media resolver infrastructure",
+    "human approval or signature synthesis",
+    "provider execution, remediation, publication or deployment",
+    "legacy authoritative cutover",
+    "public identifier migration"
+  ]
+}

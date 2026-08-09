@@ -365,6 +365,11 @@ def build_candidate_decision(
             "selection.time",
             "evaluated_at must be timezone-aware",
         )
+    if (authority is None) != (authority_ledger is None):
+        raise SelectionContractError(
+            "selection.authority.partial",
+            "authority evidence and its trusted ledger must be supplied together",
+        )
     workspace = require_token(workspace_id, "workspace_id")
     channel = require_token(channel_id, "channel_id")
     concept = require_token(concept_id, "concept_id")
@@ -609,7 +614,7 @@ def build_candidate_decision(
         overall_status = CandidateDecisionStatus.AUTO_SELECTED
     else:
         overall_status = CandidateDecisionStatus.ESCALATION_REQUIRED
-    authority_valid = authority is not None and not authority_reasons
+    authority_presented = authority is not None
     provisional = CandidateDecision(
         artifact_version=CANDIDATE_DECISION_VERSION,
         decision_id=OpaqueId("pending"),
@@ -625,13 +630,13 @@ def build_candidate_decision(
         evaluated_at=evaluated_at.isoformat(),
         selection_input_sha256=selection_input_sha256,
         authority_request_sha256=(
-            authority.request.request_sha256 if authority_valid else None
+            authority.request.request_sha256 if authority_presented else None
         ),
         authority_decision_sha256=(
-            authority.decision.decision_sha256 if authority_valid else None
+            authority.decision.decision_sha256 if authority_presented else None
         ),
         authority_receipt_sha256=(
-            authority.receipt.receipt_sha256 if authority_valid else None
+            authority.receipt.receipt_sha256 if authority_presented else None
         ),
         shots=tuple(decisions),
         status=overall_status,

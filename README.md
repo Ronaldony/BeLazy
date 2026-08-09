@@ -57,7 +57,9 @@ receipt for every candidate, a unique winner at all score/confidence/margin
 thresholds, exact workspace/channel/concept/episode scope, an independently
 supplied immutable origin evaluation time, and both original and current W04
 `auto_select_candidates` trusted-ledger authority.
-Otherwise it records a stable escalation or denial reason.
+Otherwise it records a stable escalation or denial reason. Complete rejected
+authority evidence remains bound as non-authorizing audit provenance, while
+partial evidence/ledger input is rejected outright.
 
 ReleaseCandidate binds final media, metadata, subtitle/accessibility,
 thumbnail, integrated quality, selection provenance, destination, context, and

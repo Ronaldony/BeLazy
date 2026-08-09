@@ -341,25 +341,26 @@ def test_exact_thresholds_pass_and_current_evidence_failures_deny() -> None:
     assert denied.status is CandidateDecisionStatus.DENIED
     assert "selection.quality.current_evidence_invalid" in denied.reason_codes
 
-    unverified_authority = build_candidate_decision(
-        workspace_id=str(value.workspace_id),
-        channel_id=str(value.channel_id),
-        concept_id=str(value.concept_id),
-        episode_id="episode-a",
-        quality_origin_evaluated_at=bundle.evaluated_at,
-        quality_bundle_ref=bundle_ref,
-        quality_bundle=bundle,
-        candidate_sets=(candidates,),
-        policy=target_quality_policy(),
-        current_context=value.gate_context,
-        evaluated_at=NOW,
-        authority=evidence,
-        authority_ledger=None,
-        quality_resolver=_CurrentMediaResolver(),
-        evaluation_verifier=_CurrentEvaluationVerifier(),
-        confidence_verifier=_CurrentConfidenceVerifier(),
-    )
-    assert "selection.authority.missing" in unverified_authority.reason_codes
+    for partial_authority, partial_ledger in ((evidence, None), (None, ledger)):
+        with pytest.raises(SelectionContractError, match="supplied together"):
+            build_candidate_decision(
+                workspace_id=str(value.workspace_id),
+                channel_id=str(value.channel_id),
+                concept_id=str(value.concept_id),
+                episode_id="episode-a",
+                quality_origin_evaluated_at=bundle.evaluated_at,
+                quality_bundle_ref=bundle_ref,
+                quality_bundle=bundle,
+                candidate_sets=(candidates,),
+                policy=target_quality_policy(),
+                current_context=value.gate_context,
+                evaluated_at=NOW,
+                authority=partial_authority,
+                authority_ledger=partial_ledger,
+                quality_resolver=_CurrentMediaResolver(),
+                evaluation_verifier=_CurrentEvaluationVerifier(),
+                confidence_verifier=_CurrentConfidenceVerifier(),
+            )
 
 
 def test_hard_failure_denies_even_with_high_score() -> None:
@@ -573,6 +574,49 @@ def test_candidate_authority_requires_exact_production_scope(scope_field: str) -
     )
     assert rebound.status is not CandidateDecisionStatus.AUTO_SELECTED
     assert "selection.authority.invalid" in rebound.reason_codes
+    assert rebound.authority_request_sha256 == foreign_evidence.request.request_sha256
+    assert rebound.authority_decision_sha256 == foreign_evidence.decision.decision_sha256
+    assert rebound.authority_receipt_sha256 == foreign_evidence.receipt.receipt_sha256
+    verification = CandidateDecisionVerificationInputs(
+        workspace_id=str(value.workspace_id),
+        channel_id=str(value.channel_id),
+        concept_id=str(value.concept_id),
+        episode_id=str(value.episode_id),
+        quality_origin_evaluated_at=bundle.evaluated_at,
+        quality_bundle_ref=bundle_ref,
+        quality_bundle=bundle,
+        candidate_sets=(candidates,),
+        policy=target_quality_policy(),
+        current_context=value.gate_context,
+        verified_at=NOW,
+        origin_evaluated_at=NOW,
+        origin_authority=foreign_evidence,
+        origin_authority_ledger=foreign_ledger,
+        authority=foreign_evidence,
+        authority_ledger=foreign_ledger,
+        quality_resolver=_CurrentMediaResolver(),
+        evaluation_verifier=_CurrentEvaluationVerifier(),
+        confidence_verifier=_CurrentConfidenceVerifier(),
+    )
+    assert verify_candidate_decision(rebound, verification) is rebound
+    substituted_evidence, substituted_ledger = _authority(
+        bundle_ref,
+        candidates,
+        value.selection_input_sha256,
+        value.gate_context,
+        scope_overrides={scope_field: OpaqueId(f"substituted-{scope_field}")},
+    )
+    with pytest.raises(SelectionContractError, match="origin"):
+        verify_candidate_decision(
+            rebound,
+            replace(
+                verification,
+                origin_authority=substituted_evidence,
+                origin_authority_ledger=substituted_ledger,
+                authority=substituted_evidence,
+                authority_ledger=substituted_ledger,
+            ),
+        )
 
 
 def test_candidate_origin_authority_and_timestamp_are_immutable() -> None:

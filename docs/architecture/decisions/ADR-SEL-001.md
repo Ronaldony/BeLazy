@@ -40,6 +40,12 @@ Add the separate `candidate-decision/1.0` contract.
   decision timestamp is supplied independently to verification and remains
   separate from the trusted current-verification timestamp even when no
   authority was issued; selection cannot predate its QualityBundle.
+- Authority evidence and its trusted ledger are an indivisible input pair.
+  Complete evidence that fails scope or current-authority validation remains
+  non-authorizing, but its request, decision, and receipt digests are retained
+  as exact attempt provenance so the resulting escalation can be reproduced
+  and audited. Partial evidence is rejected instead of being collapsed into a
+  generic missing-authority decision.
 - The legacy projection is read-only, non-current, and non-authorizing. It
   never emits an edit manifest or `selected_by_human=true`.
 

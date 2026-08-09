@@ -9,6 +9,7 @@
   while remediation remains affected-target-only with receipt-bound bounded
   history.
 - Added confidence-receipt/score/margin-bound CandidateDecision with exact
+  complete authority-attempt provenance, fail-closed partial authority input,
   workspace/channel/concept/episode scope, independently bound immutable
   origin time and authority lineage, separate current authority verification,
   future-QualityBundle rejection,

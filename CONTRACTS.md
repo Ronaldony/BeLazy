@@ -44,7 +44,7 @@ Production planning is evidence-based, not presence-based:
 | `video_factory.workflow` | target-owned versioned claims/gates/actions DAG, complete blocker and parallel-frontier evaluation, incremental invalidation, per-action executable plan identities, and non-authorizing legacy parity reports |
 | `video_factory.authority` | separate assurance/autonomy/risk contracts, exact action requests, parse-only standing grants, non-authorizing approval requests, target policy classification, authority decisions, and trusted ledger verification/revalidation ports |
 | `video_factory.quality` | exact-media nine-dimension QualityBundle aggregation, target-owned hard gates, current media/evaluator-receipt verification ports, and bounded affected-target-only remediation plans |
-| `video_factory.selection` | confidence/score/margin-bound CandidateDecision with current W04 authority and a read-only non-current legacy ranking projection |
+| `video_factory.selection` | trusted-confidence/score/margin-bound CandidateDecision with exact `auto_select_candidates` W04 authority and a read-only non-current legacy ranking projection |
 | `video_factory.release` | non-secret destination binding, cycle-free ReleaseCandidate identity, and exactly-one-human non-publishing ReleaseAssessment handoff |
 | `video_factory.feasibility` | pure checks for capability, minimum duration, first-frame aspect/before-state, continuity anchors, cross-shot first-frame state carryover, and unsupported render dependencies |
 | `video_factory.qc` | injected constraints with pass/warn/fail/inconclusive/not-applicable outcomes and fallback measurement hints |
@@ -89,8 +89,8 @@ This generalizes the existing `EncodeCommandPlan` pattern (`executed=False` alwa
 | `build_declarative_gate_run` / `evaluate_declarative_gate_run` / `build_executable_production_plan` | `DeclarativeGateRun` / `WorkflowEvaluation` / `ExecutableProductionPlan` | only mode-material gate helpers run; sealed input digests drive transitive invalidation, every blocker/frontier item is preserved, and each action gets its own material-context/plan digest; `authority_effect=none` | unknown/cyclic definition, missing gate, stale context, invalid incremental reuse |
 | `evaluate_authority` / `revalidate_authority_for_side_effect` | `ActionRiskAssessment` / `AuthorityDecision` / `AuthorityVerificationReceipt` | target policy recomputes risk and a trusted ledger proves current scope, signature/ledger state, revocation, limits, identity, and purpose immediately before a side effect | unknown action, stale context, insufficient source, revoked/expired grant, kill switch, budget/idempotency mismatch |
 | `build_quality_bundle` / `verify_quality_bundle` / `plan_targeted_remediation` | `QualityBundle` / `RemediationPlan` | exact nine-dimension coverage, current media and evaluator receipts, hard-failure dominance, and only affected targets within bounded lineage | missing/duplicate/stale evaluation, hard/safety failure, replay, no progress, regression, oscillation, exhausted retries |
-| `build_candidate_decision` / `verify_candidate_decision` | `CandidateDecision` | unique winner meets score/confidence/margin thresholds and exact W04 authority is current | tie, low score/confidence/margin, stale quality, missing or rebound authority |
-| `build_release_candidate` / `assess_release_candidate` | `ReleaseCandidate` / `ReleaseAssessment` | exact release constituents are current and one current human approval makes the handoff eligible; never publishes | stale constituent/context/destination, failed quality, unverified selection, missing or invalid human authority |
+| `build_candidate_decision` / `verify_candidate_decision` | `CandidateDecision` | unique winner meets score/confidence/margin thresholds, every confidence receipt is current, and exact W04 authority is current | tie, low score/confidence/margin, stale confidence or quality, missing or rebound authority |
+| `build_release_candidate` / `verify_release_candidate` / `assess_release_candidate` | `ReleaseCandidate` / `ReleaseAssessment` | exact release constituents are freshly reverified at the consumer time and one current human approval makes the handoff eligible; never publishes | stale constituent/context/destination, invalid causal time, failed quality, unverified selection, missing or invalid human authority |
 | `draft_*_config` | validated config mapping | schema-valid channel/concept/episode draft | invalid scope id / settings |
 | `build_core_lock` | TOML `str` | deterministic lock document text (caller writes file) | invalid artifact / path escape |
 | `plan_wheel_build` | `WheelBuildPlan` | `python -m build --wheel` argv + vendor placement notes | invalid version |
@@ -285,12 +285,16 @@ cumulative use, and stops on replay, no progress, regression, oscillation, or
 the target two-retry ceiling.
 
 `candidate-decision/1.0` requires at least two unique candidates per shot.
-Auto-selection requires a passed current QualityBundle, current trusted-ledger
-W04 authority for `rank_generation_candidates`, score at least 8000,
-confidence at least 8500, and a unique top margin at least 500 basis points.
+Auto-selection requires a passed current QualityBundle, a trusted current
+confidence receipt for every candidate, current trusted-ledger W04 authority
+for the separate `auto_select_candidates` action/capability, score at least
+8000, confidence at least 8500, and a unique top margin at least 500 basis
+points. The authority request envelope binds the complete selection input and
+its scope binds every candidate media and confidence receipt.
 Threshold equality passes; ties and lower values escalate. A downstream
 consumer receives the original verification inputs and cleanly recomputes a
-persisted decision. The legacy projection is diagnostic-only,
+persisted decision at a separate trusted current-verification time. The legacy
+projection is diagnostic-only,
 `current_eligible=false`, `authority_effect=none`, and never claims a human
 selection.
 
@@ -299,7 +303,8 @@ authority request and binds exact final media, metadata, subtitle,
 accessibility, thumbnail, release QualityBundle, CandidateDecision,
 DestinationBinding, policy, GateContext, and workspace observation. W04
 `approve_publish` then consumes that exact candidate and constituent set, and
-`release-assessment/1.0` binds the result. Initial W05 policy requires exactly
+`release-assessment/1.0` first cleanly reverifies that entire candidate at the
+assessment time and then binds the authority result. Initial W05 policy requires exactly
 one current one-shot human principal; release campaign remains disabled.
 Missing approval yields only a non-authorizing `ApprovalRequest`. Even a ready
 assessment has `publish_performed=false` and `authority_effect=none`; there is

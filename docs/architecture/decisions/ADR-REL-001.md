@@ -22,7 +22,11 @@ Use three additive contracts: `destination-binding/1.0`,
    subtitle and accessibility artifacts, thumbnail, a current release-scope
    QualityBundle, a cleanly reverified CandidateDecision, destination, policy,
    GateContext, workspace observation, and release-intent digest. It contains
-   no authority decision digest, avoiding a cycle.
+   no authority decision digest, avoiding a cycle. CandidateDecision,
+   QualityBundle, media, and evaluator evidence are reverified at candidate
+   creation and again at every ReleaseAssessment time. The causal order is
+   decision evaluation, release quality evaluation, candidate creation, then
+   assessment.
 3. A W04 `approve_publish` / `publish_approval` request consumes the exact
    candidate and all constituents. ReleaseAssessment then binds that request,
    risk, decision, and current trusted-ledger receipt.

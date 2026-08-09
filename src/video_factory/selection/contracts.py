@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
+from typing import Protocol
 
 from video_factory.approvals import GateContext
 from video_factory.authority import TrustedAuthorizationLedger
@@ -36,6 +37,7 @@ class CandidateOption:
     subject: MediaSubject
     adapter_id: OpaqueId
     confidence_bps: int
+    confidence_receipt_ref: ArtifactReference
 
 
 @dataclass(frozen=True, slots=True)
@@ -50,6 +52,7 @@ class RankedCandidate:
     adapter_id: OpaqueId
     quality_score_bps: int
     confidence_bps: int
+    confidence_receipt_ref: ArtifactReference
 
 
 @dataclass(frozen=True, slots=True)
@@ -92,12 +95,26 @@ class CandidateDecisionVerificationInputs:
     candidate_sets: tuple[ShotCandidateSet, ...]
     policy: QualityPolicy
     current_context: GateContext
-    evaluated_at: datetime
+    verified_at: datetime
     authority: InitialAuthorityEvidence | None
     authority_ledger: TrustedAuthorizationLedger | None
     quality_resolver: CurrentQualityEvidenceResolver | None
     evaluation_verifier: CurrentQualityEvaluationVerifier | None
+    confidence_verifier: CurrentCandidateConfidenceVerifier | None
     authority_references: tuple[ArtifactReference, ...] = ()
+
+
+class CurrentCandidateConfidenceVerifier(Protocol):
+    """Trusted port that authenticates one exact current confidence receipt."""
+
+    def verify_current(
+        self,
+        option: CandidateOption,
+        *,
+        gate_context: GateContext,
+        policy: QualityPolicy,
+        evaluated_at: datetime,
+    ) -> CandidateOption | None: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -114,6 +131,7 @@ __all__ = [
     "CandidateDecisionStatus",
     "CandidateDecisionVerificationInputs",
     "CandidateOption",
+    "CurrentCandidateConfidenceVerifier",
     "LegacyCandidateSelectionProjection",
     "RankedCandidate",
     "SelectionContractError",

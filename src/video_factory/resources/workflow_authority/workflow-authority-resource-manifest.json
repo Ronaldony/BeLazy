@@ -4,7 +4,7 @@
   "resources": [
     {
       "filename": "authority-policy-v2.1.json",
-      "sha256": "31c7236cec11d3a6e34a7bb440aa5a95d2f64eae5c324b112b7b7b6b53cea35d"
+      "sha256": "50a29e0b7da956aefee59b363171bcba021227c4dfd14d3ca13e8ffbc51b7395"
     },
     {
       "filename": "episode-production-workflow.json",

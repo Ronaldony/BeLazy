@@ -77,7 +77,7 @@
     },
     {
       "filename": "candidate-decision.schema.json",
-      "sha256": "93bb87c6ca812c7a97b8edd05c39141c64f7f98196ad078efb3d506a8a842e46",
+      "sha256": "e65acd548fbff32c576ebb2055954cd6aad7eb2193f1b1c1274531f63c77b007",
       "schema_id": "https://schemas.video-factory.invalid/selection/candidate-decision.schema.json",
       "artifact_version": "candidate-decision/1.0"
     },

@@ -525,18 +525,38 @@ def validate_action_authority_request(request: ActionAuthorityRequest) -> Action
             or request.side_effect is not request.plan.side_effect
         ):
             raise AuthorityContractError("authority.request.plan_rebound", "request fields differ from the workflow plan")
-    elif (
-        request.workflow_evaluation is not None
-        or request.workflow_evaluation_predecessors
-        or (
-        request.action_id != "managed_mutation"
-        or request.capability_id != "managed_mutation"
-        or request.action_risk is not ActionRisk.R4
-        or request.authority_requirement is not AuthorityRequirement.TWO_INDEPENDENT_HUMANS
-        or request.side_effect is not True
+    else:
+        is_managed_mutation = (
+            request.action_id == "managed_mutation"
+            and request.capability_id == "managed_mutation"
+            and request.action_risk is ActionRisk.R4
+            and request.authority_requirement
+            is AuthorityRequirement.TWO_INDEPENDENT_HUMANS
+            and request.side_effect is True
         )
-    ):
-        raise AuthorityContractError("authority.request.unowned_action", "non-workflow action is not the W02 R4 bridge")
+        is_candidate_auto_selection = (
+            request.action_id == "auto_select_candidates"
+            and request.capability_id == "auto_select_candidates"
+            and request.action_risk is ActionRisk.R1
+            and request.authority_requirement is AuthorityRequirement.POLICY
+            and request.side_effect is False
+            and request.scope.provider_id is None
+            and request.scope.model_id is None
+            and request.scope.destination is None
+            and request.scope.cost_minor_units == 0
+            and request.scope.candidate_count >= 2
+            and request.scope.retry_index == 0
+            and not request.scope.allowed_outputs
+        )
+        if (
+            request.workflow_evaluation is not None
+            or request.workflow_evaluation_predecessors
+            or not (is_managed_mutation or is_candidate_auto_selection)
+        ):
+            raise AuthorityContractError(
+                "authority.request.unowned_action",
+                "non-workflow action is not an exact target-owned bridge",
+            )
     if request.gate_context.executable_plan_sha256 != request.executable_plan_sha256:
         raise AuthorityContractError("authority.request.context", "request context does not match the plan digest")
     expected_triggers = target_policy_bundle().hard_escalation_triggers

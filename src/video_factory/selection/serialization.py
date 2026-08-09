@@ -71,6 +71,7 @@ def _ranked(value: object) -> RankedCandidate:
         adapter_id=OpaqueId(str(value["adapter_id"])),
         quality_score_bps=int(value["quality_score_bps"]),
         confidence_bps=int(value["confidence_bps"]),
+        confidence_receipt_ref=_reference(value["confidence_receipt_ref"]),
     )
 
 

@@ -53,7 +53,12 @@ def test_w05_schema_registry_and_all_public_mappings_are_strict() -> None:
     )
     remediation = plan_targeted_remediation(failed_bundle, policy=policy)
     candidate_decision, *_ = _decision()
-    release_candidate, release_candidate_ref, destination = _release_fixture()
+    (
+        release_candidate,
+        release_candidate_ref,
+        destination,
+        release_verification,
+    ) = _release_fixture()
     release_authority, release_ledger, release_authority_references = _authority(
         release_candidate,
         release_candidate_ref,
@@ -63,6 +68,7 @@ def test_w05_schema_registry_and_all_public_mappings_are_strict() -> None:
     assessment = assess_release_candidate(
         release_candidate_ref=release_candidate_ref,
         release_candidate=release_candidate,
+        release_candidate_verification=release_verification,
         destination=destination,
         current_context=release_candidate.gate_context,
         evaluated_at=NOW,

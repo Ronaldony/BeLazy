@@ -43,12 +43,18 @@
     "status": { "enum": ["auto_selected", "escalation_required", "denied"] },
     "ranked": {
       "type": "object",
-      "required": ["subject", "adapter_id", "quality_score_bps", "confidence_bps"],
+      "required": ["subject", "adapter_id", "quality_score_bps", "confidence_bps", "confidence_receipt_ref"],
       "properties": {
         "subject": { "$ref": "artifact-common.schema.json#/$defs/mediaSubject" },
         "adapter_id": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" },
         "quality_score_bps": { "$ref": "artifact-common.schema.json#/$defs/basisPoints" },
-        "confidence_bps": { "$ref": "artifact-common.schema.json#/$defs/basisPoints" }
+        "confidence_bps": { "$ref": "artifact-common.schema.json#/$defs/basisPoints" },
+        "confidence_receipt_ref": {
+          "allOf": [
+            { "$ref": "artifact-common.schema.json#/$defs/boundArtifact" },
+            { "properties": { "artifact_version": { "const": "candidate-confidence-receipt/1.0" } } }
+          ]
+        }
       },
       "additionalProperties": false
     },

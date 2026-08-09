@@ -50,15 +50,17 @@ implementations remain deferred to the runtime wave.
 W05 adds a non-side-effect automation plane. A QualityBundle covers nine
 independent dimensions for exact current media; hard, safety, continuity, and
 platform failures cannot be hidden by averages. CandidateDecision selects
-automatically only with current media/evaluator evidence, a unique winner at
-all score/confidence/margin thresholds, and current W04 trusted-ledger
-authority. Otherwise it records a stable escalation or denial reason.
+automatically only with current media/evaluator evidence, a trusted confidence
+receipt for every candidate, a unique winner at all score/confidence/margin
+thresholds, and exact W04 `auto_select_candidates` trusted-ledger authority.
+Otherwise it records a stable escalation or denial reason.
 
 ReleaseCandidate binds final media, metadata, subtitle/accessibility,
 thumbnail, integrated quality, selection provenance, destination, context, and
 workspace observation without creating an authority digest cycle. A later
-ReleaseAssessment requires exactly one current one-shot human release
-approval. It can make the package eligible for handoff, but never publishes:
+ReleaseAssessment first reverifies that exact candidate at its assessment time
+and requires exactly one current one-shot human release approval. It can make
+the package eligible for handoff, but never publishes:
 there is no publisher API and every W05 artifact has `authority_effect=none`.
 Legacy ranking/edit artifacts remain unchanged and their projection is
 read-only and non-current; runtime cutover remains W06 work.

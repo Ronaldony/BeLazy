@@ -17,18 +17,25 @@ and current W04 authority all agree.
 Add the separate `candidate-decision/1.0` contract.
 
 - A shot needs at least two unique exact-media candidates. Scores and
-  confidence are integer basis points and ordering is canonical.
+  confidence are integer basis points and ordering is canonical. Every
+  confidence value is bound to a distinct immutable
+  `candidate-confidence-receipt/1.0` and is reverified through a trusted
+  current-confidence port.
 - Auto-selection requires the target quality policy, a fully current verified
   QualityBundle, no hard/safety/inconclusive blocker, a unique top candidate,
   score at least 8000, confidence at least 8500, and margin at least 500 basis
   points. Equality passes; any lower value or a tie escalates with stable
   reason codes.
-- The decision revalidates the exact W04 `rank_generation_candidates` /
-  `rank_candidates` request and trusted-ledger result. Caller-supplied receipt
-  fields or a self-rehashed document are insufficient.
+- Legacy `rank_generation_candidates` / `rank_candidates` remains advisory.
+  Automatic choice uses the separate target-owned non-workflow
+  `auto_select_candidates` action/capability. Its W04 request envelope equals
+  the exact selection-input digest and its scope includes every media and
+  confidence-receipt reference. Caller-supplied receipt fields or a
+  self-rehashed document are insufficient.
 - A downstream consumer must cleanly recompute a persisted decision from its
-  original QualityBundle, candidate set, current resolvers, and authority
-  evidence.
+  original QualityBundle, candidate set, current resolvers, and freshly
+  evaluated authority evidence. The immutable decision timestamp is separate
+  from the trusted current-verification timestamp.
 - The legacy projection is read-only, non-current, and non-authorizing. It
   never emits an edit manifest or `selected_by_human=true`.
 

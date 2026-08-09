@@ -6,6 +6,7 @@ from .contracts import (
     ReleaseAssessmentStatus,
     ReleaseAuthorityEvidence,
     ReleaseCandidate,
+    ReleaseCandidateVerificationInputs,
     ReleaseContractError,
     ReleaseVisibility,
 )

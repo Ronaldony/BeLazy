@@ -8,6 +8,7 @@ from dataclasses import replace
 import hashlib
 
 from video_factory.approvals import GateContext, gate_context_sha256, gate_context_to_mapping
+from video_factory.artifacts import validate_artifact_mapping
 from video_factory.config import canonical_json_bytes, canonical_sha256
 from video_factory.domain import ArtifactReference, HashDigest, OpaqueId
 from video_factory.json_boundary import parse_rfc3339_datetime
@@ -334,11 +335,15 @@ def _bundle_identity(value: QualityBundle) -> dict[str, object]:
 
 def quality_bundle_to_mapping(value: QualityBundle) -> dict[str, object]:
     validate_quality_bundle(value)
-    return {
+    mapping = {
         **_bundle_identity(value),
         "bundle_id": str(value.bundle_id),
         "bundle_sha256": str(value.bundle_sha256),
     }
+    result = validate_artifact_mapping(mapping)
+    if not result.ok:
+        raise QualityContractError("quality.bundle.schema", "; ".join(result.error_texts))
+    return mapping
 
 
 def build_quality_bundle(
@@ -567,24 +572,23 @@ def verify_quality_bundle(
     seen: set[tuple[object, ...]] = set()
     for evaluation in value.evaluations:
         key = _subject_key(evaluation.subject)
-        if key in seen:
-            continue
-        seen.add(key)
-        try:
-            current = resolver.resolve_current(
-                evaluation.subject,
-                evaluated_at=evaluated_at,
-            )
-        except Exception as error:
-            raise QualityContractError(
-                "quality.bundle.resolver_unavailable",
-                "current media resolver failed",
-            ) from error
-        if current != evaluation.subject:
-            raise QualityContractError(
-                "quality.bundle.media_stale",
-                "quality evidence is not bound to current exact media bytes",
-            )
+        if key not in seen:
+            seen.add(key)
+            try:
+                current = resolver.resolve_current(
+                    evaluation.subject,
+                    evaluated_at=evaluated_at,
+                )
+            except Exception as error:
+                raise QualityContractError(
+                    "quality.bundle.resolver_unavailable",
+                    "current media resolver failed",
+                ) from error
+            if current != evaluation.subject:
+                raise QualityContractError(
+                    "quality.bundle.media_stale",
+                    "quality evidence is not bound to current exact media bytes",
+                )
         try:
             verified_evaluation = evaluation_verifier.verify_current(
                 evaluation,
@@ -747,11 +751,15 @@ def _remediation_identity(value: RemediationPlan) -> dict[str, object]:
 
 def remediation_plan_to_mapping(value: RemediationPlan) -> dict[str, object]:
     validate_remediation_plan(value)
-    return {
+    mapping = {
         **_remediation_identity(value),
         "plan_id": str(value.plan_id),
         "plan_sha256": str(value.plan_sha256),
     }
+    result = validate_artifact_mapping(mapping)
+    if not result.ok:
+        raise QualityContractError("quality.remediation.schema", "; ".join(result.error_texts))
+    return mapping
 
 
 def plan_targeted_remediation(

@@ -1,18 +1,22 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from datetime import timedelta
 
 import pytest
 
 from video_factory.authority import (
     AuthorityDecisionStatus,
     AuthoritySource,
+    LedgerRecordState,
     VerificationPurpose,
     evaluate_authority,
     target_policy_bundle,
 )
 from video_factory.domain import ArtifactReference, ArtifactVersion, HashDigest, OpaqueId, RelativeArtifactPath
+from video_factory.config import canonical_sha256
 from video_factory.quality import (
+    InitialAuthorityEvidence,
     MediaSubject,
     QualityDimension,
     QualityVerdict,
@@ -25,22 +29,28 @@ from video_factory.release import (
     ReleaseAssessmentStatus,
     ReleaseAuthorityEvidence,
     ReleaseContractError,
+    ReleaseCandidateVerificationInputs,
     ReleaseVisibility,
     assess_release_candidate,
     build_destination_binding,
     build_release_candidate,
     destination_binding_bytes_sha256,
     release_candidate_bytes_sha256,
+    release_candidate_to_mapping,
+    release_assessment_to_mapping,
+    verify_release_candidate,
     verify_release_assessment,
 )
 from video_factory.selection import candidate_decision_bytes_sha256
 from video_factory.selection import CandidateDecisionVerificationInputs
 from tests.unit.test_authority_control import FakeLedger, NOW, _ref as authority_ref, _request
-from tests.unit.test_candidate_decision import _decision
+from tests.unit.test_candidate_decision import _CurrentConfidenceVerifier, _decision
 from tests.unit.test_quality_bundle import (
     _CurrentEvaluationVerifier,
     _CurrentMediaResolver,
 )
+from video_factory.release.decision import _candidate_identity, _candidate_material
+from video_factory.selection.decision import _identity as _selection_identity
 
 
 def _ref(path: str, digest: str, version: str) -> ArtifactReference:
@@ -82,11 +92,12 @@ def _release_fixture(*, quality_resolver=None):
         candidate_sets=(selection_candidates,),
         policy=target_quality_policy(),
         current_context=candidate_decision.gate_context,
-        evaluated_at=NOW,
+        verified_at=NOW,
         authority=selection_authority,
         authority_ledger=selection_ledger,
         quality_resolver=resolver,
         evaluation_verifier=_CurrentEvaluationVerifier(),
+        confidence_verifier=_CurrentConfidenceVerifier(),
     )
     approve = _request("approve_publish")
     final_media = _media("final.mp4", "final-media/1.0", "1")
@@ -170,10 +181,29 @@ def _release_fixture(*, quality_resolver=None):
         _ref("release/release-candidate.json", "0", "release-candidate/1.0"),
         sha256=release_candidate_bytes_sha256(candidate),
     )
-    return candidate, candidate_ref, destination
+    verification = ReleaseCandidateVerificationInputs(
+        episode_id="episode-a",
+        final_media=final_media,
+        metadata_ref=metadata,
+        subtitle_accessibility_refs=subtitles,
+        thumbnail=thumbnail,
+        quality_bundle_ref=bundle_ref,
+        quality_bundle=bundle,
+        candidate_decision_ref=decision_ref,
+        candidate_decision=candidate_decision,
+        candidate_verification=candidate_verification,
+        destination_ref=destination_ref,
+        destination=destination,
+        policy=policy,
+        current_context=approve.gate_context,
+        verified_at=NOW,
+        quality_resolver=resolver,
+        evaluation_verifier=_CurrentEvaluationVerifier(),
+    )
+    return candidate, candidate_ref, destination, verification
 
 
-def _authority(candidate, candidate_ref, destination, *, granted: bool):
+def _authority(candidate, candidate_ref, destination, *, granted: bool, evaluated_at=NOW):
     values = (
         candidate_ref,
         candidate.final_media.reference,
@@ -209,7 +239,7 @@ def _authority(candidate, candidate_ref, destination, *, granted: bool):
             request,
             target_policy_bundle(),
             ledger=None,
-            evaluated_at=NOW,
+            evaluated_at=evaluated_at,
         )
         assert decision.status is AuthorityDecisionStatus.HUMAN_APPROVAL_REQUIRED
         return ReleaseAuthorityEvidence(request, risk, decision, None), None, ()
@@ -226,14 +256,14 @@ def _authority(candidate, candidate_ref, destination, *, granted: bool):
         target_policy_bundle(),
         ledger=ledger,
         authority_references=authority_references,
-        evaluated_at=NOW,
+        evaluated_at=evaluated_at,
     )
     assert decision.status is AuthorityDecisionStatus.AUTHORIZED
     receipt = ledger._receipt(
         request,
         risk.assessment_sha256,
         purpose=VerificationPurpose.INITIAL_DECISION,
-        evaluated_at=NOW,
+        evaluated_at=evaluated_at,
     )
     assert receipt.receipt_sha256 == decision.verification_receipt_sha256
     return (
@@ -243,14 +273,57 @@ def _authority(candidate, candidate_ref, destination, *, granted: bool):
     )
 
 
+def _current_release_verification(verification, evaluated_at):
+    prior = verification.candidate_verification
+    ledger = prior.authority_ledger
+    risk, decision = evaluate_authority(
+        prior.authority.request,
+        target_policy_bundle(),
+        ledger=ledger,
+        evaluated_at=evaluated_at,
+    )
+    receipt = ledger._receipt(
+        prior.authority.request,
+        risk.assessment_sha256,
+        purpose=VerificationPurpose.INITIAL_DECISION,
+        evaluated_at=evaluated_at,
+    )
+    current_authority = InitialAuthorityEvidence(
+        prior.authority.request,
+        risk,
+        decision,
+        receipt,
+    )
+    return replace(
+        verification,
+        verified_at=evaluated_at,
+        candidate_verification=replace(
+            prior,
+            verified_at=evaluated_at,
+            authority=current_authority,
+        ),
+    )
+
+
+def _decision_at(value, evaluated_at):
+    rebound = replace(value, evaluated_at=evaluated_at.isoformat())
+    digest = canonical_sha256(_selection_identity(rebound))
+    return replace(
+        rebound,
+        decision_id=OpaqueId(f"candidate-decision-{str(digest)[:20]}"),
+        decision_sha256=digest,
+    )
+
+
 def test_release_requires_one_human_without_synthesizing_evidence() -> None:
-    candidate, candidate_ref, destination = _release_fixture()
+    candidate, candidate_ref, destination, verification = _release_fixture()
     authority, ledger, authority_references = _authority(
         candidate, candidate_ref, destination, granted=False
     )
     assessment = assess_release_candidate(
         release_candidate_ref=candidate_ref,
         release_candidate=candidate,
+        release_candidate_verification=verification,
         destination=destination,
         current_context=candidate.gate_context,
         evaluated_at=NOW,
@@ -267,13 +340,14 @@ def test_release_requires_one_human_without_synthesizing_evidence() -> None:
 
 
 def test_exact_current_human_authority_yields_handoff_ready_but_never_publish() -> None:
-    candidate, candidate_ref, destination = _release_fixture()
+    candidate, candidate_ref, destination, verification = _release_fixture()
     authority, ledger, authority_references = _authority(
         candidate, candidate_ref, destination, granted=True
     )
     assessment = assess_release_candidate(
         release_candidate_ref=candidate_ref,
         release_candidate=candidate,
+        release_candidate_verification=verification,
         destination=destination,
         current_context=candidate.gate_context,
         evaluated_at=NOW,
@@ -289,6 +363,7 @@ def test_exact_current_human_authority_yields_handoff_ready_but_never_publish() 
         assessment,
         release_candidate_ref=candidate_ref,
         release_candidate=candidate,
+        release_candidate_verification=verification,
         destination=destination,
         current_context=candidate.gate_context,
         evaluated_at=NOW,
@@ -301,6 +376,7 @@ def test_exact_current_human_authority_yields_handoff_ready_but_never_publish() 
         assess_release_candidate(
             release_candidate_ref=candidate_ref,
             release_candidate=candidate,
+            release_candidate_verification=verification,
             destination=destination,
             current_context=candidate.gate_context,
             evaluated_at=NOW,
@@ -311,7 +387,7 @@ def test_exact_current_human_authority_yields_handoff_ready_but_never_publish() 
 
 
 def test_release_destination_or_context_rebound_fails_closed() -> None:
-    candidate, candidate_ref, destination = _release_fixture()
+    candidate, candidate_ref, destination, verification = _release_fixture()
     other_destination = build_destination_binding(
         platform="platform-b",
         channel_account_id="channel-account-other",
@@ -325,6 +401,7 @@ def test_release_destination_or_context_rebound_fails_closed() -> None:
         assess_release_candidate(
             release_candidate_ref=candidate_ref,
             release_candidate=candidate,
+            release_candidate_verification=verification,
             destination=other_destination,
             current_context=candidate.gate_context,
             evaluated_at=NOW,
@@ -339,6 +416,7 @@ def test_release_destination_or_context_rebound_fails_closed() -> None:
         assess_release_candidate(
             release_candidate_ref=candidate_ref,
             release_candidate=candidate,
+            release_candidate_verification=verification,
             destination=destination,
             current_context=stale_context,
             evaluated_at=NOW,
@@ -355,3 +433,155 @@ def test_release_candidate_rechecks_thumbnail_exact_bytes() -> None:
 
     with pytest.raises(ReleaseContractError, match="thumbnail"):
         _release_fixture(quality_resolver=StaleThumbnailResolver())
+
+
+def test_release_assessment_requires_clean_current_candidate_reverification() -> None:
+    candidate, candidate_ref, destination, verification = _release_fixture()
+    later = NOW + timedelta(seconds=1)
+    current = _current_release_verification(verification, later)
+    authority, ledger, authority_references = _authority(
+        candidate,
+        candidate_ref,
+        destination,
+        granted=True,
+        evaluated_at=later,
+    )
+    assessment = assess_release_candidate(
+        release_candidate_ref=candidate_ref,
+        release_candidate=candidate,
+        release_candidate_verification=current,
+        destination=destination,
+        current_context=candidate.gate_context,
+        evaluated_at=later,
+        authority=authority,
+        authority_ledger=ledger,
+        authority_references=authority_references,
+    )
+    assert assessment.status is ReleaseAssessmentStatus.READY
+
+    with pytest.raises(ReleaseContractError, match="freshly verified"):
+        assess_release_candidate(
+            release_candidate_ref=candidate_ref,
+            release_candidate=candidate,
+            release_candidate_verification=verification,
+            destination=destination,
+            current_context=candidate.gate_context,
+            evaluated_at=later,
+            authority=authority,
+            authority_ledger=ledger,
+            authority_references=authority_references,
+        )
+
+    current.candidate_verification.authority_ledger.ledger_state = (
+        LedgerRecordState.REVOKED
+    )
+    with pytest.raises(ReleaseContractError, match="current trusted evidence"):
+        verify_release_candidate(candidate, current)
+
+
+def test_release_semantic_verifier_rejects_self_rehashed_lineage() -> None:
+    candidate, candidate_ref, destination, verification = _release_fixture()
+    forged = replace(candidate, quality_bundle_sha256=HashDigest("f" * 64))
+    forged = replace(
+        forged,
+        release_intent_sha256=canonical_sha256(_candidate_material(forged)),
+    )
+    digest = canonical_sha256(_candidate_identity(forged))
+    forged = replace(
+        forged,
+        candidate_id=OpaqueId(f"release-candidate-{str(digest)[:20]}"),
+        candidate_sha256=digest,
+    )
+    release_candidate_to_mapping(forged)
+    with pytest.raises(ReleaseContractError, match="clean current recomputation"):
+        verify_release_candidate(forged, verification)
+
+    with pytest.raises(ReleaseContractError, match="exactly one subtitle"):
+        release_candidate_to_mapping(
+            replace(candidate, subtitle_accessibility_refs=())
+        )
+
+    authority, ledger, authority_references = _authority(
+        candidate, candidate_ref, destination, granted=True
+    )
+    assessment = assess_release_candidate(
+        release_candidate_ref=candidate_ref,
+        release_candidate=candidate,
+        release_candidate_verification=verification,
+        destination=destination,
+        current_context=candidate.gate_context,
+        evaluated_at=NOW,
+        authority=authority,
+        authority_ledger=ledger,
+        authority_references=authority_references,
+    )
+    with pytest.raises(ReleaseContractError, match="single-human"):
+        release_assessment_to_mapping(
+            replace(assessment, required_independent_humans=True)
+        )
+
+
+def test_release_causal_time_order_is_fail_closed() -> None:
+    candidate, _, _, verification = _release_fixture()
+    created_later = NOW + timedelta(seconds=2)
+    current = _current_release_verification(verification, created_later)
+    decision_after_quality = _decision_at(
+        verification.candidate_decision,
+        NOW + timedelta(seconds=1),
+    )
+    decision_ref = replace(
+        verification.candidate_decision_ref,
+        sha256=candidate_decision_bytes_sha256(decision_after_quality),
+    )
+    with pytest.raises(ReleaseContractError, match="causal ordering"):
+        build_release_candidate(
+            episode_id=verification.episode_id,
+            final_media=verification.final_media,
+            metadata_ref=verification.metadata_ref,
+            subtitle_accessibility_refs=verification.subtitle_accessibility_refs,
+            thumbnail=verification.thumbnail,
+            quality_bundle_ref=verification.quality_bundle_ref,
+            quality_bundle=verification.quality_bundle,
+            candidate_decision_ref=decision_ref,
+            candidate_decision=decision_after_quality,
+            candidate_verification=current.candidate_verification,
+            destination_ref=verification.destination_ref,
+            destination=verification.destination,
+            policy=verification.policy,
+            current_context=verification.current_context,
+            created_at=created_later.isoformat(),
+            quality_resolver=verification.quality_resolver,
+            evaluation_verifier=verification.evaluation_verifier,
+        )
+
+    future_quality = build_quality_bundle(
+        episode_id=str(verification.quality_bundle.episode_id),
+        gate_context=verification.current_context,
+        evaluations=verification.quality_bundle.evaluations,
+        policy=verification.policy,
+        evaluated_at=(NOW + timedelta(seconds=1)).isoformat(),
+    )
+    future_quality_ref = replace(
+        verification.quality_bundle_ref,
+        sha256=quality_bundle_bytes_sha256(future_quality),
+    )
+    with pytest.raises(ReleaseContractError, match="causal ordering"):
+        build_release_candidate(
+            episode_id=verification.episode_id,
+            final_media=verification.final_media,
+            metadata_ref=verification.metadata_ref,
+            subtitle_accessibility_refs=verification.subtitle_accessibility_refs,
+            thumbnail=verification.thumbnail,
+            quality_bundle_ref=future_quality_ref,
+            quality_bundle=future_quality,
+            candidate_decision_ref=verification.candidate_decision_ref,
+            candidate_decision=verification.candidate_decision,
+            candidate_verification=verification.candidate_verification,
+            destination_ref=verification.destination_ref,
+            destination=verification.destination,
+            policy=verification.policy,
+            current_context=verification.current_context,
+            created_at=NOW.isoformat(),
+            quality_resolver=verification.quality_resolver,
+            evaluation_verifier=verification.evaluation_verifier,
+        )

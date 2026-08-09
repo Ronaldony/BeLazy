@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 from enum import StrEnum
 
 from video_factory.approvals import GateContext
@@ -14,7 +15,17 @@ from video_factory.authority import (
     AuthorityVerificationReceipt,
 )
 from video_factory.domain import ArtifactReference, HashDigest, OpaqueId
-from video_factory.quality import MediaSubject
+from video_factory.quality import (
+    CurrentQualityEvaluationVerifier,
+    CurrentQualityEvidenceResolver,
+    MediaSubject,
+    QualityBundle,
+    QualityPolicy,
+)
+from video_factory.selection import (
+    CandidateDecision,
+    CandidateDecisionVerificationInputs,
+)
 
 
 class ReleaseContractError(ValueError):
@@ -75,6 +86,29 @@ class ReleaseCandidate:
 
 
 @dataclass(frozen=True, slots=True)
+class ReleaseCandidateVerificationInputs:
+    """Exact current evidence required by every release consumer."""
+
+    episode_id: str
+    final_media: MediaSubject
+    metadata_ref: ArtifactReference
+    subtitle_accessibility_refs: tuple[ArtifactReference, ...]
+    thumbnail: MediaSubject
+    quality_bundle_ref: ArtifactReference
+    quality_bundle: QualityBundle
+    candidate_decision_ref: ArtifactReference
+    candidate_decision: CandidateDecision
+    candidate_verification: CandidateDecisionVerificationInputs
+    destination_ref: ArtifactReference
+    destination: DestinationBinding
+    policy: QualityPolicy
+    current_context: GateContext
+    verified_at: datetime
+    quality_resolver: CurrentQualityEvidenceResolver
+    evaluation_verifier: CurrentQualityEvaluationVerifier
+
+
+@dataclass(frozen=True, slots=True)
 class ReleaseAuthorityEvidence:
     request: ActionAuthorityRequest
     risk: ActionRiskAssessment
@@ -110,6 +144,7 @@ __all__ = [
     "ReleaseAssessmentStatus",
     "ReleaseAuthorityEvidence",
     "ReleaseCandidate",
+    "ReleaseCandidateVerificationInputs",
     "ReleaseContractError",
     "ReleaseVisibility",
 ]

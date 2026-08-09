@@ -13,6 +13,7 @@ from datetime import datetime
 import hashlib
 
 from video_factory.approvals import GateContext, gate_context_sha256, gate_context_to_mapping
+from video_factory.artifacts import validate_artifact_mapping
 from video_factory.authority import (
     AuthorityDecisionStatus,
     AuthoritySource,
@@ -74,6 +75,7 @@ from .contracts import (
     ReleaseAssessmentStatus,
     ReleaseAuthorityEvidence,
     ReleaseCandidate,
+    ReleaseCandidateVerificationInputs,
     ReleaseContractError,
     ReleaseVisibility,
 )
@@ -115,11 +117,15 @@ def _destination_identity(value: DestinationBinding) -> dict[str, object]:
 
 def destination_binding_to_mapping(value: DestinationBinding) -> dict[str, object]:
     validate_destination_binding(value)
-    return {
+    mapping = {
         **_destination_identity(value),
         "destination_id": str(value.destination_id),
         "destination_sha256": str(value.destination_sha256),
     }
+    result = validate_artifact_mapping(mapping)
+    if not result.ok:
+        raise ReleaseContractError("release.destination.schema", "; ".join(result.error_texts))
+    return mapping
 
 
 def build_destination_binding(
@@ -164,6 +170,7 @@ def validate_destination_binding(value: DestinationBinding) -> DestinationBindin
     if (
         value.artifact_version != DESTINATION_BINDING_VERSION
         or value.authority_effect != "none"
+        or not isinstance(value.visibility, ReleaseVisibility)
     ):
         raise ReleaseContractError(
             "release.destination.contract",
@@ -234,14 +241,18 @@ def _candidate_identity(value: ReleaseCandidate) -> dict[str, object]:
 
 def release_candidate_to_mapping(value: ReleaseCandidate) -> dict[str, object]:
     validate_release_candidate_structure(value)
-    return {
+    mapping = {
         **_candidate_identity(value),
         "candidate_id": str(value.candidate_id),
         "candidate_sha256": str(value.candidate_sha256),
     }
+    result = validate_artifact_mapping(mapping)
+    if not result.ok:
+        raise ReleaseContractError("release.candidate.schema", "; ".join(result.error_texts))
+    return mapping
 
 
-def build_release_candidate(
+def _build_release_candidate(
     *,
     episode_id: str,
     final_media: MediaSubject,
@@ -258,6 +269,7 @@ def build_release_candidate(
     policy: QualityPolicy,
     current_context: GateContext,
     created_at: str,
+    verified_at: datetime,
     quality_resolver: CurrentQualityEvidenceResolver,
     evaluation_verifier: CurrentQualityEvaluationVerifier,
 ) -> ReleaseCandidate:
@@ -276,6 +288,16 @@ def build_release_candidate(
             "release candidate input is invalid",
         ) from error
     created = parse_rfc3339_datetime(created_at)
+    if verified_at.tzinfo is None or verified_at.utcoffset() is None:
+        raise ReleaseContractError(
+            "release.candidate.verification_time",
+            "release verification time must be timezone-aware",
+        )
+    if created > verified_at or candidate_verification.verified_at != verified_at:
+        raise ReleaseContractError(
+            "release.candidate.verification_time",
+            "release constituents must be verified at the current release time",
+        )
     try:
         verify_quality_bundle(
             quality_bundle,
@@ -283,12 +305,12 @@ def build_release_candidate(
             policy=policy,
             resolver=quality_resolver,
             evaluation_verifier=evaluation_verifier,
-            evaluated_at=created_at,
+            evaluated_at=verified_at.isoformat(),
         )
         verify_candidate_decision(candidate_decision, candidate_verification)
         current_thumbnail = quality_resolver.resolve_current(
             thumbnail,
-            evaluated_at=created_at,
+            evaluated_at=verified_at.isoformat(),
         )
     except Exception as error:
         raise ReleaseContractError(
@@ -351,10 +373,12 @@ def build_release_candidate(
             "release.candidate.workspace",
             "final media and thumbnail are not from one current workspace observation",
         )
-    if parse_rfc3339_datetime(quality_bundle.evaluated_at) > created:
+    decision_time = parse_rfc3339_datetime(candidate_decision.evaluated_at)
+    quality_time = parse_rfc3339_datetime(quality_bundle.evaluated_at)
+    if not (decision_time <= quality_time <= created <= verified_at):
         raise ReleaseContractError(
             "release.candidate.time",
-            "release candidate predates its quality evaluation",
+            "release evidence timestamps violate causal ordering",
         )
     require_reference(metadata_ref, "metadata_ref")
     if metadata_ref.artifact_version != "publish-metadata-draft/1.0":
@@ -455,6 +479,51 @@ def build_release_candidate(
     )
 
 
+def build_release_candidate(
+    *,
+    episode_id: str,
+    final_media: MediaSubject,
+    metadata_ref: ArtifactReference,
+    subtitle_accessibility_refs: Sequence[ArtifactReference],
+    thumbnail: MediaSubject,
+    quality_bundle_ref: ArtifactReference,
+    quality_bundle: QualityBundle,
+    candidate_decision_ref: ArtifactReference,
+    candidate_decision: CandidateDecision,
+    candidate_verification: CandidateDecisionVerificationInputs,
+    destination_ref: ArtifactReference,
+    destination: DestinationBinding,
+    policy: QualityPolicy,
+    current_context: GateContext,
+    created_at: str,
+    quality_resolver: CurrentQualityEvidenceResolver,
+    evaluation_verifier: CurrentQualityEvaluationVerifier,
+) -> ReleaseCandidate:
+    """Create a candidate only after verification at its creation instant."""
+
+    created = parse_rfc3339_datetime(created_at)
+    return _build_release_candidate(
+        episode_id=episode_id,
+        final_media=final_media,
+        metadata_ref=metadata_ref,
+        subtitle_accessibility_refs=subtitle_accessibility_refs,
+        thumbnail=thumbnail,
+        quality_bundle_ref=quality_bundle_ref,
+        quality_bundle=quality_bundle,
+        candidate_decision_ref=candidate_decision_ref,
+        candidate_decision=candidate_decision,
+        candidate_verification=candidate_verification,
+        destination_ref=destination_ref,
+        destination=destination,
+        policy=policy,
+        current_context=current_context,
+        created_at=created_at,
+        verified_at=created,
+        quality_resolver=quality_resolver,
+        evaluation_verifier=evaluation_verifier,
+    )
+
+
 def validate_release_candidate_structure(value: ReleaseCandidate) -> ReleaseCandidate:
     if (
         value.artifact_version != RELEASE_CANDIDATE_VERSION
@@ -467,10 +536,47 @@ def validate_release_candidate_structure(value: ReleaseCandidate) -> ReleaseCand
     require_token(str(value.episode_id), "episode_id")
     require_media_subject(value.final_media, "final_media")
     require_media_subject(value.thumbnail, "thumbnail")
+    if str(value.final_media.reference.artifact_version) != "final-media/1.0":
+        raise ReleaseContractError(
+            "release.candidate.final_media_version",
+            "final media uses an unsupported artifact version",
+        )
+    if str(value.thumbnail.reference.artifact_version) != "thumbnail/1.0":
+        raise ReleaseContractError(
+            "release.candidate.thumbnail_version",
+            "thumbnail uses an unsupported artifact version",
+        )
     require_reference(value.metadata_ref, "metadata_ref")
+    if str(value.metadata_ref.artifact_version) != "publish-metadata-draft/1.0":
+        raise ReleaseContractError(
+            "release.candidate.metadata_version",
+            "metadata reference has an unsupported version",
+        )
     require_reference(value.quality_bundle_ref, "quality_bundle_ref")
+    if str(value.quality_bundle_ref.artifact_version) != "quality-bundle/1.0":
+        raise ReleaseContractError(
+            "release.candidate.quality_ref",
+            "quality reference has an unsupported version",
+        )
     require_reference(value.candidate_decision_ref, "candidate_decision_ref")
+    if str(value.candidate_decision_ref.artifact_version) != "candidate-decision/1.0":
+        raise ReleaseContractError(
+            "release.candidate.selection_ref",
+            "candidate decision reference has an unsupported version",
+        )
     require_reference(value.destination_ref, "destination_ref")
+    if str(value.destination_ref.artifact_version) != DESTINATION_BINDING_VERSION:
+        raise ReleaseContractError(
+            "release.candidate.destination_ref",
+            "destination reference has an unsupported version",
+        )
+    if len(value.subtitle_accessibility_refs) != 2 or {
+        str(item.artifact_version) for item in value.subtitle_accessibility_refs
+    } != {"subtitle-track/1.0", "accessibility-track/1.0"}:
+        raise ReleaseContractError(
+            "release.candidate.accessibility",
+            "release needs exactly one subtitle and one accessibility artifact",
+        )
     require_reference_consistency(
         value.subtitle_accessibility_refs,
         allow_exact_reuse=False,
@@ -496,6 +602,11 @@ def validate_release_candidate_structure(value: ReleaseCandidate) -> ReleaseCand
     )
     require_sha256(str(value.destination_sha256), "destination_sha256")
     require_sha256(str(value.policy_sha256), "policy_sha256")
+    if value.policy_sha256 != target_quality_policy().policy_sha256:
+        raise ReleaseContractError(
+            "release.candidate.policy",
+            "release candidate uses another target quality policy",
+        )
     require_gate_context(value.gate_context)
     require_sha256(
         str(value.workspace_observation_sha256),
@@ -513,6 +624,20 @@ def validate_release_candidate_structure(value: ReleaseCandidate) -> ReleaseCand
             "release.candidate.workspace",
             "release media uses another workspace observation",
         )
+    require_reference_consistency(
+        (
+            value.final_media.reference,
+            value.final_media.observation_receipt_ref,
+            value.metadata_ref,
+            *value.subtitle_accessibility_refs,
+            value.thumbnail.reference,
+            value.thumbnail.observation_receipt_ref,
+            value.quality_bundle_ref,
+            value.candidate_decision_ref,
+            value.destination_ref,
+        ),
+        allow_exact_reuse=False,
+    )
     intent = canonical_sha256(_candidate_material(value))
     if value.release_intent_sha256 != intent:
         raise ReleaseContractError(
@@ -608,11 +733,15 @@ def _assessment_identity(value: ReleaseAssessment) -> dict[str, object]:
 
 def release_assessment_to_mapping(value: ReleaseAssessment) -> dict[str, object]:
     validate_release_assessment_structure(value)
-    return {
+    mapping = {
         **_assessment_identity(value),
         "assessment_id": str(value.assessment_id),
         "assessment_sha256": str(value.assessment_sha256),
     }
+    result = validate_artifact_mapping(mapping)
+    if not result.ok:
+        raise ReleaseContractError("release.assessment.schema", "; ".join(result.error_texts))
+    return mapping
 
 
 def _validate_release_authority(
@@ -750,6 +879,7 @@ def assess_release_candidate(
     *,
     release_candidate_ref: ArtifactReference,
     release_candidate: ReleaseCandidate,
+    release_candidate_verification: ReleaseCandidateVerificationInputs,
     destination: DestinationBinding,
     current_context: GateContext,
     evaluated_at: datetime,
@@ -764,6 +894,20 @@ def assess_release_candidate(
         raise ReleaseContractError(
             "release.assessment.time",
             "release assessment time must be timezone-aware",
+        )
+    if release_candidate_verification.verified_at != evaluated_at:
+        raise ReleaseContractError(
+            "release.assessment.verification_time",
+            "release candidate must be freshly verified at assessment time",
+        )
+    verify_release_candidate(
+        release_candidate,
+        release_candidate_verification,
+    )
+    if parse_rfc3339_datetime(release_candidate.created_at) > evaluated_at:
+        raise ReleaseContractError(
+            "release.assessment.time",
+            "release assessment predates its candidate",
         )
     require_reference(release_candidate_ref, "release_candidate_ref")
     if (
@@ -844,7 +988,10 @@ def validate_release_assessment_structure(
     if (
         value.artifact_version != RELEASE_ASSESSMENT_VERSION
         or value.authority_effect != "none"
-        or value.publish_performed
+        or not isinstance(value.status, ReleaseAssessmentStatus)
+        or type(value.publish_performed) is not bool
+        or value.publish_performed is not False
+        or type(value.required_independent_humans) is not int
         or value.required_independent_humans != 1
     ):
         raise ReleaseContractError(
@@ -852,6 +999,11 @@ def validate_release_assessment_structure(
             "release assessment is not a non-publishing single-human handoff",
         )
     require_reference(value.release_candidate_ref, "release_candidate_ref")
+    if str(value.release_candidate_ref.artifact_version) != RELEASE_CANDIDATE_VERSION:
+        raise ReleaseContractError(
+            "release.assessment.candidate_ref",
+            "release assessment references an unsupported candidate version",
+        )
     require_sha256(
         str(value.release_candidate_sha256),
         "release_candidate_sha256",
@@ -924,9 +1076,29 @@ def validate_release_assessment_structure(
 
 def verify_release_candidate(
     value: ReleaseCandidate,
-    **inputs: object,
+    verification: ReleaseCandidateVerificationInputs,
 ) -> ReleaseCandidate:
-    expected = build_release_candidate(**inputs)
+    validate_release_candidate_structure(value)
+    expected = _build_release_candidate(
+        episode_id=verification.episode_id,
+        final_media=verification.final_media,
+        metadata_ref=verification.metadata_ref,
+        subtitle_accessibility_refs=verification.subtitle_accessibility_refs,
+        thumbnail=verification.thumbnail,
+        quality_bundle_ref=verification.quality_bundle_ref,
+        quality_bundle=verification.quality_bundle,
+        candidate_decision_ref=verification.candidate_decision_ref,
+        candidate_decision=verification.candidate_decision,
+        candidate_verification=verification.candidate_verification,
+        destination_ref=verification.destination_ref,
+        destination=verification.destination,
+        policy=verification.policy,
+        current_context=verification.current_context,
+        created_at=value.created_at,
+        verified_at=verification.verified_at,
+        quality_resolver=verification.quality_resolver,
+        evaluation_verifier=verification.evaluation_verifier,
+    )
     if value != expected:
         raise ReleaseContractError(
             "release.candidate.semantic_rebound",
@@ -952,6 +1124,7 @@ __all__ = [
     "DESTINATION_BINDING_VERSION",
     "RELEASE_ASSESSMENT_VERSION",
     "RELEASE_CANDIDATE_VERSION",
+    "ReleaseCandidateVerificationInputs",
     "assess_release_candidate",
     "build_destination_binding",
     "build_release_candidate",

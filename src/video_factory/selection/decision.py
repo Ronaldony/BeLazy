@@ -8,6 +8,7 @@ from datetime import datetime
 import hashlib
 
 from video_factory.approvals import GateContext, gate_context_to_mapping
+from video_factory.artifacts import validate_artifact_mapping
 from video_factory.authority import TrustedAuthorizationLedger
 from video_factory.config import canonical_json_bytes, canonical_sha256
 from video_factory.domain import ArtifactReference, HashDigest, OpaqueId
@@ -23,6 +24,7 @@ from video_factory.quality import (
     QualityPolicy,
     quality_bundle_bytes_sha256,
     require_target_quality_policy,
+    target_quality_policy,
     validate_initial_authority_evidence,
     verify_quality_bundle,
     validate_quality_bundle,
@@ -45,6 +47,7 @@ from .contracts import (
     CandidateDecisionStatus,
     CandidateDecisionVerificationInputs,
     CandidateOption,
+    CurrentCandidateConfidenceVerifier,
     RankedCandidate,
     SelectionContractError,
     ShotCandidateDecision,
@@ -53,6 +56,9 @@ from .contracts import (
 
 
 CANDIDATE_DECISION_VERSION = "candidate-decision/1.0"
+CANDIDATE_CONFIDENCE_RECEIPT_VERSION = "candidate-confidence-receipt/1.0"
+AUTO_SELECT_CANDIDATES_ACTION_ID = "auto_select_candidates"
+AUTO_SELECT_CANDIDATES_CAPABILITY_ID = "auto_select_candidates"
 
 
 def _subject_key(subject: MediaSubject) -> tuple[object, ...]:
@@ -82,17 +88,29 @@ def _option_mapping(value: CandidateOption) -> dict[str, object]:
     require_media_subject(value.subject, "candidate subject")
     require_token(str(value.adapter_id), "candidate adapter_id")
     require_bps(value.confidence_bps, "candidate confidence")
+    require_reference(value.confidence_receipt_ref, "candidate confidence_receipt_ref")
+    if (
+        str(value.confidence_receipt_ref.artifact_version)
+        != CANDIDATE_CONFIDENCE_RECEIPT_VERSION
+    ):
+        raise SelectionContractError(
+            "selection.confidence.receipt_version",
+            "candidate confidence receipt has an unsupported artifact version",
+        )
     return {
         "subject": media_subject_to_mapping(value.subject),
         "adapter_id": str(value.adapter_id),
         "confidence_bps": value.confidence_bps,
+        "confidence_receipt_ref": reference_to_mapping(
+            value.confidence_receipt_ref
+        ),
     }
 
 
 def _selection_input_mapping(
     episode_id: str,
     bundle_ref: ArtifactReference,
-    bundle: QualityBundle,
+    bundle_sha256: HashDigest,
     policy: QualityPolicy,
     context: GateContext,
     shots: tuple[ShotCandidateSet, ...],
@@ -100,7 +118,7 @@ def _selection_input_mapping(
     return {
         "episode_id": episode_id,
         "quality_bundle_ref": reference_to_mapping(bundle_ref),
-        "quality_bundle_sha256": str(bundle.bundle_sha256),
+        "quality_bundle_sha256": str(bundle_sha256),
         "policy_sha256": str(policy.policy_sha256),
         "gate_context": gate_context_to_mapping(context),
         "shots": [
@@ -119,6 +137,9 @@ def _ranked_mapping(value: RankedCandidate) -> dict[str, object]:
         "adapter_id": str(value.adapter_id),
         "quality_score_bps": value.quality_score_bps,
         "confidence_bps": value.confidence_bps,
+        "confidence_receipt_ref": reference_to_mapping(
+            value.confidence_receipt_ref
+        ),
     }
 
 
@@ -173,11 +194,18 @@ def _identity(value: CandidateDecision) -> dict[str, object]:
 
 def candidate_decision_to_mapping(value: CandidateDecision) -> dict[str, object]:
     validate_candidate_decision_structure(value)
-    return {
+    mapping = {
         **_identity(value),
         "decision_id": str(value.decision_id),
         "decision_sha256": str(value.decision_sha256),
     }
+    result = validate_artifact_mapping(mapping)
+    if not result.ok:
+        raise SelectionContractError(
+            "selection.schema",
+            "; ".join(result.error_texts),
+        )
+    return mapping
 
 
 def candidate_decision_bytes_sha256(value: CandidateDecision) -> HashDigest:
@@ -235,10 +263,60 @@ def _normalize_shots(
                 (
                     item.subject.reference,
                     item.subject.observation_receipt_ref,
+                    item.confidence_receipt_ref,
                 )
             )
     require_reference_consistency(references, allow_exact_reuse=False)
     return values
+
+
+def candidate_selection_input_sha256(
+    *,
+    episode_id: str,
+    quality_bundle_ref: ArtifactReference,
+    quality_bundle: QualityBundle,
+    candidate_sets: Sequence[ShotCandidateSet],
+    policy: QualityPolicy,
+    current_context: GateContext,
+) -> HashDigest:
+    """Return the exact non-authorizing input digest used by W04 authority."""
+
+    validate_quality_bundle(quality_bundle)
+    require_target_quality_policy(policy)
+    require_gate_context(current_context)
+    episode = require_token(episode_id, "episode_id")
+    require_reference(quality_bundle_ref, "quality_bundle_ref")
+    if (
+        str(quality_bundle.episode_id) != episode
+        or quality_bundle.policy_sha256 != policy.policy_sha256
+        or quality_bundle.gate_context != current_context
+        or str(quality_bundle_ref.artifact_version) != "quality-bundle/1.0"
+        or quality_bundle_ref.sha256 != quality_bundle_bytes_sha256(quality_bundle)
+    ):
+        raise SelectionContractError(
+            "selection.input",
+            "selection input is not bound to the exact bundle, policy, and context",
+        )
+    shots = _normalize_shots(candidate_sets)
+    candidate_keys = {
+        _subject_key(item.subject) for shot in shots for item in shot.candidates
+    }
+    bundle_keys = {_subject_key(item.subject) for item in quality_bundle.subjects}
+    if candidate_keys != bundle_keys:
+        raise SelectionContractError(
+            "selection.coverage",
+            "candidate sets must exactly cover QualityBundle media subjects",
+        )
+    return canonical_sha256(
+        _selection_input_mapping(
+            episode,
+            quality_bundle_ref,
+            quality_bundle.bundle_sha256,
+            policy,
+            current_context,
+            shots,
+        )
+    )
 
 
 def build_candidate_decision(
@@ -254,6 +332,7 @@ def build_candidate_decision(
     authority_ledger: TrustedAuthorizationLedger | None,
     quality_resolver: CurrentQualityEvidenceResolver | None,
     evaluation_verifier: CurrentQualityEvaluationVerifier | None,
+    confidence_verifier: CurrentCandidateConfidenceVerifier | None,
     authority_references: Sequence[ArtifactReference] = (),
 ) -> CandidateDecision:
     validate_quality_bundle(quality_bundle)
@@ -296,15 +375,13 @@ def build_candidate_decision(
             "selection.coverage",
             "candidate sets must exactly cover QualityBundle media subjects",
         )
-    selection_input_sha256 = canonical_sha256(
-        _selection_input_mapping(
-            episode,
-            quality_bundle_ref,
-            quality_bundle,
-            policy,
-            current_context,
-            shots,
-        )
+    selection_input_sha256 = candidate_selection_input_sha256(
+        episode_id=episode,
+        quality_bundle_ref=quality_bundle_ref,
+        quality_bundle=quality_bundle,
+        candidate_sets=shots,
+        policy=policy,
+        current_context=current_context,
     )
     authority_reasons: list[str] = []
     quality_current_reasons: list[str] = []
@@ -324,21 +401,69 @@ def build_candidate_decision(
             quality_current_reasons.append(
                 "selection.quality.current_evidence_invalid"
             )
+    confidence_current_reasons: list[str] = []
+    if confidence_verifier is None:
+        confidence_current_reasons.append(
+            "selection.confidence.current_evidence_missing"
+        )
+    else:
+        for shot in shots:
+            for option in shot.candidates:
+                try:
+                    current_option = confidence_verifier.verify_current(
+                        option,
+                        gate_context=current_context,
+                        policy=policy,
+                        evaluated_at=evaluated_at,
+                    )
+                except Exception:
+                    current_option = None
+                if current_option != option:
+                    confidence_current_reasons.append(
+                        "selection.confidence.current_evidence_invalid"
+                    )
+                    break
+            if confidence_current_reasons:
+                break
     candidate_refs = tuple(item.reference for item in candidate_subjects)
-    authority_inputs = tuple(
-        sorted((quality_bundle_ref, *candidate_refs), key=_reference_sort_key)
+    confidence_refs = tuple(
+        item.confidence_receipt_ref
+        for shot in shots
+        for item in shot.candidates
     )
+    authority_inputs = tuple(
+        sorted(
+            (quality_bundle_ref, *candidate_refs, *confidence_refs),
+            key=_reference_sort_key,
+        )
+    )
+    require_reference_consistency(authority_inputs, allow_exact_reuse=False)
     if authority is None or authority_ledger is None:
         authority_reasons.append("selection.authority.missing")
     else:
         try:
+            request = authority.request
+            if (
+                request.request_envelope_sha256 != selection_input_sha256
+                or str(request.scope.episode_id) != episode
+                or request.scope.candidate_count != len(candidate_subjects)
+                or request.scope.cost_minor_units != 0
+                or request.scope.retry_index != 0
+                or request.scope.allowed_outputs
+                or request.scope.provider_id is not None
+                or request.scope.model_id is not None
+            ):
+                raise QualityContractError(
+                    "selection.authority.scope",
+                    "candidate authority request does not bind the exact selection input",
+                )
             validate_initial_authority_evidence(
                 authority,
                 current_context=current_context,
                 evaluated_at=evaluated_at,
-                expected_action_id="rank_generation_candidates",
-                expected_capability_id="rank_candidates",
-                expected_plan_sha256=str(authority.request.executable_plan_sha256),
+                expected_action_id=AUTO_SELECT_CANDIDATES_ACTION_ID,
+                expected_capability_id=AUTO_SELECT_CANDIDATES_CAPABILITY_ID,
+                expected_plan_sha256=str(current_context.executable_plan_sha256),
                 expected_input_artifacts=authority_inputs,
                 expected_destination=None,
                 expected_side_effect=False,
@@ -348,8 +473,9 @@ def build_candidate_decision(
         except (QualityContractError, ValueError):
             authority_reasons.append("selection.authority.invalid")
     bundle_reasons: list[str] = []
-    bundle_denied = bool(quality_current_reasons)
+    bundle_denied = bool(quality_current_reasons or confidence_current_reasons)
     bundle_reasons.extend(quality_current_reasons)
+    bundle_reasons.extend(confidence_current_reasons)
     if quality_bundle.hard_failure_reason_codes:
         bundle_reasons.append("selection.quality.hard_failure")
         bundle_denied = True
@@ -374,6 +500,7 @@ def build_candidate_decision(
                             _subject_key(item.subject)
                         ].aggregate_score_bps,
                         confidence_bps=item.confidence_bps,
+                        confidence_receipt_ref=item.confidence_receipt_ref,
                     )
                     for item in shot.candidates
                 ),
@@ -481,6 +608,7 @@ def validate_candidate_decision_structure(
     if (
         value.artifact_version != CANDIDATE_DECISION_VERSION
         or value.authority_effect != "none"
+        or not isinstance(value.status, CandidateDecisionStatus)
     ):
         raise SelectionContractError(
             "selection.contract",
@@ -488,8 +616,20 @@ def validate_candidate_decision_structure(
         )
     require_token(str(value.episode_id), "episode_id")
     require_reference(value.quality_bundle_ref, "quality_bundle_ref")
+    if str(value.quality_bundle_ref.artifact_version) != "quality-bundle/1.0":
+        raise SelectionContractError(
+            "selection.bundle_ref",
+            "candidate decision has an unsupported QualityBundle reference",
+        )
     require_sha256(str(value.quality_bundle_sha256), "quality_bundle_sha256")
     require_sha256(str(value.policy_sha256), "policy_sha256")
+    if value.policy_sha256 != require_target_quality_policy(
+        target_quality_policy()
+    ).policy_sha256:
+        raise SelectionContractError(
+            "selection.policy",
+            "candidate decision uses another quality policy",
+        )
     require_gate_context(value.gate_context)
     parse_rfc3339_datetime(value.evaluated_at)
     require_sha256(str(value.selection_input_sha256), "selection_input_sha256")
@@ -519,8 +659,14 @@ def validate_candidate_decision_structure(
             "shot decisions are empty, duplicated, or non-canonical",
         )
     all_refs: list[ArtifactReference] = [value.quality_bundle_ref]
+    candidate_refs: list[ArtifactReference] = []
     for shot in value.shots:
         require_token(str(shot.shot_id), "shot_id")
+        if not isinstance(shot.status, CandidateDecisionStatus):
+            raise SelectionContractError(
+                "selection.status",
+                "shot status is not a CandidateDecisionStatus",
+            )
         if len(shot.ranked_candidates) < 2:
             raise SelectionContractError(
                 "selection.margin.unavailable",
@@ -552,16 +698,33 @@ def validate_candidate_decision_structure(
             require_token(str(item.adapter_id), "adapter_id")
             require_bps(item.quality_score_bps, "quality_score_bps")
             require_bps(item.confidence_bps, "confidence_bps")
+            _option_mapping(
+                CandidateOption(
+                    subject=item.subject,
+                    adapter_id=item.adapter_id,
+                    confidence_bps=item.confidence_bps,
+                    confidence_receipt_ref=item.confidence_receipt_ref,
+                )
+            )
             all_refs.extend(
                 (
                     item.subject.reference,
                     item.subject.observation_receipt_ref,
+                    item.confidence_receipt_ref,
+                )
+            )
+            candidate_refs.extend(
+                (
+                    item.subject.reference,
+                    item.subject.observation_receipt_ref,
+                    item.confidence_receipt_ref,
                 )
             )
         expected_margin = (
             shot.ranked_candidates[0].quality_score_bps
             - shot.ranked_candidates[1].quality_score_bps
         )
+        require_bps(shot.margin_to_second_bps, "margin_to_second_bps")
         if shot.margin_to_second_bps != expected_margin:
             raise SelectionContractError(
                 "selection.margin",
@@ -583,6 +746,45 @@ def validate_candidate_decision_structure(
                 "selected media is inconsistent with decision status",
             )
     require_reference_consistency(all_refs, allow_exact_reuse=True)
+    require_reference_consistency(candidate_refs, allow_exact_reuse=False)
+    reconstructed_shots = tuple(
+        ShotCandidateSet(
+            shot_id=shot.shot_id,
+            candidates=tuple(
+                sorted(
+                    (
+                        CandidateOption(
+                            subject=item.subject,
+                            adapter_id=item.adapter_id,
+                            confidence_bps=item.confidence_bps,
+                            confidence_receipt_ref=item.confidence_receipt_ref,
+                        )
+                        for item in shot.ranked_candidates
+                    ),
+                    key=lambda item: (
+                        _subject_key(item.subject),
+                        str(item.adapter_id),
+                    ),
+                )
+            ),
+        )
+        for shot in value.shots
+    )
+    expected_selection_input = canonical_sha256(
+        _selection_input_mapping(
+            str(value.episode_id),
+            value.quality_bundle_ref,
+            value.quality_bundle_sha256,
+            target_quality_policy(),
+            value.gate_context,
+            reconstructed_shots,
+        )
+    )
+    if value.selection_input_sha256 != expected_selection_input:
+        raise SelectionContractError(
+            "selection.input_rebound",
+            "selection input digest differs from persisted candidate inputs",
+        )
     if any(item.status is CandidateDecisionStatus.DENIED for item in value.shots):
         expected_status = CandidateDecisionStatus.DENIED
     elif all(
@@ -622,6 +824,17 @@ def verify_candidate_decision(
     value: CandidateDecision,
     verification: CandidateDecisionVerificationInputs,
 ) -> CandidateDecision:
+    validate_candidate_decision_structure(value)
+    persisted_at = parse_rfc3339_datetime(value.evaluated_at)
+    if (
+        verification.verified_at.tzinfo is None
+        or verification.verified_at.utcoffset() is None
+        or persisted_at > verification.verified_at
+    ):
+        raise SelectionContractError(
+            "selection.verification_time",
+            "current verification must be timezone-aware and not predate the decision",
+        )
     expected = build_candidate_decision(
         episode_id=str(value.episode_id),
         quality_bundle_ref=verification.quality_bundle_ref,
@@ -629,14 +842,27 @@ def verify_candidate_decision(
         candidate_sets=verification.candidate_sets,
         policy=verification.policy,
         current_context=verification.current_context,
-        evaluated_at=verification.evaluated_at,
+        evaluated_at=verification.verified_at,
         authority=verification.authority,
         authority_ledger=verification.authority_ledger,
         quality_resolver=verification.quality_resolver,
         evaluation_verifier=verification.evaluation_verifier,
+        confidence_verifier=verification.confidence_verifier,
         authority_references=verification.authority_references,
     )
-    if value != expected:
+    persisted_semantics = {
+        **_identity(value),
+        "evaluated_at": None,
+        "authority_decision_sha256": None,
+        "authority_receipt_sha256": None,
+    }
+    current_semantics = {
+        **_identity(expected),
+        "evaluated_at": None,
+        "authority_decision_sha256": None,
+        "authority_receipt_sha256": None,
+    }
+    if persisted_semantics != current_semantics:
         raise SelectionContractError(
             "selection.semantic_rebound",
             "CandidateDecision does not match a clean current recomputation",
@@ -645,10 +871,14 @@ def verify_candidate_decision(
 
 
 __all__ = [
+    "AUTO_SELECT_CANDIDATES_ACTION_ID",
+    "AUTO_SELECT_CANDIDATES_CAPABILITY_ID",
+    "CANDIDATE_CONFIDENCE_RECEIPT_VERSION",
     "CANDIDATE_DECISION_VERSION",
     "build_candidate_decision",
     "candidate_decision_bytes_sha256",
     "candidate_decision_to_mapping",
+    "candidate_selection_input_sha256",
     "validate_candidate_decision_structure",
     "verify_candidate_decision",
 ]

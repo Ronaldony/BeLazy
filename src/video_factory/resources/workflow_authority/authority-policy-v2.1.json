@@ -131,6 +131,10 @@
     {
       "action_id": "managed_mutation",
       "risk": "R4"
+    },
+    {
+      "action_id": "auto_select_candidates",
+      "risk": "R1"
     }
   ],
   "enforcement_matrix": [
@@ -407,6 +411,6 @@
       "negative_test_id": "test_policy_enforcement_matrix_negative[hard_escalation_triggers.direct_human_mutation_requested]"
     }
   ],
-  "bundle_id": "policy-bundle-20cf86efeb26d545e160",
-  "bundle_sha256": "20cf86efeb26d545e160ff1b0c189c15fe4293010f95b879902d75e012fe8a1b"
+  "bundle_id": "policy-bundle-6b4192d4cba4f2351031",
+  "bundle_sha256": "6b4192d4cba4f2351031d972165ccb0d156b43340f2aa52c10b0d54f738f2dbd"
 }

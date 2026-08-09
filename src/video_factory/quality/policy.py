@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 
+from video_factory.artifacts import validate_artifact_mapping
 from video_factory.config import canonical_sha256
 from video_factory.domain import HashDigest, OpaqueId
 
@@ -54,11 +55,15 @@ def _identity(policy: QualityPolicy) -> dict[str, object]:
 
 def quality_policy_to_mapping(policy: QualityPolicy) -> dict[str, object]:
     validate_quality_policy(policy)
-    return {
+    mapping = {
         **_identity(policy),
         "policy_id": str(policy.policy_id),
         "policy_sha256": str(policy.policy_sha256),
     }
+    result = validate_artifact_mapping(mapping)
+    if not result.ok:
+        raise QualityContractError("quality.policy.schema", "; ".join(result.error_texts))
+    return mapping
 
 
 def validate_quality_policy(policy: QualityPolicy) -> QualityPolicy:

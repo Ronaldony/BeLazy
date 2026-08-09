@@ -7,11 +7,13 @@
   current media/evaluator receipts; hard and safety failures dominate scores,
   while remediation remains affected-target-only with receipt-bound bounded
   history.
-- Added confidence/score/margin-bound CandidateDecision with current W04
-  trusted-ledger verification. Legacy candidate-ranking/edit-selection truth
+- Added confidence-receipt/score/margin-bound CandidateDecision with exact
+  `auto_select_candidates` W04 trusted-ledger verification and later-time
+  current verification. Legacy candidate-ranking/edit-selection truth
   semantics remain unchanged; the compatibility projection is read-only,
   non-current, and never claims human selection.
-- Added cycle-free DestinationBinding, ReleaseCandidate, and ReleaseAssessment.
+- Added cycle-free DestinationBinding, freshly reverified ReleaseCandidate,
+  and ReleaseAssessment.
   Initial release retains exactly one current human approval, creates no human
   evidence, performs no publish action, and leaves campaign activation and all
   runtime upload/reconciliation work to W06. Added seven closed schemas and an

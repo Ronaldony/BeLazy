@@ -153,6 +153,7 @@ def target_policy_bundle() -> PolicyBundle:
     definition = default_workflow_definition()
     risk_map = tuple((item.action_id, item.risk) for item in definition.actions) + (
         (OpaqueId("managed_mutation"), ActionRisk.R4),
+        (OpaqueId("auto_select_candidates"), ActionRisk.R1),
     )
     provisional = PolicyBundle(
         artifact_version=POLICY_ARTIFACT_VERSION,

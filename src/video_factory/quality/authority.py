@@ -21,6 +21,7 @@ from video_factory.authority import (
     target_policy_bundle,
     validate_action_authority_request,
     validate_authority_decision,
+    validate_initial_authority_receipt_binding,
     validate_authority_verification_receipt,
     validate_risk_assessment,
 )
@@ -39,20 +40,40 @@ class InitialAuthorityEvidence:
     receipt: AuthorityVerificationReceipt
 
     def __post_init__(self) -> None:
-        try:
-            validate_action_authority_request(self.request)
-            validate_risk_assessment(self.risk)
-            validate_authority_decision(self.decision)
-            validate_authority_verification_receipt(self.receipt)
-        except (AttributeError, TypeError, ValueError) as error:
-            raise QualityContractError(
-                "quality.authority.invalid",
-                "authority evidence is structurally invalid",
-            ) from error
-        request = self.request
-        risk = self.risk
-        decision = self.decision
-        receipt = self.receipt
+        validate_initial_authority_evidence_structure(self)
+
+
+def validate_initial_authority_evidence_structure(
+    evidence: InitialAuthorityEvidence,
+) -> InitialAuthorityEvidence:
+    """Reject malformed or internally rebound initial-authority evidence."""
+
+    if not isinstance(evidence, InitialAuthorityEvidence):
+        raise QualityContractError(
+            "quality.authority.invalid",
+            "authority evidence is structurally invalid",
+        )
+    try:
+        request = evidence.request
+        risk = evidence.risk
+        decision = evidence.decision
+        receipt = evidence.receipt
+    except AttributeError as error:
+        raise QualityContractError(
+            "quality.authority.invalid",
+            "authority evidence is structurally invalid",
+        ) from error
+    try:
+        validate_action_authority_request(request)
+        validate_risk_assessment(risk)
+        validate_authority_decision(decision)
+        validate_authority_verification_receipt(receipt)
+    except (AttributeError, TypeError, ValueError) as error:
+        raise QualityContractError(
+            "quality.authority.invalid",
+            "authority evidence is structurally invalid",
+        ) from error
+    try:
         request_context_sha256 = gate_context_sha256(request.gate_context)
         if (
             not risk.supported
@@ -80,6 +101,13 @@ class InitialAuthorityEvidence:
                 "quality.authority.binding",
                 "authority request, risk, decision, and receipt are not coherent",
             )
+        validate_initial_authority_receipt_binding(
+            receipt,
+            request,
+            risk,
+            target_policy_bundle(),
+            parse_rfc3339_datetime(receipt.evaluated_at),
+        )
         issued = parse_rfc3339_datetime(receipt.evaluated_at)
         valid_until = parse_rfc3339_datetime(receipt.valid_until)
         decision_issued = parse_rfc3339_datetime(decision.evaluated_at)
@@ -93,6 +121,14 @@ class InitialAuthorityEvidence:
                 "quality.authority.window",
                 "authority decision and receipt validity windows are incoherent",
             )
+    except QualityContractError:
+        raise
+    except (AttributeError, TypeError, ValueError) as error:
+        raise QualityContractError(
+            "quality.authority.binding",
+            "authority receipt is not canonically bound to its request",
+        ) from error
+    return evidence
 
 
 def validate_initial_authority_evidence(
@@ -113,13 +149,7 @@ def validate_initial_authority_evidence(
     if evaluated_at.tzinfo is None or evaluated_at.utcoffset() is None:
         raise QualityContractError("quality.authority.time", "authority evaluation time must be timezone-aware")
     require_gate_context(current_context)
-    try:
-        validate_action_authority_request(evidence.request)
-        validate_risk_assessment(evidence.risk)
-        validate_authority_decision(evidence.decision)
-        validate_authority_verification_receipt(evidence.receipt)
-    except (AttributeError, TypeError, ValueError) as error:
-        raise QualityContractError("quality.authority.invalid", "authority evidence is structurally invalid") from error
+    validate_initial_authority_evidence_structure(evidence)
     request = evidence.request
     risk = evidence.risk
     decision = evidence.decision
@@ -192,4 +222,8 @@ def validate_initial_authority_evidence(
     return evidence
 
 
-__all__ = ["InitialAuthorityEvidence", "validate_initial_authority_evidence"]
+__all__ = [
+    "InitialAuthorityEvidence",
+    "validate_initial_authority_evidence",
+    "validate_initial_authority_evidence_structure",
+]

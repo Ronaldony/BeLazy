@@ -17,7 +17,11 @@ from .aggregate import (
     verify_quality_bundle,
     validate_remediation_plan,
 )
-from .authority import InitialAuthorityEvidence, validate_initial_authority_evidence
+from .authority import (
+    InitialAuthorityEvidence,
+    validate_initial_authority_evidence,
+    validate_initial_authority_evidence_structure,
+)
 from .contracts import (
     CurrentQualityEvidenceResolver,
     CurrentQualityEvaluationVerifier,
@@ -110,6 +114,7 @@ __all__ = [
     "target_quality_policy",
     "validate_dimension_evaluation",
     "validate_initial_authority_evidence",
+    "validate_initial_authority_evidence_structure",
     "validate_quality_bundle",
     "verify_quality_bundle",
     "validate_quality_policy",

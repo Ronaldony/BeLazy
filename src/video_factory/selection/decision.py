@@ -26,6 +26,7 @@ from video_factory.quality import (
     require_target_quality_policy,
     target_quality_policy,
     validate_initial_authority_evidence,
+    validate_initial_authority_evidence_structure,
     verify_quality_bundle,
     validate_quality_bundle,
 )
@@ -491,6 +492,13 @@ def build_candidate_decision(
     if authority is None or authority_ledger is None:
         authority_reasons.append("selection.authority.missing")
     else:
+        try:
+            validate_initial_authority_evidence_structure(authority)
+        except QualityContractError as error:
+            raise SelectionContractError(
+                "selection.authority.evidence",
+                "complete authority evidence is malformed",
+            ) from error
         try:
             request = authority.request
             validate_initial_authority_evidence(

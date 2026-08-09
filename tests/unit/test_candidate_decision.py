@@ -9,6 +9,7 @@ from video_factory.authority import (
     AuthorityDecisionStatus,
     ActionRisk,
     AuthoritySource,
+    authority_verification_receipt_sha256,
     build_action_authority_request,
     LedgerRecordState,
     build_bound_action_authority_request,
@@ -43,6 +44,7 @@ from video_factory.selection import (
     verify_candidate_decision,
 )
 from video_factory.workflow import AuthorityRequirement
+from video_factory.authority.evaluator import _decision_identity as _authority_decision_identity
 from video_factory.selection.decision import _identity as _selection_identity
 from tests.unit.test_authority_control import FakeLedger, NOW, _request
 from tests.unit.test_quality_bundle import (
@@ -629,7 +631,7 @@ def test_candidate_authority_requires_exact_production_scope(scope_field: str) -
 
 
 def test_candidate_authority_evidence_rejects_missing_internal_components() -> None:
-    _, _, _, _, evidence, _ = _decision()
+    value, bundle_ref, bundle, candidates, evidence, ledger = _decision()
     fields = ("request", "risk", "decision", "receipt")
     for field in fields:
         values = {
@@ -657,6 +659,82 @@ def test_candidate_authority_evidence_rejects_missing_internal_components() -> N
         }
         with pytest.raises(QualityContractError, match="structurally invalid"):
             InitialAuthorityEvidence(**values)
+
+    receipt_rebounds = (
+        {"workspace_id": OpaqueId("foreign-workspace")},
+        {"reserved_candidates": 0},
+        {"retry_index": 1},
+        {"adapter_id": OpaqueId("foreign-adapter")},
+        {"service_identity": OpaqueId("foreign-service")},
+        {"workspace_observation_sha256": HashDigest("f" * 64)},
+    )
+    for receipt_rebound in receipt_rebounds:
+        provisional_receipt = replace(
+            evidence.receipt,
+            receipt_id=OpaqueId("pending"),
+            receipt_sha256=HashDigest("0" * 64),
+            **receipt_rebound,
+        )
+        receipt_digest = authority_verification_receipt_sha256(provisional_receipt)
+        rebound_receipt = replace(
+            provisional_receipt,
+            receipt_id=OpaqueId(f"authority-receipt-{str(receipt_digest)[:20]}"),
+            receipt_sha256=receipt_digest,
+        )
+        provisional_decision = replace(
+            evidence.decision,
+            decision_id=OpaqueId("pending"),
+            decision_sha256=HashDigest("0" * 64),
+            verification_receipt_id=rebound_receipt.receipt_id,
+            verification_receipt_sha256=rebound_receipt.receipt_sha256,
+        )
+        decision_digest = canonical_sha256(
+            _authority_decision_identity(provisional_decision)
+        )
+        rebound_decision = replace(
+            provisional_decision,
+            decision_id=OpaqueId(f"authority-decision-{str(decision_digest)[:20]}"),
+            decision_sha256=decision_digest,
+        )
+        with pytest.raises(QualityContractError, match="canonically bound"):
+            InitialAuthorityEvidence(
+                request=evidence.request,
+                risk=evidence.risk,
+                decision=rebound_decision,
+                receipt=rebound_receipt,
+            )
+
+    forged = object.__new__(InitialAuthorityEvidence)
+    object.__setattr__(
+        forged,
+        "request",
+        replace(evidence.request, requester_principal_id=OpaqueId("other")),
+    )
+    object.__setattr__(forged, "risk", evidence.risk)
+    object.__setattr__(forged, "decision", evidence.decision)
+    object.__setattr__(forged, "receipt", evidence.receipt)
+    with pytest.raises(
+        SelectionContractError,
+        match="complete authority evidence is malformed",
+    ):
+        build_candidate_decision(
+            workspace_id=str(value.workspace_id),
+            channel_id=str(value.channel_id),
+            concept_id=str(value.concept_id),
+            episode_id=str(value.episode_id),
+            quality_origin_evaluated_at=bundle.evaluated_at,
+            quality_bundle_ref=bundle_ref,
+            quality_bundle=bundle,
+            candidate_sets=(candidates,),
+            policy=target_quality_policy(),
+            current_context=value.gate_context,
+            evaluated_at=NOW,
+            authority=forged,
+            authority_ledger=ledger,
+            quality_resolver=_CurrentMediaResolver(),
+            evaluation_verifier=_CurrentEvaluationVerifier(),
+            confidence_verifier=_CurrentConfidenceVerifier(),
+        )
 
 
 def test_candidate_origin_authority_and_timestamp_are_immutable() -> None:

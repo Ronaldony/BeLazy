@@ -1272,13 +1272,15 @@ def _build_decision(
     )
 
 
-def _validate_initial_receipt(
+def validate_initial_authority_receipt_binding(
     receipt: AuthorityVerificationReceipt,
     request: ActionAuthorityRequest,
     risk: ActionRiskAssessment,
     policy: PolicyBundle,
     evaluated_at: datetime,
-) -> None:
+) -> AuthorityVerificationReceipt:
+    """Validate canonical initial receipt material without trusting the port."""
+
     validate_authority_verification_receipt(receipt)
     _validate_receipt_risk_window(receipt, risk, policy)
     expected_workflow_evaluation_sha256 = (
@@ -1315,6 +1317,7 @@ def _validate_initial_receipt(
         or receipt.retry_index != request.scope.retry_index
     ):
         raise AuthorityContractError("authority.receipt.rebound", "initial receipt is bound to another request")
+    return receipt
 
 
 def _validate_receipt_risk_window(
@@ -1468,7 +1471,13 @@ def evaluate_authority(
             reasons=("authority.ledger.denied",), evaluated_at=evaluated_at,
             required_authority=required, receipt=None,
         )
-    _validate_initial_receipt(receipt, request, risk, policy, evaluated_at)
+    validate_initial_authority_receipt_binding(
+        receipt,
+        request,
+        risk,
+        policy,
+        evaluated_at,
+    )
     verified_principals = tuple(
         item.principal_id for item in receipt.principal_verifications
     )

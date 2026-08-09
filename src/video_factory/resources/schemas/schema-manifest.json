@@ -41,7 +41,7 @@
     },
     {
       "filename": "authority-verification-receipt.schema.json",
-      "sha256": "aab496a73efa5dd085d2231b3c9931ed0b6dcb4258cd028c616d4d6bb325a1ad",
+      "sha256": "621e515a53aebfb7020ec37b2fb825d55bc06bb26f10aaed7bba243283da6972",
       "schema_id": "https://schemas.video-factory.invalid/authority/authority-verification-receipt.schema.json",
       "artifact_version": "authority-verification-receipt/1.0"
     },
@@ -317,7 +317,7 @@
     },
     {
       "filename": "policy-bundle.schema.json",
-      "sha256": "60e36cdc2877649eff1ba05531061428b4cdab5f1d6052880702d024b7fddb48",
+      "sha256": "d1bc368a5a8db3472a08a9cb1a6d394d332c32bd4e9c922effe7f3a7f7006d00",
       "schema_id": "https://schemas.video-factory.invalid/authority/policy-bundle.schema.json",
       "artifact_version": "policy-bundle/1.0"
     },
@@ -377,7 +377,7 @@
     },
     {
       "filename": "standing-authorization.schema.json",
-      "sha256": "b62f1456aca5eaafe1b9b1ee15ec08c10dd043d02645712eb176703d948c4ba3",
+      "sha256": "4dc1093250d64c7ca147cb1e16e275bfecc199640106923ff1563e245a8a49f3",
       "schema_id": "https://schemas.video-factory.invalid/authority/standing-authorization.schema.json",
       "artifact_version": "standing-authorization/1.0"
     },
@@ -419,7 +419,7 @@
     },
     {
       "filename": "workflow-evaluation.schema.json",
-      "sha256": "54b4447845f8cfa87cfd136394a454a2124705055489660f5cba8abdc0a43d05",
+      "sha256": "ad4d7ab3d0476121c9ee25f19e98fed446ab6c1f631af1ea8592122d09441b6f",
       "schema_id": "https://schemas.video-factory.invalid/workflow/workflow-evaluation.schema.json",
       "artifact_version": "workflow-evaluation/1.0"
     },

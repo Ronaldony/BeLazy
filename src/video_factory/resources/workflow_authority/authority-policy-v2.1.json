@@ -7,6 +7,7 @@
   "unknown_state_fail_closed": true,
   "self_approval_forbidden": true,
   "release_campaign_enabled": false,
+  "maximum_r4_validity_seconds": 300,
   "hard_escalation_triggers": [
     "unresolved_director_hard_blocker",
     "low_or_conflicting_confidence",
@@ -184,7 +185,7 @@
     {
       "policy_path": "material_change_invalidates_authority",
       "owner": "authority.guard",
-      "enforcement_phase": "initial",
+      "enforcement_phase": "predispatch",
       "reason_code": "authority.predispatch.context",
       "positive_test_id": "test_policy_enforcement_matrix_positive[material_change_invalidates_authority]",
       "negative_test_id": "test_policy_enforcement_matrix_negative[material_change_invalidates_authority]"
@@ -294,8 +295,16 @@
       "negative_test_id": "test_policy_enforcement_matrix_negative[R4.standing_grant_forbidden]"
     },
     {
+      "policy_path": "R4.short_expiry",
+      "owner": "authority.ledger",
+      "enforcement_phase": "initial_and_predispatch",
+      "reason_code": "authority.r4.expiry_too_long",
+      "positive_test_id": "test_policy_enforcement_matrix_positive[R4.short_expiry]",
+      "negative_test_id": "test_policy_enforcement_matrix_negative[R4.short_expiry]"
+    },
+    {
       "policy_path": "hard_escalation_triggers.unresolved_director_hard_blocker",
-      "owner": "workflow.gates",
+      "owner": "authority.policy",
       "enforcement_phase": "initial",
       "reason_code": "authority.escalation.unresolved_director_hard_blocker.triggered",
       "positive_test_id": "test_policy_enforcement_matrix_positive[hard_escalation_triggers.unresolved_director_hard_blocker]",
@@ -303,7 +312,7 @@
     },
     {
       "policy_path": "hard_escalation_triggers.low_or_conflicting_confidence",
-      "owner": "workflow.gates",
+      "owner": "authority.policy",
       "enforcement_phase": "initial",
       "reason_code": "authority.escalation.low_or_conflicting_confidence.triggered",
       "positive_test_id": "test_policy_enforcement_matrix_positive[hard_escalation_triggers.low_or_conflicting_confidence]",
@@ -311,15 +320,15 @@
     },
     {
       "policy_path": "hard_escalation_triggers.cost_over_grant",
-      "owner": "authority.ledger",
-      "enforcement_phase": "predispatch",
+      "owner": "authority.policy",
+      "enforcement_phase": "initial",
       "reason_code": "authority.escalation.cost_over_grant.triggered",
       "positive_test_id": "test_policy_enforcement_matrix_positive[hard_escalation_triggers.cost_over_grant]",
       "negative_test_id": "test_policy_enforcement_matrix_negative[hard_escalation_triggers.cost_over_grant]"
     },
     {
       "policy_path": "hard_escalation_triggers.provider_or_model_not_allowlisted",
-      "owner": "authority.scope",
+      "owner": "authority.policy",
       "enforcement_phase": "initial",
       "reason_code": "authority.escalation.provider_or_model_not_allowlisted.triggered",
       "positive_test_id": "test_policy_enforcement_matrix_positive[hard_escalation_triggers.provider_or_model_not_allowlisted]",
@@ -327,7 +336,7 @@
     },
     {
       "policy_path": "hard_escalation_triggers.new_publish_destination",
-      "owner": "authority.scope",
+      "owner": "authority.policy",
       "enforcement_phase": "initial",
       "reason_code": "authority.escalation.new_publish_destination.triggered",
       "positive_test_id": "test_policy_enforcement_matrix_positive[hard_escalation_triggers.new_publish_destination]",
@@ -335,15 +344,15 @@
     },
     {
       "policy_path": "hard_escalation_triggers.material_blueprint_change_after_authorization",
-      "owner": "authority.guard",
-      "enforcement_phase": "predispatch",
+      "owner": "authority.policy",
+      "enforcement_phase": "initial",
       "reason_code": "authority.escalation.material_blueprint_change_after_authorization.triggered",
       "positive_test_id": "test_policy_enforcement_matrix_positive[hard_escalation_triggers.material_blueprint_change_after_authorization]",
       "negative_test_id": "test_policy_enforcement_matrix_negative[hard_escalation_triggers.material_blueprint_change_after_authorization]"
     },
     {
       "policy_path": "hard_escalation_triggers.factual_or_rights_risk_unknown",
-      "owner": "workflow.gates",
+      "owner": "authority.policy",
       "enforcement_phase": "initial",
       "reason_code": "authority.escalation.factual_or_rights_risk_unknown.triggered",
       "positive_test_id": "test_policy_enforcement_matrix_positive[hard_escalation_triggers.factual_or_rights_risk_unknown]",
@@ -351,15 +360,15 @@
     },
     {
       "policy_path": "hard_escalation_triggers.kill_switch_not_clear",
-      "owner": "authority.ledger",
-      "enforcement_phase": "predispatch",
+      "owner": "authority.policy",
+      "enforcement_phase": "initial",
       "reason_code": "authority.escalation.kill_switch_not_clear.triggered",
       "positive_test_id": "test_policy_enforcement_matrix_positive[hard_escalation_triggers.kill_switch_not_clear]",
       "negative_test_id": "test_policy_enforcement_matrix_negative[hard_escalation_triggers.kill_switch_not_clear]"
     },
     {
       "policy_path": "hard_escalation_triggers.ledger_or_signature_invalid",
-      "owner": "authority.ledger",
+      "owner": "authority.policy",
       "enforcement_phase": "initial",
       "reason_code": "authority.escalation.ledger_or_signature_invalid.triggered",
       "positive_test_id": "test_policy_enforcement_matrix_positive[hard_escalation_triggers.ledger_or_signature_invalid]",
@@ -367,37 +376,37 @@
     },
     {
       "policy_path": "hard_escalation_triggers.workspace_trust_state_untrusted",
-      "owner": "authority.guard",
-      "enforcement_phase": "predispatch",
+      "owner": "authority.policy",
+      "enforcement_phase": "initial",
       "reason_code": "authority.escalation.workspace_trust_state_untrusted.triggered",
       "positive_test_id": "test_policy_enforcement_matrix_positive[hard_escalation_triggers.workspace_trust_state_untrusted]",
       "negative_test_id": "test_policy_enforcement_matrix_negative[hard_escalation_triggers.workspace_trust_state_untrusted]"
     },
     {
       "policy_path": "hard_escalation_triggers.out_of_band_file_mutation_detected",
-      "owner": "authority.guard",
-      "enforcement_phase": "predispatch",
+      "owner": "authority.policy",
+      "enforcement_phase": "initial",
       "reason_code": "authority.escalation.out_of_band_file_mutation_detected.triggered",
       "positive_test_id": "test_policy_enforcement_matrix_positive[hard_escalation_triggers.out_of_band_file_mutation_detected]",
       "negative_test_id": "test_policy_enforcement_matrix_negative[hard_escalation_triggers.out_of_band_file_mutation_detected]"
     },
     {
       "policy_path": "hard_escalation_triggers.mutation_plan_precondition_mismatch",
-      "owner": "mutation.guard",
-      "enforcement_phase": "predispatch",
+      "owner": "authority.policy",
+      "enforcement_phase": "initial",
       "reason_code": "authority.escalation.mutation_plan_precondition_mismatch.triggered",
       "positive_test_id": "test_policy_enforcement_matrix_positive[hard_escalation_triggers.mutation_plan_precondition_mismatch]",
       "negative_test_id": "test_policy_enforcement_matrix_negative[hard_escalation_triggers.mutation_plan_precondition_mismatch]"
     },
     {
       "policy_path": "hard_escalation_triggers.direct_human_mutation_requested",
-      "owner": "mutation.guard",
+      "owner": "authority.policy",
       "enforcement_phase": "initial",
       "reason_code": "authority.escalation.direct_human_mutation_requested.triggered",
       "positive_test_id": "test_policy_enforcement_matrix_positive[hard_escalation_triggers.direct_human_mutation_requested]",
       "negative_test_id": "test_policy_enforcement_matrix_negative[hard_escalation_triggers.direct_human_mutation_requested]"
     }
   ],
-  "bundle_id": "policy-bundle-d5e2169be779695ba467",
-  "bundle_sha256": "d5e2169be779695ba467cabeb8c2738513608d833da1212539c3deb383a4a75f"
+  "bundle_id": "policy-bundle-20cf86efeb26d545e160",
+  "bundle_sha256": "20cf86efeb26d545e160ff1b0c189c15fe4293010f95b879902d75e012fe8a1b"
 }

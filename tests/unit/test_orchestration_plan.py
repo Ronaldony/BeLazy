@@ -7,6 +7,7 @@ from dataclasses import replace
 from datetime import datetime, timezone
 
 import pytest
+import video_factory.engine.declarative as declarative_adapter
 
 from video_factory.artifacts import validate_artifact
 from video_factory.approvals import GateContext, gate_context_to_mapping
@@ -22,6 +23,7 @@ from video_factory.engine import (
     ArtifactSnapshot,
     OrchestrationPlanError,
     artifact_reference_to_mapping,
+    build_declarative_gate_run,
     build_declarative_gate_results,
     build_generation_readiness as _build_generation_readiness,
     make_artifact_snapshot,
@@ -1276,7 +1278,9 @@ def test_characterization_matrix_covers_every_target_action_identity() -> None:
     assert observed == set(CHARACTERIZATION_SEEDS)
 
 
-def test_actual_adapter_late_evidence_change_reuses_unaffected_claims() -> None:
+def test_actual_adapter_late_evidence_change_reuses_unaffected_claims(
+    monkeypatch,
+) -> None:
     definition = default_workflow_definition()
     context = MaterialContextSeed(
         workflow_definition_sha256=GATE_CONTEXT.workflow_definition_sha256,
@@ -1293,10 +1297,28 @@ def test_actual_adapter_late_evidence_change_reuses_unaffected_claims() -> None:
     kwargs = _characterization_inputs(
         "ready_for_human_publish", "standard"
     )[1]
-    baseline_results = build_declarative_gate_results(
+    packet_contract_calls = 0
+    original_packet_contract = declarative_adapter._packet_contract_blockers
+
+    def counted_packet_contract(*args, **kwargs):
+        nonlocal packet_contract_calls
+        packet_contract_calls += 1
+        return original_packet_contract(*args, **kwargs)
+
+    monkeypatch.setattr(
+        declarative_adapter,
+        "_packet_contract_blockers",
+        counted_packet_contract,
+    )
+    baseline_run = build_declarative_gate_run(
         observation, "standard", context, **kwargs
     )
-    baseline = evaluate_workflow(definition, baseline_results, context)
+    assert packet_contract_calls == 1
+    baseline = evaluate_workflow(
+        definition,
+        baseline_run.gate_results,
+        context,
+    )
 
     without_publish_approval = observe_episode_state(
         tuple(
@@ -1305,13 +1327,32 @@ def test_actual_adapter_late_evidence_change_reuses_unaffected_claims() -> None:
             if snapshot.family != "publish-approval"
         )
     )
-    changed_results = build_declarative_gate_results(
-        without_publish_approval, "standard", context, **kwargs
+    packet_contract_calls = 0
+    changed_run = build_declarative_gate_run(
+        without_publish_approval,
+        "standard",
+        context,
+        previous=baseline_run,
+        **kwargs,
     )
+    assert packet_contract_calls == 0
+    assert changed_run.evaluated_claim_ids == (
+        "publish_approval_current",
+    )
+    assert "packet_contract_valid" in changed_run.reused_claim_ids
     incremental = evaluate_workflow(
-        definition, changed_results, context, previous=baseline
+        definition,
+        changed_run.gate_results,
+        context,
+        previous=baseline,
     )
-    clean = evaluate_workflow(definition, changed_results, context)
+    clean_results = build_declarative_gate_results(
+        without_publish_approval,
+        "standard",
+        context,
+        **kwargs,
+    )
+    clean = evaluate_workflow(definition, clean_results, context)
 
     assert workflow_semantic_projection(
         incremental

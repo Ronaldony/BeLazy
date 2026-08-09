@@ -160,6 +160,7 @@ class WorkflowEvaluation:
     blockers: tuple[ActionBlocker, ...]
     action_frontier: tuple[ActionFrontierItem, ...]
     recommended_action_id: OpaqueId | None
+    previous_evaluation_sha256: HashDigest | None
     invalidated_claim_ids: tuple[OpaqueId, ...]
     reused_claim_ids: tuple[OpaqueId, ...]
     authority_effect: str = "none"

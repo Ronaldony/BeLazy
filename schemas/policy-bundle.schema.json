@@ -7,7 +7,8 @@
     "artifact_version", "bundle_id", "bundle_sha256", "policy_version",
     "classifier_version", "governance_policy_sha256", "default_decision",
     "unknown_state_fail_closed", "self_approval_forbidden",
-    "release_campaign_enabled", "hard_escalation_triggers",
+    "release_campaign_enabled", "maximum_r4_validity_seconds",
+    "hard_escalation_triggers",
     "action_risk_by_action", "enforcement_matrix"
   ],
   "properties": {
@@ -21,6 +22,7 @@
     "unknown_state_fail_closed": { "const": true },
     "self_approval_forbidden": { "const": true },
     "release_campaign_enabled": { "const": false },
+    "maximum_r4_validity_seconds": { "const": 300 },
     "hard_escalation_triggers": {
       "type": "array", "minItems": 13, "maxItems": 13,
       "items": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },

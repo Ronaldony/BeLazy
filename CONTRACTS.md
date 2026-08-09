@@ -151,7 +151,10 @@ and feasibility, and final review and metadata preparation, can appear together
 on the frontier. Each gate binds only the material-context fields it declares;
 a stale PASS is rejected, while an unrelated context change invalidates only
 the transitive dependent claims. Its semantic projection must equal a clean
-full recomputation.
+full recomputation. The incremental adapter skips unchanged gate helpers,
+binds the previous evaluation SHA, and requires the complete predecessor chain
+and exact target-claim invalidated/reused partition before reuse metadata can
+be accepted.
 
 Each frontier action produces a distinct `executable-production-plan/1.0` and
 full seven-digest `GateContext`, including that action's plan digest. A
@@ -170,7 +173,8 @@ and any unexplained dimension fails. The 78 rows feed the same episode
 observation to the legacy planner and an independent declarative gate adapter;
 no expected action is fed into that adapter. Explanation codes are
 dimension-scoped and validate target-owned blocker codes or the committed
-legacy-label-to-SHA evidence shape.
+action-row-specific blocker and legacy-label-to-target-claim/SHA evidence
+shape. Unmapped blockers and labels borrowed from another valid row fail.
 
 `video_factory.authority` keeps three independent axes: `AssuranceProfile`
 describes evidence rigor, `AutonomyProfile` describes how work may be proposed,
@@ -198,7 +202,8 @@ or campaign authority source.
 `creates_authority=false`; legacy `ApprovalEvidence` and readiness records do
 not prove signature, ledger inclusion, or current revocation. Only an
 `authority-decision/1.0` produced from a trusted ledger receipt can carry
-`execution_authority`. Each human is bound to one signature verification whose
+`execution_authority`, including POLICY-owned R0/R1 workflow actions. Each
+human is bound to one signature verification whose
 content is distinct from every other authentication proof. The requester is
 authenticated by a separate immutable proof and cannot self-approve. Workflow
 authority additionally requires a trusted-ledger proof for the exact clean
@@ -206,6 +211,10 @@ workflow-evaluation SHA; a structurally self-rehashed gate bundle is
 non-authorizing. The decision seals the exact initial authority basis so fresh
 revalidation cannot swap its source, grant, requester, human, workflow proof,
 or signature evidence.
+The policy fixes the maximum R4 receipt lifetime at 300 seconds. Ledger entry,
+requester authentication, signature verification, and workflow-evaluation
+verification references have exact role-specific artifact versions, and the
+ledger head is a lowercase SHA-256.
 
 Initial evaluation verifies the exact request/risk/context and allowed authority
 source. Every actual executor dispatch, reconcile, and managed mutation then
@@ -249,6 +258,9 @@ filesystem executor or approval issuer.
   trusted-ledger seam, but its target policy intentionally classifies
   `managed_mutation` as R4; no lower semantic classifier has been activated.
   W04 authority and R4 break-glass are both required.
+- Before either authority or idempotency reservation, the W04 request ID,
+  idempotency key, and core-owned digest of the complete canonical mutation
+  plan must exactly match the W02 plan.
 - Every plan binds the workspace revision, before-manifest digest, serialized
   base revision digest, policy digest, request digest, and idempotency key.
 - Managed paths are canonical relative POSIX NFC strings and reject absolute,

@@ -56,6 +56,12 @@ AUTHORITY_DECISION_VERSION = "authority-decision/1.0"
 APPROVAL_REQUEST_VERSION = "approval-request/1.0"
 STANDING_AUTHORIZATION_VERSION = "standing-authorization/1.0"
 VERIFICATION_RECEIPT_VERSION = "authority-verification-receipt/1.0"
+LEDGER_ENTRY_VERSION = "authority-ledger-entry/1.0"
+PRINCIPAL_AUTHENTICATION_VERSION = "principal-authentication/1.0"
+SIGNATURE_VERIFICATION_VERSION = "signature-verification/1.0"
+WORKFLOW_EVALUATION_VERIFICATION_VERSION = (
+    "workflow-evaluation-verification/1.0"
+)
 
 
 _ASSURANCE_RANK = {
@@ -104,15 +110,40 @@ def _canonical_path(path: str) -> str:
     return path
 
 
+def _require_sha256(value: object, label: str) -> str:
+    digest = str(value)
+    if (
+        len(digest) != 64
+        or digest.lower() != digest
+        or any(character not in "0123456789abcdef" for character in digest)
+    ):
+        raise AuthorityContractError(
+            "authority.scope.digest",
+            f"{label} must be a lowercase SHA-256 digest",
+        )
+    return digest
+
+
 def _reference_mapping(reference: ArtifactReference) -> dict[str, str]:
     path = _canonical_path(str(reference.path))
-    digest = str(reference.sha256)
-    if len(digest) != 64 or digest.lower() != digest or any(value not in "0123456789abcdef" for value in digest):
-        raise AuthorityContractError("authority.scope.digest", "artifact digest is invalid")
+    digest = _require_sha256(reference.sha256, "artifact digest")
     version = str(reference.artifact_version)
     if "/" not in version or not version.strip() or version.strip() != version:
         raise AuthorityContractError("authority.scope.version", "artifact version is invalid")
     return {"path": path, "sha256": digest, "artifact_version": version}
+
+
+def _require_reference_version(
+    reference: ArtifactReference,
+    expected_version: str,
+    label: str,
+) -> None:
+    _reference_mapping(reference)
+    if str(reference.artifact_version) != expected_version:
+        raise AuthorityContractError(
+            "authority.evidence.role",
+            f"{label} must use {expected_version}",
+        )
 
 
 def _principal_verification_mapping(
@@ -651,6 +682,17 @@ def validate_standing_authorization(value: UnverifiedStandingAuthorization) -> U
         value.signature_verification_refs,
         require_canonical_order=True,
     )
+    _require_reference_version(
+        value.ledger_record,
+        LEDGER_ENTRY_VERSION,
+        "standing authorization ledger record",
+    )
+    for reference in value.signature_verification_refs:
+        _require_reference_version(
+            reference,
+            SIGNATURE_VERIFICATION_VERSION,
+            "standing authorization signature verification",
+        )
     _validate_reference_set((value.ledger_record, *value.signature_verification_refs))
     digest = standing_authorization_sha256(value)
     if str(digest) != str(value.authorization_sha256):
@@ -802,8 +844,13 @@ def _authority_basis_sha256(
     source: AuthoritySource,
     receipt: AuthorityVerificationReceipt | None,
 ) -> HashDigest:
+    if receipt is None:
+        raise AuthorityContractError(
+            "authority.basis.receipt",
+            "execution authority requires a verified authority basis",
+        )
     if source is AuthoritySource.POLICY:
-        if receipt is not None and (
+        if (
             receipt.grant_sha256 is not None
             or receipt.principal_verifications
             or receipt.signature_verification_refs
@@ -812,12 +859,6 @@ def _authority_basis_sha256(
                 "authority.basis.policy",
                 "policy authority cannot acquire human or grant evidence",
             )
-        return canonical_sha256({"authority_source": source.value})
-    if receipt is None:
-        raise AuthorityContractError(
-            "authority.basis.receipt",
-            "non-policy authority requires a verified authority basis",
-        )
     return canonical_sha256(
         {
             "authority_source": source.value,
@@ -870,6 +911,17 @@ def validate_authority_verification_receipt(
             "authority.kill_switch.engaged",
             "receipt kill switch is engaged",
         )
+    _require_sha256(receipt.ledger_head_sha256, "ledger_head_sha256")
+    _require_reference_version(
+        receipt.ledger_entry,
+        LEDGER_ENTRY_VERSION,
+        "receipt ledger entry",
+    )
+    _require_reference_version(
+        receipt.requester_authentication_ref,
+        PRINCIPAL_AUTHENTICATION_VERSION,
+        "requester authentication evidence",
+    )
     if min(receipt.reserved_cost_minor_units, receipt.reserved_candidates, receipt.retry_index) < 0:
         raise AuthorityContractError("authority.receipt.limit", "receipt reservation is invalid")
     principal_ids = tuple(
@@ -900,11 +952,23 @@ def validate_authority_verification_receipt(
         and str(
             receipt.workflow_evaluation_verification_ref.artifact_version
         )
-        != "workflow-evaluation-verification/1.0"
+        != WORKFLOW_EVALUATION_VERIFICATION_VERSION
     ):
         raise AuthorityContractError(
             "authority.receipt.workflow_evaluation",
             "workflow evaluation verification evidence has another version",
+        )
+    for verification in receipt.principal_verifications:
+        _require_reference_version(
+            verification.signature_verification_ref,
+            SIGNATURE_VERIFICATION_VERSION,
+            "human signature verification",
+        )
+    for reference in receipt.signature_verification_refs:
+        _require_reference_version(
+            reference,
+            SIGNATURE_VERIFICATION_VERSION,
+            "grant signature verification",
         )
     human_counts = {
         AuthoritySource.ONE_SHOT_HUMAN: 1,
@@ -1072,12 +1136,12 @@ def validate_authority_decision(decision: AuthorityDecision) -> AuthorityDecisio
     if (decision.verification_receipt_id is None) != (decision.verification_receipt_sha256 is None):
         raise AuthorityContractError("authority.decision.receipt", "decision receipt binding is partial")
     has_receipt = decision.verification_receipt_id is not None
-    if authorized and decision.source is not AuthoritySource.POLICY and not has_receipt:
+    if authorized and not has_receipt:
         raise AuthorityContractError(
             "authority.decision.receipt",
-            "non-policy authorization requires an initial verification receipt",
+            "authorization requires an initial verification receipt",
         )
-    if (not authorized or decision.source is AuthoritySource.POLICY) and has_receipt:
+    if not authorized and has_receipt:
         raise AuthorityContractError(
             "authority.decision.receipt",
             "decision carries an unexpected verification receipt",
@@ -1167,9 +1231,11 @@ def _validate_initial_receipt(
     receipt: AuthorityVerificationReceipt,
     request: ActionAuthorityRequest,
     risk: ActionRiskAssessment,
+    policy: PolicyBundle,
     evaluated_at: datetime,
 ) -> None:
     validate_authority_verification_receipt(receipt)
+    _validate_receipt_risk_window(receipt, risk, policy)
     expected_workflow_evaluation_sha256 = (
         request.workflow_evaluation.evaluation_sha256
         if request.workflow_evaluation is not None
@@ -1204,6 +1270,24 @@ def _validate_initial_receipt(
         or receipt.retry_index != request.scope.retry_index
     ):
         raise AuthorityContractError("authority.receipt.rebound", "initial receipt is bound to another request")
+
+
+def _validate_receipt_risk_window(
+    receipt: AuthorityVerificationReceipt,
+    risk: ActionRiskAssessment,
+    policy: PolicyBundle,
+) -> None:
+    if risk.effective_risk is not ActionRisk.R4:
+        return
+    evaluated = parse_rfc3339_datetime(receipt.evaluated_at)
+    valid_until = parse_rfc3339_datetime(receipt.valid_until)
+    if (
+        valid_until - evaluated
+    ).total_seconds() > policy.maximum_r4_validity_seconds:
+        raise AuthorityContractError(
+            "authority.r4.expiry_too_long",
+            "R4 authority exceeds the target-owned short-expiry limit",
+        )
 
 
 def _source_allowed(
@@ -1271,13 +1355,6 @@ def evaluate_authority(
         )
 
     required = request.authority_requirement
-    if risk.effective_risk in {ActionRisk.R0, ActionRisk.R1} and required is AuthorityRequirement.POLICY:
-        return risk, _build_decision(
-            request, risk, status=AuthorityDecisionStatus.AUTHORIZED, source=AuthoritySource.POLICY,
-            reasons=("authority.policy.covered",), evaluated_at=evaluated_at,
-            required_authority=required, receipt=None,
-        )
-
     references = _validate_reference_set(tuple(authority_references))
     if presented_grant is not None:
         if risk.effective_risk is ActionRisk.R4:
@@ -1293,9 +1370,20 @@ def evaluate_authority(
                 reasons=blockers, evaluated_at=evaluated_at, required_authority=required,
                 receipt=None,
             )
-    if ledger is None or (presented_grant is None and not references):
+    missing_authority_evidence = (
+        required is not AuthorityRequirement.POLICY
+        and presented_grant is None
+        and not references
+    )
+    if ledger is None or missing_authority_evidence:
         return risk, _build_decision(
-            request, risk, status=AuthorityDecisionStatus.HUMAN_APPROVAL_REQUIRED,
+            request,
+            risk,
+            status=(
+                AuthorityDecisionStatus.DENIED
+                if required is AuthorityRequirement.POLICY
+                else AuthorityDecisionStatus.HUMAN_APPROVAL_REQUIRED
+            ),
             source=AuthoritySource.NONE, reasons=("authority.evidence.missing",),
             evaluated_at=evaluated_at, required_authority=required, receipt=None,
         )
@@ -1312,7 +1400,7 @@ def evaluate_authority(
             reasons=("authority.ledger.denied",), evaluated_at=evaluated_at,
             required_authority=required, receipt=None,
         )
-    _validate_initial_receipt(receipt, request, risk, evaluated_at)
+    _validate_initial_receipt(receipt, request, risk, policy, evaluated_at)
     verified_principals = tuple(
         item.principal_id for item in receipt.principal_verifications
     )
@@ -1527,6 +1615,7 @@ def revalidate_authority_for_side_effect(
     if receipt is None:
         raise AuthorityContractError("authority.predispatch.denied", "trusted predispatch verification denied")
     validate_authority_verification_receipt(receipt)
+    _validate_receipt_risk_window(receipt, risk, policy)
     if (
         receipt.purpose is not purpose
         or receipt.authority_decision_sha256 != decision.decision_sha256

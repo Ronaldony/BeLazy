@@ -62,6 +62,10 @@
       "reason_code": "workflow.final_delivery_valid.blocked"
     },
     {
+      "contains": "publish-metadata-draft",
+      "reason_code": "workflow.publish_metadata.missing"
+    },
+    {
       "contains": "publish metadata",
       "reason_code": "workflow.publish_metadata_bound.blocked"
     }
@@ -77,7 +81,6 @@
     "ready_for_human_publish": "human_or_campaign"
   },
   "known_blocker_reason_codes": [
-    "parity.legacy_blocker_unmapped",
     "workflow.approval.blocked",
     "workflow.artifact_graph_valid.blocked",
     "workflow.brief_present.blocked",
@@ -129,6 +132,378 @@
     "storyboard-review",
     "trusted workspace observation"
   ],
+  "parity_rows_by_action": {
+    "resolve_artifact_graph": {
+      "legacy_blockers": [
+        "workflow.artifact_graph_valid.blocked",
+        "workflow.brief_present.blocked"
+      ],
+      "declarative_blockers": [
+        "workflow.artifact_graph_valid.blocked"
+      ],
+      "legacy_evidence": [],
+      "declarative_claim_ids": []
+    },
+    "create_brief": {
+      "legacy_blockers": [
+        "workflow.brief_present.blocked"
+      ],
+      "declarative_blockers": [
+        "workflow.brief_present.blocked"
+      ],
+      "legacy_evidence": [],
+      "declarative_claim_ids": [
+        "artifact_graph_valid"
+      ]
+    },
+    "create_storyboard": {
+      "legacy_blockers": [
+        "workflow.storyboard_present.blocked"
+      ],
+      "declarative_blockers": [
+        "workflow.storyboard_present.blocked"
+      ],
+      "legacy_evidence": [
+        "brief"
+      ],
+      "declarative_claim_ids": [
+        "brief_present"
+      ]
+    },
+    "review_or_revise_storyboard": {
+      "legacy_blockers": [
+        "workflow.review.blocked",
+        "workflow.storyboard_present.blocked"
+      ],
+      "declarative_blockers": [
+        "workflow.review.blocked"
+      ],
+      "legacy_evidence": [
+        "storyboard"
+      ],
+      "declarative_claim_ids": [
+        "storyboard_present"
+      ]
+    },
+    "approve_storyboard": {
+      "legacy_blockers": [
+        "workflow.approval.blocked",
+        "workflow.artifact_graph_valid.blocked",
+        "workflow.storyboard_present.blocked"
+      ],
+      "declarative_blockers": [
+        "workflow.approval.blocked"
+      ],
+      "legacy_evidence": [
+        "storyboard",
+        "passing storyboard reviews"
+      ],
+      "declarative_claim_ids": [
+        "storyboard_review_pass"
+      ]
+    },
+    "create_generation_packet": {
+      "legacy_blockers": [
+        "workflow.packet_contract_valid.blocked"
+      ],
+      "declarative_blockers": [
+        "workflow.packet_present.blocked"
+      ],
+      "legacy_evidence": [
+        "storyboard approval"
+      ],
+      "declarative_claim_ids": [
+        "storyboard_approval_current"
+      ]
+    },
+    "rebuild_generation_packet": {
+      "legacy_blockers": [
+        "workflow.packet_contract_valid.blocked",
+        "workflow.storyboard_present.blocked"
+      ],
+      "declarative_blockers": [
+        "workflow.packet_contract_valid.blocked"
+      ],
+      "legacy_evidence": [],
+      "declarative_claim_ids": [
+        "packet_present"
+      ]
+    },
+    "review_or_revise_generation_packet": {
+      "legacy_blockers": [
+        "workflow.packet_contract_valid.blocked",
+        "workflow.review.blocked"
+      ],
+      "declarative_blockers": [
+        "workflow.review.blocked"
+      ],
+      "legacy_evidence": [
+        "generation-packet"
+      ],
+      "declarative_claim_ids": [
+        "packet_contract_valid"
+      ]
+    },
+    "review_generation_feasibility": {
+      "legacy_blockers": [
+        "workflow.artifact_graph_valid.blocked",
+        "workflow.feasibility_pass.blocked",
+        "workflow.review.blocked"
+      ],
+      "declarative_blockers": [
+        "workflow.feasibility_pass.blocked"
+      ],
+      "legacy_evidence": [
+        "generation-packet",
+        "storyboard"
+      ],
+      "declarative_claim_ids": [
+        "packet_contract_valid"
+      ]
+    },
+    "approve_generation": {
+      "legacy_blockers": [
+        "workflow.approval.blocked",
+        "workflow.artifact_graph_valid.blocked",
+        "workflow.packet_contract_valid.blocked"
+      ],
+      "declarative_blockers": [
+        "workflow.approval.blocked"
+      ],
+      "legacy_evidence": [
+        "packet review pass",
+        "feasibility pass"
+      ],
+      "declarative_claim_ids": [
+        "packet_review_pass",
+        "feasibility_pass"
+      ]
+    },
+    "preview_complete": {
+      "legacy_blockers": [
+        "workflow.mode.preview_only"
+      ],
+      "declarative_blockers": [
+        "workflow.mode.preview_only"
+      ],
+      "legacy_evidence": [],
+      "declarative_claim_ids": [
+        "generation_approval_current"
+      ]
+    },
+    "reconcile_workspace": {
+      "legacy_blockers": [
+        "workflow.workspace_trusted.blocked"
+      ],
+      "declarative_blockers": [
+        "workflow.workspace_trusted.blocked"
+      ],
+      "legacy_evidence": [
+        "trusted workspace observation"
+      ],
+      "declarative_claim_ids": [
+        "generation_mode_permits_execution"
+      ]
+    },
+    "run_external_generation": {
+      "legacy_blockers": [
+        "workflow.qc.blocked"
+      ],
+      "declarative_blockers": [
+        "workflow.shot_qc.missing"
+      ],
+      "legacy_evidence": [
+        "generation readiness"
+      ],
+      "declarative_claim_ids": [
+        "workspace_trusted"
+      ]
+    },
+    "remediate_or_repeat_shot_qc": {
+      "legacy_blockers": [
+        "workflow.qc.blocked"
+      ],
+      "declarative_blockers": [
+        "workflow.shot_qc.failed"
+      ],
+      "legacy_evidence": [
+        "generation readiness"
+      ],
+      "declarative_claim_ids": [
+        "workspace_trusted"
+      ]
+    },
+    "run_continuity_qc": {
+      "legacy_blockers": [
+        "workflow.artifact_graph_valid.blocked",
+        "workflow.continuity_qc.blocked",
+        "workflow.packet_contract_valid.blocked",
+        "workflow.qc.blocked"
+      ],
+      "declarative_blockers": [
+        "workflow.continuity_qc.missing"
+      ],
+      "legacy_evidence": [],
+      "declarative_claim_ids": [
+        "shot_qc_pass"
+      ]
+    },
+    "remediate_continuity_qc": {
+      "legacy_blockers": [
+        "workflow.continuity_qc.blocked",
+        "workflow.qc.blocked"
+      ],
+      "declarative_blockers": [
+        "workflow.continuity_qc.failed"
+      ],
+      "legacy_evidence": [],
+      "declarative_claim_ids": [
+        "shot_qc_pass"
+      ]
+    },
+    "rank_generation_candidates": {
+      "legacy_blockers": [
+        "workflow.candidate_ranking_current.blocked"
+      ],
+      "declarative_blockers": [
+        "workflow.candidate_ranking_current.blocked"
+      ],
+      "legacy_evidence": [],
+      "declarative_claim_ids": [
+        "continuity_qc_pass"
+      ]
+    },
+    "select_edit_inputs": {
+      "legacy_blockers": [
+        "workflow.edit_manifest_current.blocked"
+      ],
+      "declarative_blockers": [
+        "workflow.edit_manifest_current.blocked"
+      ],
+      "legacy_evidence": [],
+      "declarative_claim_ids": [
+        "candidate_ranking_current"
+      ]
+    },
+    "assemble_or_repair_rough_cut": {
+      "legacy_blockers": [
+        "workflow.rough_cut_pass.blocked"
+      ],
+      "declarative_blockers": [
+        "workflow.rough_cut_pass.blocked"
+      ],
+      "legacy_evidence": [],
+      "declarative_claim_ids": [
+        "edit_manifest_current"
+      ]
+    },
+    "prepare_final_delivery": {
+      "legacy_blockers": [
+        "workflow.final_delivery_valid.blocked"
+      ],
+      "declarative_blockers": [
+        "workflow.final_delivery.missing"
+      ],
+      "legacy_evidence": [],
+      "declarative_claim_ids": [
+        "rough_cut_pass"
+      ]
+    },
+    "repair_final_delivery": {
+      "legacy_blockers": [
+        "workflow.edit_manifest_current.blocked",
+        "workflow.final_delivery_valid.blocked"
+      ],
+      "declarative_blockers": [
+        "workflow.final_delivery_valid.blocked"
+      ],
+      "legacy_evidence": [],
+      "declarative_claim_ids": [
+        "final_delivery_present"
+      ]
+    },
+    "review_or_revise_final_delivery": {
+      "legacy_blockers": [
+        "workflow.review.blocked"
+      ],
+      "declarative_blockers": [
+        "workflow.review.blocked"
+      ],
+      "legacy_evidence": [],
+      "declarative_claim_ids": [
+        "final_delivery_valid"
+      ]
+    },
+    "prepare_publish_metadata": {
+      "legacy_blockers": [
+        "workflow.publish_metadata.missing"
+      ],
+      "declarative_blockers": [
+        "workflow.publish_metadata.missing"
+      ],
+      "legacy_evidence": [],
+      "declarative_claim_ids": [
+        "final_delivery_valid"
+      ]
+    },
+    "repair_publish_metadata": {
+      "legacy_blockers": [
+        "workflow.brief_present.blocked",
+        "workflow.publish_metadata_bound.blocked"
+      ],
+      "declarative_blockers": [
+        "workflow.publish_metadata_bound.blocked"
+      ],
+      "legacy_evidence": [],
+      "declarative_claim_ids": [
+        "publish_metadata_present"
+      ]
+    },
+    "approve_publish": {
+      "legacy_blockers": [
+        "workflow.approval.blocked",
+        "workflow.artifact_graph_valid.blocked"
+      ],
+      "declarative_blockers": [
+        "workflow.approval.blocked"
+      ],
+      "legacy_evidence": [
+        "final review pass",
+        "publish metadata"
+      ],
+      "declarative_claim_ids": [
+        "final_review_pass",
+        "publish_metadata_bound"
+      ]
+    },
+    "ready_for_human_publish": {
+      "legacy_blockers": [],
+      "declarative_blockers": [
+        "workflow.external_publish_complete.pending_human"
+      ],
+      "legacy_evidence": [
+        "brief",
+        "candidate-ranking",
+        "edit-manifest",
+        "final-delivery",
+        "final-review",
+        "generation-feasibility-review",
+        "generation-packet",
+        "packet-approval",
+        "packet-review",
+        "publish-approval",
+        "publish-metadata-draft",
+        "rough-cut-report",
+        "shot-qc",
+        "storyboard",
+        "storyboard-approval",
+        "storyboard-review"
+      ],
+      "declarative_claim_ids": [
+        "publish_approval_current"
+      ]
+    }
+  },
   "default_authority": "policy",
   "unmapped_behavior": "MISMATCH",
   "authority_effect": "none"

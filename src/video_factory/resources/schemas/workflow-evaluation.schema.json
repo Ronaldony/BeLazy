@@ -7,8 +7,8 @@
     "artifact_version", "evaluation_id", "evaluation_sha256", "workflow_id",
     "workflow_definition_sha256", "material_context", "material_context_sha256",
     "gate_results", "gate_input_sha256s", "satisfied_claim_ids", "blockers",
-    "action_frontier", "recommended_action_id", "invalidated_claim_ids",
-    "reused_claim_ids", "authority_effect"
+    "action_frontier", "recommended_action_id", "previous_evaluation_sha256",
+    "invalidated_claim_ids", "reused_claim_ids", "authority_effect"
   ],
   "properties": {
     "artifact_version": { "const": "workflow-evaluation/1.0" },
@@ -58,6 +58,7 @@
       }
     },
     "recommended_action_id": { "oneOf": [{ "type": "null" }, { "$ref": "artifact-common.schema.json#/$defs/opaqueId" }] },
+    "previous_evaluation_sha256": { "oneOf": [{ "type": "null" }, { "$ref": "artifact-common.schema.json#/$defs/sha256" }] },
     "invalidated_claim_ids": { "type": "array", "uniqueItems": true, "items": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" } },
     "reused_claim_ids": { "type": "array", "uniqueItems": true, "items": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" } },
     "authority_effect": { "const": "none" }

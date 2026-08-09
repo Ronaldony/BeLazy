@@ -3,6 +3,32 @@
   "$id": "https://schemas.video-factory.invalid/authority/authority-verification-receipt.schema.json",
   "title": "Trusted-ledger current verification and reservation receipt",
   "type": "object",
+  "$defs": {
+    "ledgerEntry": {
+      "allOf": [
+        { "$ref": "artifact-common.schema.json#/$defs/boundArtifact" },
+        { "properties": { "artifact_version": { "const": "authority-ledger-entry/1.0" } } }
+      ]
+    },
+    "principalAuthentication": {
+      "allOf": [
+        { "$ref": "artifact-common.schema.json#/$defs/boundArtifact" },
+        { "properties": { "artifact_version": { "const": "principal-authentication/1.0" } } }
+      ]
+    },
+    "signatureVerification": {
+      "allOf": [
+        { "$ref": "artifact-common.schema.json#/$defs/boundArtifact" },
+        { "properties": { "artifact_version": { "const": "signature-verification/1.0" } } }
+      ]
+    },
+    "workflowEvaluationVerification": {
+      "allOf": [
+        { "$ref": "artifact-common.schema.json#/$defs/boundArtifact" },
+        { "properties": { "artifact_version": { "const": "workflow-evaluation-verification/1.0" } } }
+      ]
+    }
+  },
   "required": [
     "artifact_version", "receipt_id", "receipt_sha256", "purpose",
     "action_request_sha256", "authority_decision_sha256", "gate_context_sha256",
@@ -25,13 +51,13 @@
     "gate_context_sha256": { "$ref": "artifact-common.schema.json#/$defs/sha256" },
     "risk_assessment_sha256": { "$ref": "artifact-common.schema.json#/$defs/sha256" },
     "workflow_evaluation_sha256": { "oneOf": [{ "type": "null" }, { "$ref": "artifact-common.schema.json#/$defs/sha256" }] },
-    "workflow_evaluation_verification_ref": { "oneOf": [{ "type": "null" }, { "$ref": "artifact-common.schema.json#/$defs/boundArtifact" }] },
+    "workflow_evaluation_verification_ref": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/workflowEvaluationVerification" }] },
     "authority_source": { "$ref": "workflow-authority-common.schema.json#/$defs/authoritySource" },
     "ledger_state": { "const": "active" },
     "ledger_head_sha256": { "$ref": "artifact-common.schema.json#/$defs/sha256" },
-    "ledger_entry": { "$ref": "artifact-common.schema.json#/$defs/boundArtifact" },
+    "ledger_entry": { "$ref": "#/$defs/ledgerEntry" },
     "requester_principal_id": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" },
-    "requester_authentication_ref": { "$ref": "artifact-common.schema.json#/$defs/boundArtifact" },
+    "requester_authentication_ref": { "$ref": "#/$defs/principalAuthentication" },
     "grant_sha256": { "oneOf": [{ "type": "null" }, { "$ref": "artifact-common.schema.json#/$defs/sha256" }] },
     "principal_verifications": {
       "type": "array",
@@ -41,12 +67,12 @@
         "required": ["principal_id", "signature_verification_ref"],
         "properties": {
           "principal_id": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" },
-          "signature_verification_ref": { "$ref": "artifact-common.schema.json#/$defs/boundArtifact" }
+          "signature_verification_ref": { "$ref": "#/$defs/signatureVerification" }
         },
         "additionalProperties": false
       }
     },
-    "signature_verification_refs": { "type": "array", "uniqueItems": true, "items": { "$ref": "artifact-common.schema.json#/$defs/boundArtifact" } },
+    "signature_verification_refs": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/signatureVerification" } },
     "revocation_checked_at": { "type": "string", "format": "date-time" },
     "kill_switch_clear": { "const": true },
     "reserved_cost_minor_units": { "type": "integer", "minimum": 0 },

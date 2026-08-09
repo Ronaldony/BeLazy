@@ -94,6 +94,9 @@ from video_factory.mutation import (
     workspace_trust_blockers,
     workspace_revision_to_mapping,
 )
+from video_factory.mutation.planner import (
+    managed_mutation_authority_envelope_sha256,
+)
 from video_factory.providers import (
     BreakGlassPolicy,
     MutationPreSideEffectGuard,
@@ -1267,6 +1270,10 @@ def test_all_six_contracts_validate_and_round_trip_through_strict_bytes() -> Non
 
 
 class _TrustedW04Ledger:
+    def __init__(self) -> None:
+        self.verify_calls = 0
+        self.reserve_calls = 0
+
     def _receipt(
         self,
         request,
@@ -1363,6 +1370,7 @@ class _TrustedW04Ledger:
         current_context,
         evaluated_at,
     ):
+        self.verify_calls += 1
         return self._receipt(
             request,
             risk.assessment_sha256,
@@ -1382,6 +1390,7 @@ class _TrustedW04Ledger:
         evaluated_at,
         purpose,
     ):
+        self.reserve_calls += 1
         return self._receipt(
             request,
             decision.risk_assessment_sha256,
@@ -1407,15 +1416,9 @@ def _w04_authority_bundle(
         else str(plan.requester_id)
     )
     request = build_bound_action_authority_request(
-        request_id=f"authority-{plan.plan_id}",
+        request_id=str(plan.request_id),
         request_envelope_sha256=str(
-            canonical_sha256(
-                {
-                    "plan_sha256": str(plan.plan_sha256),
-                    "workspace_id": str(plan.workspace_id),
-                    "idempotency_key": str(plan.idempotency_key),
-                }
-            )
+            managed_mutation_authority_envelope_sha256(plan)
         ),
         idempotency_key=str(plan.idempotency_key),
         requester_principal_id=effective_requester,
@@ -1889,6 +1892,85 @@ def test_w04_requester_must_match_the_hash_bound_change_request() -> None:
             **dependencies,
         )
     assert mismatch.value.reason_code == "mutation.authority.w04_request_mismatch"
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    (
+        ("request_id", "request-foreign"),
+        ("request_envelope_sha256", SHA_C),
+        ("idempotency_key", "foreign-reservation"),
+    ),
+)
+def test_w04_request_identity_must_match_before_any_reservation(
+    field,
+    value,
+) -> None:
+    plan = _plan()
+    request, _, _ = _w04_authority_bundle(plan)
+    changed = {
+        "request_id": str(request.request_id),
+        "request_envelope_sha256": str(request.request_envelope_sha256),
+        "idempotency_key": str(request.idempotency_key),
+    }
+    changed[field] = str(value)
+    mismatched_request = build_bound_action_authority_request(
+        request_id=changed["request_id"],
+        request_envelope_sha256=changed["request_envelope_sha256"],
+        idempotency_key=changed["idempotency_key"],
+        requester_principal_id=str(request.requester_principal_id),
+        action_id=str(request.action_id),
+        capability_id=str(request.capability_id),
+        executable_plan_sha256=str(request.executable_plan_sha256),
+        action_risk=request.action_risk,
+        authority_requirement=request.authority_requirement,
+        side_effect=request.side_effect,
+        gate_context=request.gate_context,
+        profiles=request.profiles,
+        scope=request.scope,
+        hard_escalation_facts=request.hard_escalation_facts,
+    )
+    ledger = _TrustedW04Ledger()
+    _, mismatched_decision = evaluate_authority(
+        mismatched_request,
+        target_policy_bundle(),
+        ledger=ledger,
+        authority_references=(
+            _reference(
+                "authority/human-1.json",
+                HashDigest("1" * 64),
+                "human-approval/1.0",
+            ),
+            _reference(
+                "authority/human-2.json",
+                HashDigest("2" * 64),
+                "human-approval/1.0",
+            ),
+        ),
+        evaluated_at=EVALUATED_AT,
+    )
+    assert ledger.verify_calls == 1
+    idempotency = _TrustedIdempotency()
+    dependencies = _authorization_dependencies(plan, ledger=idempotency)
+    dependencies.update(
+        {
+            "w04_authority_request": mismatched_request,
+            "w04_authority_decision": mismatched_decision,
+            "w04_authority_ledger": ledger,
+        }
+    )
+    with pytest.raises(MutationRuntimeError) as mismatch:
+        MutationPreSideEffectGuard().authorize(
+            plan,
+            _observation(),
+            service_identity=OpaqueId("mutation-service"),
+            current_context=_gate_context(plan),
+            evaluated_at=EVALUATED_AT,
+            **dependencies,
+        )
+    assert mismatch.value.reason_code == "mutation.authority.w04_request_mismatch"
+    assert ledger.reserve_calls == 0
+    assert idempotency.calls == 0
 
 
 def test_guard_deduplicates_reused_content_before_idempotency_reservation() -> None:

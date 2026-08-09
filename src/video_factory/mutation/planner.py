@@ -886,6 +886,24 @@ def mutation_plan_to_mapping(plan: MutationPlan) -> dict[str, object]:
     }
 
 
+def managed_mutation_authority_envelope_sha256(
+    plan: MutationPlan,
+) -> HashDigest:
+    """Bind W04 authority to the complete canonical managed-mutation plan.
+
+    This is a structural request-envelope identity.  It does not grant
+    authority; the trusted W04 ledger still verifies the current request and
+    reserves the same idempotency identity immediately before execution.
+    """
+
+    return canonical_sha256(
+        {
+            "artifact_version": "managed-mutation-authority-envelope/1.0",
+            "mutation_plan": mutation_plan_to_mapping(plan),
+        }
+    )
+
+
 def _operation_result_mapping(result: OperationResult) -> dict[str, object]:
     return {
         "operation_id": str(result.operation_id),

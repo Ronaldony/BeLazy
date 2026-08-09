@@ -17,6 +17,7 @@ from .contracts import (
     WorkflowParityReport,
 )
 from .evaluator import require_target_workflow_evaluation
+from .definition import default_workflow_definition
 
 
 PARITY_REPORT_VERSION = "workflow-parity-report/1.0"
@@ -39,6 +40,205 @@ EXPLANATION_DIMENSIONS = {
     "EXPLAINED_BLUEPRINT_CONSOLIDATION": frozenset({"consumed_evidence"}),
     "EXPLAINED_AUTHORITY_HARDENING": frozenset({"required_authority"}),
 }
+
+
+_PARITY_ACTION_ROWS = {
+    "resolve_artifact_graph": (
+        ("workflow.artifact_graph_valid.blocked", "workflow.brief_present.blocked"),
+        ("workflow.artifact_graph_valid.blocked",),
+        (),
+    ),
+    "create_brief": (
+        ("workflow.brief_present.blocked",),
+        ("workflow.brief_present.blocked",),
+        (),
+    ),
+    "create_storyboard": (
+        ("workflow.storyboard_present.blocked",),
+        ("workflow.storyboard_present.blocked",),
+        ("brief",),
+    ),
+    "review_or_revise_storyboard": (
+        ("workflow.review.blocked", "workflow.storyboard_present.blocked"),
+        ("workflow.review.blocked",),
+        ("storyboard",),
+    ),
+    "approve_storyboard": (
+        (
+            "workflow.approval.blocked",
+            "workflow.artifact_graph_valid.blocked",
+            "workflow.storyboard_present.blocked",
+        ),
+        ("workflow.approval.blocked",),
+        ("storyboard", "passing storyboard reviews"),
+    ),
+    "create_generation_packet": (
+        ("workflow.packet_contract_valid.blocked",),
+        ("workflow.packet_present.blocked",),
+        ("storyboard approval",),
+    ),
+    "rebuild_generation_packet": (
+        (
+            "workflow.packet_contract_valid.blocked",
+            "workflow.storyboard_present.blocked",
+        ),
+        ("workflow.packet_contract_valid.blocked",),
+        (),
+    ),
+    "review_or_revise_generation_packet": (
+        ("workflow.packet_contract_valid.blocked", "workflow.review.blocked"),
+        ("workflow.review.blocked",),
+        ("generation-packet",),
+    ),
+    "review_generation_feasibility": (
+        (
+            "workflow.artifact_graph_valid.blocked",
+            "workflow.feasibility_pass.blocked",
+            "workflow.review.blocked",
+        ),
+        ("workflow.feasibility_pass.blocked",),
+        ("generation-packet", "storyboard"),
+    ),
+    "approve_generation": (
+        (
+            "workflow.approval.blocked",
+            "workflow.artifact_graph_valid.blocked",
+            "workflow.packet_contract_valid.blocked",
+        ),
+        ("workflow.approval.blocked",),
+        ("packet review pass", "feasibility pass"),
+    ),
+    "preview_complete": (
+        ("workflow.mode.preview_only",),
+        ("workflow.mode.preview_only",),
+        (),
+    ),
+    "reconcile_workspace": (
+        ("workflow.workspace_trusted.blocked",),
+        ("workflow.workspace_trusted.blocked",),
+        ("trusted workspace observation",),
+    ),
+    "run_external_generation": (
+        ("workflow.qc.blocked",),
+        ("workflow.shot_qc.missing",),
+        ("generation readiness",),
+    ),
+    "remediate_or_repeat_shot_qc": (
+        ("workflow.qc.blocked",),
+        ("workflow.shot_qc.failed",),
+        ("generation readiness",),
+    ),
+    "run_continuity_qc": (
+        (
+            "workflow.artifact_graph_valid.blocked",
+            "workflow.continuity_qc.blocked",
+            "workflow.packet_contract_valid.blocked",
+            "workflow.qc.blocked",
+        ),
+        ("workflow.continuity_qc.missing",),
+        (),
+    ),
+    "remediate_continuity_qc": (
+        ("workflow.continuity_qc.blocked", "workflow.qc.blocked"),
+        ("workflow.continuity_qc.failed",),
+        (),
+    ),
+    "rank_generation_candidates": (
+        ("workflow.candidate_ranking_current.blocked",),
+        ("workflow.candidate_ranking_current.blocked",),
+        (),
+    ),
+    "select_edit_inputs": (
+        ("workflow.edit_manifest_current.blocked",),
+        ("workflow.edit_manifest_current.blocked",),
+        (),
+    ),
+    "assemble_or_repair_rough_cut": (
+        ("workflow.rough_cut_pass.blocked",),
+        ("workflow.rough_cut_pass.blocked",),
+        (),
+    ),
+    "prepare_final_delivery": (
+        ("workflow.final_delivery_valid.blocked",),
+        ("workflow.final_delivery.missing",),
+        (),
+    ),
+    "repair_final_delivery": (
+        (
+            "workflow.edit_manifest_current.blocked",
+            "workflow.final_delivery_valid.blocked",
+        ),
+        ("workflow.final_delivery_valid.blocked",),
+        (),
+    ),
+    "review_or_revise_final_delivery": (
+        ("workflow.review.blocked",),
+        ("workflow.review.blocked",),
+        (),
+    ),
+    "prepare_publish_metadata": (
+        ("workflow.publish_metadata.missing",),
+        ("workflow.publish_metadata.missing",),
+        (),
+    ),
+    "repair_publish_metadata": (
+        (
+            "workflow.brief_present.blocked",
+            "workflow.publish_metadata_bound.blocked",
+        ),
+        ("workflow.publish_metadata_bound.blocked",),
+        (),
+    ),
+    "approve_publish": (
+        ("workflow.approval.blocked", "workflow.artifact_graph_valid.blocked"),
+        ("workflow.approval.blocked",),
+        ("final review pass", "publish metadata"),
+    ),
+    "ready_for_human_publish": (
+        (),
+        ("workflow.external_publish_complete.pending_human",),
+        (
+            "brief",
+            "candidate-ranking",
+            "edit-manifest",
+            "final-delivery",
+            "final-review",
+            "generation-feasibility-review",
+            "generation-packet",
+            "packet-approval",
+            "packet-review",
+            "publish-approval",
+            "publish-metadata-draft",
+            "rough-cut-report",
+            "shot-qc",
+            "storyboard",
+            "storyboard-approval",
+            "storyboard-review",
+        ),
+    ),
+}
+
+
+def _parity_action_rows() -> dict[str, object]:
+    definition = default_workflow_definition()
+    action_claims = {
+        str(action.action_id): [str(value) for value in action.required_claim_ids]
+        for action in definition.actions
+    }
+    if set(action_claims) != set(_PARITY_ACTION_ROWS):
+        raise WorkflowContractError(
+            "workflow.parity.action_catalog",
+            "parity normalization does not cover the target action catalog",
+        )
+    return {
+        action_id: {
+            "legacy_blockers": list(values[0]),
+            "declarative_blockers": list(values[1]),
+            "legacy_evidence": list(values[2]),
+            "declarative_claim_ids": action_claims[action_id],
+        }
+        for action_id, values in _PARITY_ACTION_ROWS.items()
+    }
 
 
 def legacy_projection_from_plan(plan: object) -> LegacyNextStepProjection:
@@ -87,6 +287,7 @@ def default_parity_normalization() -> dict[str, object]:
             {"contains": "edit", "reason_code": "workflow.edit_manifest_current.blocked"},
             {"contains": "rough-cut", "reason_code": "workflow.rough_cut_pass.blocked"},
             {"contains": "final-delivery", "reason_code": "workflow.final_delivery_valid.blocked"},
+            {"contains": "publish-metadata-draft", "reason_code": "workflow.publish_metadata.missing"},
             {"contains": "publish metadata", "reason_code": "workflow.publish_metadata_bound.blocked"},
         ],
         "authority_by_action": {
@@ -100,7 +301,6 @@ def default_parity_normalization() -> dict[str, object]:
             "ready_for_human_publish": "human_or_campaign",
         },
         "known_blocker_reason_codes": [
-            "parity.legacy_blocker_unmapped",
             "workflow.approval.blocked",
             "workflow.artifact_graph_valid.blocked",
             "workflow.brief_present.blocked",
@@ -152,6 +352,7 @@ def default_parity_normalization() -> dict[str, object]:
             "storyboard-review",
             "trusted workspace observation",
         ],
+        "parity_rows_by_action": _parity_action_rows(),
         "default_authority": "policy",
         "unmapped_behavior": "MISMATCH",
         "authority_effect": "none",
@@ -281,7 +482,32 @@ def compare_legacy_parity(
     normalized = default_parity_normalization() if normalization is None else dict(normalization)
     normalization_digest = parity_normalization_sha256(normalized)
     legacy_values, declarative_values = _values(legacy, evaluation, normalized)
+    if "parity.legacy_blocker_unmapped" in legacy_values["blockers"]:
+        raise WorkflowContractError(
+            "workflow.parity.unmapped_blocker",
+            "legacy blocker text is not covered by the target normalization",
+        )
     explanations = dict(explained_dimensions or {})
+    action_rows = normalized["parity_rows_by_action"]
+    if not isinstance(action_rows, Mapping):
+        raise WorkflowContractError(
+            "workflow.parity.action_catalog",
+            "target parity action rows are malformed",
+        )
+    action_row = action_rows.get(legacy.action_type)
+    if not isinstance(action_row, Mapping):
+        raise WorkflowContractError(
+            "workflow.parity.action_catalog",
+            "legacy action has no target-owned parity row",
+        )
+    frontier_item = next(
+        (
+            value
+            for value in evaluation.action_frontier
+            if value.action_id == evaluation.recommended_action_id
+        ),
+        None,
+    )
     unknown_explanations = set(explanations.values()) - ALLOWED_EXPLANATIONS
     if unknown_explanations or not set(explanations) <= set(PARITY_DIMENSIONS):
         raise WorkflowContractError("workflow.parity.explanation", "parity explanation is not allowlisted")
@@ -302,26 +528,32 @@ def compare_legacy_parity(
             continue
         explanation = explanations.get(dimension)
         if explanation == "EXPLAINED_FRONTIER_EXPANSION":
-            known = set(normalized["known_blocker_reason_codes"])
             if (
                 not isinstance(legacy_values[dimension], list)
                 or not isinstance(declarative_values[dimension], list)
-                or not set(legacy_values[dimension]) <= known
-                or not set(declarative_values[dimension]) <= known
+                or legacy_values[dimension]
+                != action_row.get("legacy_blockers")
+                or declarative_values[dimension]
+                != action_row.get("declarative_blockers")
             ):
                 raise WorkflowContractError(
                     "workflow.parity.explanation_values",
                     "blocker explanation contains an unowned reason code",
                 )
         elif explanation == "EXPLAINED_BLUEPRINT_CONSOLIDATION":
-            known_labels = set(normalized["legacy_evidence_labels"])
             legacy_evidence = legacy_values[dimension]
             declarative_evidence = declarative_values[dimension]
             if (
-                not isinstance(legacy_evidence, list)
+                frontier_item is None
+                or str(frontier_item.action_id) != legacy.action_type
+                or not isinstance(legacy_evidence, list)
                 or not isinstance(declarative_evidence, list)
-                or not set(legacy_evidence) <= known_labels
-                or not declarative_evidence
+                or legacy_evidence != action_row.get("legacy_evidence")
+                or [
+                    str(value)
+                    for value in frontier_item.consumed_claim_ids
+                ]
+                != action_row.get("declarative_claim_ids")
                 or any(
                     not isinstance(value, str)
                     or len(value) != 64

@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Closed W04 fail-closed review gaps: actual gate-helper reuse with exact
+  predecessor-chain invalidation, action-row-specific parity normalization,
+  trusted receipts for POLICY workflow authority, a 300-second R4 ceiling,
+  role-typed ledger/authentication/signature evidence, and exact W02/W04
+  mutation request-envelope plus idempotency binding before reservation.
 - Added the W04 target-owned declarative workflow plane: 24 versioned claims
   and gates, 26 legacy action identities, complete blocker/frontier evaluation,
   parallel review opportunities, action-specific material-context plans, and

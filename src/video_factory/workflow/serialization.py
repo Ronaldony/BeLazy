@@ -202,6 +202,11 @@ def workflow_evaluation_from_mapping(document: Mapping[str, object]) -> Workflow
         blockers=tuple(_blocker(item) for item in cast(list[dict[str, object]], value["blockers"])),
         action_frontier=frontier,
         recommended_action_id=OpaqueId(str(recommended)) if recommended is not None else None,
+        previous_evaluation_sha256=(
+            HashDigest(str(value["previous_evaluation_sha256"]))
+            if value["previous_evaluation_sha256"] is not None
+            else None
+        ),
         invalidated_claim_ids=tuple(OpaqueId(str(item)) for item in cast(list[str], value["invalidated_claim_ids"])),
         reused_claim_ids=tuple(OpaqueId(str(item)) for item in cast(list[str], value["reused_claim_ids"])),
         authority_effect=str(value["authority_effect"]),

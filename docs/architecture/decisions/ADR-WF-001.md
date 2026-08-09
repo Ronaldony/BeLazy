@@ -32,8 +32,11 @@ missing evaluation time or any mismatch blocks approval-derived gates instead
 of laundering an approval from another context.
 
 Incremental evaluation fingerprints each gate plus the six context inputs and
-invalidates the transitive dependent claims. Its semantic result must equal a
-clean full recomputation. Each selected frontier action receives a distinct
+invalidates the transitive dependent claims. The observation adapter retains a
+sealed prior run and skips unchanged gate helpers rather than recomputing and
+relabelling them afterward. Each incremental evaluation binds the exact prior
+evaluation SHA, and the predecessor chain, claim partition, and delta must
+match a clean target-DAG recomputation. Each selected frontier action receives a distinct
 `executable-production-plan/1.0` whose digest completes its seven-field
 `GateContext`.
 
@@ -52,8 +55,9 @@ from the same `EpisodeStateObservation`; the adapter neither accepts an
 expected action nor calls the legacy planner. Parity compares action,
 blockers, actor, required authority, consumed evidence, and prohibited actions.
 Explanation codes are dimension-scoped: blocker explanations accept only the
-target reason-code catalog, and evidence-identity explanations accept only the
-committed legacy-label catalog mapped to lowercase SHA-256 evidence. A code
+exact action-row blocker pair, and evidence-identity explanations accept only
+that action row's committed legacy labels, target claim IDs, and lowercase
+SHA-256 evidence. An unmapped blocker is always a mismatch. A code
 cannot blanket-explain another dimension or an unowned value. Unexplained
 dimensions fail. A parity report never applies cutover.
 

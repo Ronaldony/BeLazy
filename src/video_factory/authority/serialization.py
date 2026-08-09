@@ -112,6 +112,9 @@ def policy_bundle_from_mapping(document: Mapping[str, object]) -> PolicyBundle:
         unknown_state_fail_closed=bool(value["unknown_state_fail_closed"]),
         self_approval_forbidden=bool(value["self_approval_forbidden"]),
         release_campaign_enabled=bool(value["release_campaign_enabled"]),
+        maximum_r4_validity_seconds=int(
+            value["maximum_r4_validity_seconds"]
+        ),
         hard_escalation_triggers=tuple(
             cast(list[str], value["hard_escalation_triggers"])
         ),

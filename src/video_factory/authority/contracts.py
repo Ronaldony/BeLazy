@@ -161,6 +161,7 @@ class PolicyBundle:
     unknown_state_fail_closed: bool
     self_approval_forbidden: bool
     release_campaign_enabled: bool
+    maximum_r4_validity_seconds: int
     hard_escalation_triggers: tuple[str, ...]
     action_risk_by_action: tuple[tuple[OpaqueId, ActionRisk], ...]
     enforcement_matrix: tuple[PolicyEnforcementRule, ...]

@@ -31,7 +31,8 @@ non-workflow bridge is exact R4 `managed_mutation`.
 
 The target-owned `authority-policy/2.1` bundle binds the exact governance YAML
 digest, self-approval prohibition, disabled release-campaign activation, and
-complete hard-escalation trigger catalog. It recomputes the effective risk and
+complete hard-escalation trigger catalog. It recomputes the effective risk,
+sets the R4 receipt lifetime ceiling to 300 seconds, and
 contains an enforcement matrix with an owner, phase, reason code, and positive
 and negative test identifier for every policy field. Each row identifies a
 distinct executable parameterized test node that exercises the real positive
@@ -49,14 +50,19 @@ Only an `authority-decision/1.0` produced after a trusted ledger verifies the
 exact request, context, risk, scope, ledger state, signatures, revocation,
 limits, validity, permitted authority source, authenticated requester, and (for
 workflow actions) exact clean evaluation plus immutable verification proof can carry
-`execution_authority`. R2 accepts a scoped standing grant or one current human.
+`execution_authority`. The same trusted evaluation proof is mandatory for
+policy-owned R0/R1 workflow actions; POLICY is not a receipt-free authority
+shortcut. R2 accepts a scoped standing grant or one current human.
 R3 accepts one current human in W04; release-campaign authority remains
 fail-closed until later trusted campaign/content-risk facts exist. R4 requires
 two distinct humans and forbids standing authority. Every human principal is
 bound one-to-one to a signature-verification reference whose content digest is
 distinct from every other authentication proof. The requester has a separate
 authentication reference and cannot be an approver. Structural IDs and hashes prove
-integrity, not authenticity.
+integrity, not authenticity. Ledger entries, requester authentication,
+signature verification, and workflow evaluation verification use distinct
+exact artifact versions. A generic bound artifact with the wrong role cannot
+be substituted even when it is self-hashed.
 
 Standing scope binds exact input path/hash/version identities and exact output
 prefix/version scopes in addition to subject, provider/model, destination,

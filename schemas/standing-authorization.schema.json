@@ -3,6 +3,20 @@
   "$id": "https://schemas.video-factory.invalid/authority/standing-authorization.schema.json",
   "title": "Unverified bounded standing authorization document",
   "type": "object",
+  "$defs": {
+    "ledgerEntry": {
+      "allOf": [
+        { "$ref": "artifact-common.schema.json#/$defs/boundArtifact" },
+        { "properties": { "artifact_version": { "const": "authority-ledger-entry/1.0" } } }
+      ]
+    },
+    "signatureVerification": {
+      "allOf": [
+        { "$ref": "artifact-common.schema.json#/$defs/boundArtifact" },
+        { "properties": { "artifact_version": { "const": "signature-verification/1.0" } } }
+      ]
+    }
+  },
   "required": [
     "artifact_version", "authorization_id", "authorization_sha256", "gate_context_sha256",
     "capability_ids", "workspace_ids", "channel_ids", "concept_ids", "episode_ids",
@@ -37,8 +51,8 @@
     "allowed_outputs": { "type": "array", "uniqueItems": true, "items": { "$ref": "workflow-authority-common.schema.json#/$defs/outputScope" } },
     "valid_from": { "type": "string", "format": "date-time" },
     "expires_at": { "type": "string", "format": "date-time" },
-    "ledger_record": { "$ref": "artifact-common.schema.json#/$defs/boundArtifact" },
-    "signature_verification_refs": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "artifact-common.schema.json#/$defs/boundArtifact" } },
+    "ledger_record": { "$ref": "#/$defs/ledgerEntry" },
+    "signature_verification_refs": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/signatureVerification" } },
     "authority_effect": { "const": "none" }
   },
   "additionalProperties": false

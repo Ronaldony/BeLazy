@@ -220,6 +220,11 @@ def workflow_evaluation_to_mapping(evaluation: WorkflowEvaluation) -> dict[str, 
             if evaluation.recommended_action_id is not None
             else None
         ),
+        "previous_evaluation_sha256": (
+            str(evaluation.previous_evaluation_sha256)
+            if evaluation.previous_evaluation_sha256 is not None
+            else None
+        ),
         "invalidated_claim_ids": [str(value) for value in evaluation.invalidated_claim_ids],
         "reused_claim_ids": [str(value) for value in evaluation.reused_claim_ids],
         "authority_effect": evaluation.authority_effect,
@@ -261,6 +266,11 @@ def _evaluation_identity(evaluation: WorkflowEvaluation) -> dict[str, object]:
         "recommended_action_id": (
             str(evaluation.recommended_action_id)
             if evaluation.recommended_action_id is not None
+            else None
+        ),
+        "previous_evaluation_sha256": (
+            str(evaluation.previous_evaluation_sha256)
+            if evaluation.previous_evaluation_sha256 is not None
             else None
         ),
         "invalidated_claim_ids": [str(value) for value in evaluation.invalidated_claim_ids],
@@ -495,6 +505,9 @@ def evaluate_workflow(
         blockers=all_blockers,
         action_frontier=frontier_values,
         recommended_action_id=(frontier_values[0].action_id if frontier_values else None),
+        previous_evaluation_sha256=(
+            previous.evaluation_sha256 if previous is not None else None
+        ),
         invalidated_claim_ids=tuple(OpaqueId(value) for value in sorted(invalidated)),
         reused_claim_ids=tuple(OpaqueId(value) for value in sorted(reused)),
         authority_effect="none",
@@ -514,6 +527,9 @@ def evaluate_workflow(
         blockers=provisional.blockers,
         action_frontier=provisional.action_frontier,
         recommended_action_id=provisional.recommended_action_id,
+        previous_evaluation_sha256=(
+            provisional.previous_evaluation_sha256
+        ),
         invalidated_claim_ids=provisional.invalidated_claim_ids,
         reused_claim_ids=provisional.reused_claim_ids,
         authority_effect="none",
@@ -536,8 +552,27 @@ def validate_workflow_evaluation(evaluation: WorkflowEvaluation) -> WorkflowEval
         sorted(set(str(value) for value in evaluation.satisfied_claim_ids))
     ):
         raise WorkflowContractError("workflow.evaluation.claim_order", "satisfied claims are not sorted and unique")
-    if set(evaluation.invalidated_claim_ids) & set(evaluation.reused_claim_ids):
-        raise WorkflowContractError("workflow.evaluation.invalidation", "claim cannot be both reused and invalidated")
+    invalidated = tuple(str(value) for value in evaluation.invalidated_claim_ids)
+    reused = tuple(str(value) for value in evaluation.reused_claim_ids)
+    if (
+        invalidated != tuple(sorted(set(invalidated)))
+        or reused != tuple(sorted(set(reused)))
+        or set(invalidated) & set(reused)
+    ):
+        raise WorkflowContractError(
+            "workflow.evaluation.invalidation",
+            "incremental claim sets must be sorted, unique, and disjoint",
+        )
+    if evaluation.previous_evaluation_sha256 is not None:
+        _digest(
+            str(evaluation.previous_evaluation_sha256),
+            "previous workflow evaluation",
+        )
+    elif reused:
+        raise WorkflowContractError(
+            "workflow.evaluation.invalidation",
+            "a clean evaluation cannot claim reused results",
+        )
     digest = canonical_sha256(_evaluation_identity(evaluation))
     if str(digest) != str(evaluation.evaluation_sha256):
         raise WorkflowContractError("workflow.evaluation.digest", "evaluation digest mismatch")
@@ -563,6 +598,8 @@ def workflow_semantic_projection(evaluation: WorkflowEvaluation) -> dict[str, ob
 
 def require_target_workflow_evaluation(
     evaluation: WorkflowEvaluation,
+    *,
+    predecessors: Sequence[WorkflowEvaluation] = (),
 ) -> WorkflowEvaluation:
     """Recompute target-owned semantics before a result can feed a plan.
 
@@ -572,31 +609,80 @@ def require_target_workflow_evaluation(
     complete semantic projection with a clean target-DAG evaluation.
     """
 
-    validate_workflow_evaluation(evaluation)
     definition = default_workflow_definition()
     require_target_workflow_definition(definition)
-    if (
-        evaluation.workflow_id != definition.workflow_id
-        or evaluation.workflow_definition_sha256 != definition.definition_sha256
-    ):
-        raise WorkflowContractError(
-            "workflow.evaluation.not_target_owned",
-            "evaluation is not bound to the exact target workflow",
+    predecessor_by_digest: dict[str, WorkflowEvaluation] = {}
+    for predecessor in predecessors:
+        validate_workflow_evaluation(predecessor)
+        digest = str(predecessor.evaluation_sha256)
+        if digest in predecessor_by_digest:
+            raise WorkflowContractError(
+                "workflow.incremental.predecessor_duplicate",
+                "incremental predecessor evidence is duplicated",
+            )
+        predecessor_by_digest[digest] = predecessor
+
+    verified: set[str] = set()
+
+    def verify(current: WorkflowEvaluation, active: set[str]) -> None:
+        validate_workflow_evaluation(current)
+        current_digest = str(current.evaluation_sha256)
+        if current_digest in verified:
+            return
+        if current_digest in active:
+            raise WorkflowContractError(
+                "workflow.incremental.predecessor_cycle",
+                "incremental evaluation chain contains a cycle",
+            )
+        if (
+            current.workflow_id != definition.workflow_id
+            or current.workflow_definition_sha256
+            != definition.definition_sha256
+        ):
+            raise WorkflowContractError(
+                "workflow.evaluation.not_target_owned",
+                "evaluation is not bound to the exact target workflow",
+            )
+        previous: WorkflowEvaluation | None = None
+        if current.previous_evaluation_sha256 is not None:
+            previous_digest = str(current.previous_evaluation_sha256)
+            previous = predecessor_by_digest.get(previous_digest)
+            if previous is None:
+                raise WorkflowContractError(
+                    "workflow.incremental.predecessor_missing",
+                    "incremental evaluation lacks its exact predecessor",
+                )
+            verify(previous, {*active, current_digest})
+        clean = evaluate_workflow(
+            definition,
+            current.gate_results,
+            current.material_context,
+            previous=previous,
         )
-    clean = evaluate_workflow(
-        definition,
-        evaluation.gate_results,
-        evaluation.material_context,
-    )
-    if (
-        evaluation.gate_input_sha256s != clean.gate_input_sha256s
-        or workflow_semantic_projection(evaluation)
-        != workflow_semantic_projection(clean)
-    ):
-        raise WorkflowContractError(
-            "workflow.evaluation.semantic_rebound",
-            "evaluation semantics do not match a clean target-DAG recomputation",
-        )
+        target_claims = {
+            str(value.claim_id) for value in definition.claims
+        }
+        invalidated = {
+            str(value) for value in current.invalidated_claim_ids
+        }
+        reused = {str(value) for value in current.reused_claim_ids}
+        if (
+            invalidated | reused != target_claims
+            or current.previous_evaluation_sha256
+            != clean.previous_evaluation_sha256
+            or current.gate_input_sha256s != clean.gate_input_sha256s
+            or current.invalidated_claim_ids != clean.invalidated_claim_ids
+            or current.reused_claim_ids != clean.reused_claim_ids
+            or workflow_semantic_projection(current)
+            != workflow_semantic_projection(clean)
+        ):
+            raise WorkflowContractError(
+                "workflow.evaluation.semantic_rebound",
+                "evaluation semantics do not match an exact target-DAG recomputation",
+            )
+        verified.add(current_digest)
+
+    verify(evaluation, set())
     return evaluation
 
 

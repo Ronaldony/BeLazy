@@ -53,6 +53,7 @@ from video_factory.mutation.planner import (
     MutationPlanError,
     break_glass_authorization_to_mapping,
     break_glass_request_sha256,
+    managed_mutation_authority_envelope_sha256,
     mutation_content_observation_sha256,
     mutation_execution_authorization_id,
     validate_mutation_plan,
@@ -724,6 +725,10 @@ class MutationPreSideEffectGuard:
             plan.requester_id is None
             or w04_authority_request.action_id != "managed_mutation"
             or w04_authority_request.capability_id != "managed_mutation"
+            or w04_authority_request.request_id != plan.request_id
+            or w04_authority_request.request_envelope_sha256
+            != managed_mutation_authority_envelope_sha256(plan)
+            or w04_authority_request.idempotency_key != plan.idempotency_key
             or w04_authority_request.executable_plan_sha256 != plan.plan_sha256
             or w04_authority_request.gate_context != normalized_context
             or w04_authority_request.scope.workspace_id != plan.workspace_id

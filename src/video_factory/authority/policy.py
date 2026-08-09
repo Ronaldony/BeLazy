@@ -24,6 +24,7 @@ CLASSIFIER_VERSION = "authority-risk-classifier/1.0"
 GOVERNANCE_POLICY_SHA256 = HashDigest(
     "624e4bc552e39c1e962593bd4d59e393425db7352c43f2067280ca96eda368b2"
 )
+MAXIMUM_R4_VALIDITY_SECONDS = 300
 
 
 _HARD_ESCALATION_TRIGGERS = (
@@ -50,7 +51,7 @@ _ENFORCEMENT_ROWS = (
     ("self_approval_forbidden", "authority.ledger", "initial", "authority.self_approval_forbidden"),
     ("release_campaign.activation", "authority.policy", "initial", "authority.source.insufficient"),
     ("executor_revalidation_required", "authority.guard", "predispatch", "authority.predispatch.ledger"),
-    ("material_change_invalidates_authority", "authority.guard", "initial", "authority.predispatch.context"),
+    ("material_change_invalidates_authority", "authority.guard", "predispatch", "authority.predispatch.context"),
     ("scope.capability", "authority.scope", "initial", "authority.scope.capability"),
     ("scope.channel_concept_episode", "authority.scope", "initial", "authority.scope.channel"),
     ("scope.provider_model", "authority.scope", "initial", "authority.scope.provider"),
@@ -64,6 +65,7 @@ _ENFORCEMENT_ROWS = (
     ("kill_switch", "authority.ledger", "predispatch", "authority.kill_switch.engaged"),
     ("R4.independent_approvers", "authority.ledger", "initial", "authority.source.insufficient"),
     ("R4.standing_grant_forbidden", "authority.policy", "initial", "authority.r4.standing_forbidden"),
+    ("R4.short_expiry", "authority.ledger", "initial_and_predispatch", "authority.r4.expiry_too_long"),
     *(
         (
             f"hard_escalation_triggers.{trigger}",
@@ -72,19 +74,19 @@ _ENFORCEMENT_ROWS = (
             f"authority.escalation.{trigger}.triggered",
         )
         for trigger, owner, phase in (
-            ("unresolved_director_hard_blocker", "workflow.gates", "initial"),
-            ("low_or_conflicting_confidence", "workflow.gates", "initial"),
-            ("cost_over_grant", "authority.ledger", "predispatch"),
-            ("provider_or_model_not_allowlisted", "authority.scope", "initial"),
-            ("new_publish_destination", "authority.scope", "initial"),
-            ("material_blueprint_change_after_authorization", "authority.guard", "predispatch"),
-            ("factual_or_rights_risk_unknown", "workflow.gates", "initial"),
-            ("kill_switch_not_clear", "authority.ledger", "predispatch"),
-            ("ledger_or_signature_invalid", "authority.ledger", "initial"),
-            ("workspace_trust_state_untrusted", "authority.guard", "predispatch"),
-            ("out_of_band_file_mutation_detected", "authority.guard", "predispatch"),
-            ("mutation_plan_precondition_mismatch", "mutation.guard", "predispatch"),
-            ("direct_human_mutation_requested", "mutation.guard", "initial"),
+            ("unresolved_director_hard_blocker", "authority.policy", "initial"),
+            ("low_or_conflicting_confidence", "authority.policy", "initial"),
+            ("cost_over_grant", "authority.policy", "initial"),
+            ("provider_or_model_not_allowlisted", "authority.policy", "initial"),
+            ("new_publish_destination", "authority.policy", "initial"),
+            ("material_blueprint_change_after_authorization", "authority.policy", "initial"),
+            ("factual_or_rights_risk_unknown", "authority.policy", "initial"),
+            ("kill_switch_not_clear", "authority.policy", "initial"),
+            ("ledger_or_signature_invalid", "authority.policy", "initial"),
+            ("workspace_trust_state_untrusted", "authority.policy", "initial"),
+            ("out_of_band_file_mutation_detected", "authority.policy", "initial"),
+            ("mutation_plan_precondition_mismatch", "authority.policy", "initial"),
+            ("direct_human_mutation_requested", "authority.policy", "initial"),
         )
     ),
 )
@@ -118,6 +120,7 @@ def _bundle_identity(bundle: PolicyBundle) -> dict[str, object]:
         "unknown_state_fail_closed": bundle.unknown_state_fail_closed,
         "self_approval_forbidden": bundle.self_approval_forbidden,
         "release_campaign_enabled": bundle.release_campaign_enabled,
+        "maximum_r4_validity_seconds": bundle.maximum_r4_validity_seconds,
         "hard_escalation_triggers": list(bundle.hard_escalation_triggers),
         "action_risk_by_action": [
             {"action_id": str(action_id), "risk": risk.value}
@@ -162,6 +165,7 @@ def target_policy_bundle() -> PolicyBundle:
         unknown_state_fail_closed=True,
         self_approval_forbidden=True,
         release_campaign_enabled=False,
+        maximum_r4_validity_seconds=MAXIMUM_R4_VALIDITY_SECONDS,
         hard_escalation_triggers=_HARD_ESCALATION_TRIGGERS,
         action_risk_by_action=risk_map,
         enforcement_matrix=_enforcement_matrix(),
@@ -179,6 +183,9 @@ def target_policy_bundle() -> PolicyBundle:
             unknown_state_fail_closed=provisional.unknown_state_fail_closed,
             self_approval_forbidden=provisional.self_approval_forbidden,
             release_campaign_enabled=provisional.release_campaign_enabled,
+            maximum_r4_validity_seconds=(
+                provisional.maximum_r4_validity_seconds
+            ),
             hard_escalation_triggers=provisional.hard_escalation_triggers,
             action_risk_by_action=provisional.action_risk_by_action,
             enforcement_matrix=provisional.enforcement_matrix,
@@ -196,6 +203,8 @@ def validate_policy_bundle(bundle: PolicyBundle) -> PolicyBundle:
         or bundle.unknown_state_fail_closed is not True
         or bundle.self_approval_forbidden is not True
         or bundle.release_campaign_enabled is not False
+        or bundle.maximum_r4_validity_seconds
+        != MAXIMUM_R4_VALIDITY_SECONDS
         or bundle.hard_escalation_triggers != _HARD_ESCALATION_TRIGGERS
     ):
         raise AuthorityContractError("authority.policy.contract", "policy bundle is not fail closed")

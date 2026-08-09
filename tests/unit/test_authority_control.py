@@ -40,6 +40,7 @@ from video_factory.authority import (
     build_bound_action_authority_request,
     evaluate_authority,
     revalidate_authority_for_side_effect,
+    standing_authorization_to_mapping,
     standing_authorization_sha256,
     target_policy_bundle,
     validate_approval_request,
@@ -214,6 +215,15 @@ class FakeLedger:
         self.omit_workflow_verification = False
         self.trusted_workflow_evaluation_sha256: str | None = None
         self.remaining_daily_budget_minor: int | None = None
+        self.verify_current_calls = 0
+        self.revalidate_current_calls = 0
+        self.validity_seconds = 300
+        self.ledger_head_sha256 = "2" * 64
+        self.ledger_entry_version = "authority-ledger-entry/1.0"
+        self.requester_authentication_version = (
+            "principal-authentication/1.0"
+        )
+        self.signature_verification_version = "signature-verification/1.0"
 
     def _receipt(
         self,
@@ -259,8 +269,12 @@ class FakeLedger:
             ),
             authority_source=self.source,
             ledger_state=self.ledger_state,
-            ledger_head_sha256=HashDigest("2" * 64),
-            ledger_entry=_ref("ledger/entry.json", "3", "authority-ledger-entry/1.0"),
+            ledger_head_sha256=HashDigest(self.ledger_head_sha256),
+            ledger_entry=_ref(
+                "ledger/entry.json",
+                "3",
+                self.ledger_entry_version,
+            ),
             requester_principal_id=OpaqueId(
                 self.requester_principal_override
                 or str(request.requester_principal_id)
@@ -268,7 +282,7 @@ class FakeLedger:
             requester_authentication_ref=_ref(
                 "ledger/requester-authentication.json",
                 self.requester_authentication_digest,
-                "principal-authentication/1.0",
+                self.requester_authentication_version,
             ),
             grant_sha256=grant_sha256,
             principal_verifications=(
@@ -289,7 +303,7 @@ class FakeLedger:
                                 or self.shared_human_signature_bytes
                                 else str(index + 4)
                             ),
-                            "signature-verification/1.0",
+                            self.signature_verification_version,
                         ),
                     )
                     for index, principal in enumerate(self.principals)
@@ -300,7 +314,7 @@ class FakeLedger:
                     _ref(
                         "ledger/grant-signature.json",
                         "7",
-                        "signature-verification/1.0",
+                        self.signature_verification_version,
                     ),
                 )
                 if self.source in {
@@ -326,7 +340,9 @@ class FakeLedger:
             adapter_id=OpaqueId(adapter_id) if adapter_id else None,
             service_identity=OpaqueId(service_identity) if service_identity else None,
             evaluated_at=evaluated_at.isoformat(),
-            valid_until=(evaluated_at + timedelta(minutes=5)).isoformat(),
+            valid_until=(
+                evaluated_at + timedelta(seconds=self.validity_seconds)
+            ).isoformat(),
         )
         digest = authority_verification_receipt_sha256(provisional)
         return replace(
@@ -338,6 +354,7 @@ class FakeLedger:
     def verify_current(
         self, request, risk, presented_grant, authority_references, *, current_context, evaluated_at
     ):
+        self.verify_current_calls += 1
         if self.deny or (
             self.trusted_workflow_evaluation_sha256 is not None
             and (
@@ -359,6 +376,7 @@ class FakeLedger:
         self, decision, request, *, current_context, workspace_observation_sha256,
         adapter_id, service_identity, evaluated_at, purpose
     ):
+        self.revalidate_current_calls += 1
         if self.deny or (
             self.remaining_daily_budget_minor is not None
             and request.scope.cost_minor_units
@@ -483,7 +501,7 @@ def _r4_request():
 def _authorize_r2():
     request = _request()
     ledger = FakeLedger(AuthoritySource.ONE_SHOT_HUMAN, ("human-a",))
-    _, decision = evaluate_authority(
+    risk, decision = evaluate_authority(
         request,
         target_policy_bundle(),
         ledger=ledger,
@@ -500,7 +518,7 @@ def _authorize_standing():
     request = _request()
     grant = _standing_grant(request)
     ledger = FakeLedger(AuthoritySource.STANDING_GRANT, ())
-    _, decision = evaluate_authority(
+    risk, decision = evaluate_authority(
         request,
         target_policy_bundle(),
         ledger=ledger,
@@ -578,6 +596,10 @@ def _assert_matrix_positive(policy_path: str) -> None:
             evaluated_at=NOW,
         )
         assert decision.status is AuthorityDecisionStatus.AUTHORIZED
+        if policy_path == "R4.short_expiry":
+            _revalidate_r2(request, ledger, decision)
+            assert ledger.verify_current_calls == 1
+            assert ledger.revalidate_current_calls == 1
         return
     _authorize_r2()
 
@@ -606,13 +628,14 @@ def _assert_matrix_negative(policy_path: str, expected_reason: str) -> None:
                 {trigger: HardEscalationState.TRIGGERED}
             )
         )
+        ledger = FakeLedger(
+            AuthoritySource.ONE_SHOT_HUMAN,
+            ("human-a",),
+        )
         _, decision = evaluate_authority(
             request,
             target_policy_bundle(),
-            ledger=FakeLedger(
-                AuthoritySource.ONE_SHOT_HUMAN,
-                ("human-a",),
-            ),
+            ledger=ledger,
             authority_references=(
                 _ref("ledger/human-a.json", "5", "human-approval/1.0"),
             ),
@@ -620,6 +643,7 @@ def _assert_matrix_negative(policy_path: str, expected_reason: str) -> None:
         )
         assert decision.status is AuthorityDecisionStatus.DENIED
         assert expected_reason in decision.reason_codes
+        assert ledger.verify_current_calls == 0
         return
     if policy_path == "default_decision":
         request = _request()
@@ -848,6 +872,57 @@ def _assert_matrix_negative(policy_path: str, expected_reason: str) -> None:
             ),
         )
         return
+    if policy_path == "R4.short_expiry":
+        request = _r4_request()
+        references = (
+            _ref("ledger/human-a.json", "7", "human-approval/1.0"),
+            _ref("ledger/human-b.json", "8", "human-approval/1.0"),
+        )
+        initial = FakeLedger(
+            AuthoritySource.DUAL_HUMAN,
+            ("human-a", "human-b"),
+        )
+        initial.validity_seconds = 301
+        _assert_authority_error(
+            expected_reason,
+            lambda: evaluate_authority(
+                request,
+                target_policy_bundle(),
+                ledger=initial,
+                authority_references=references,
+                evaluated_at=NOW,
+            ),
+        )
+        ledger = FakeLedger(
+            AuthoritySource.DUAL_HUMAN,
+            ("human-a", "human-b"),
+        )
+        _, decision = evaluate_authority(
+            request,
+            target_policy_bundle(),
+            ledger=ledger,
+            authority_references=references,
+            evaluated_at=NOW,
+        )
+        ledger.validity_seconds = 301
+        _assert_authority_error(
+            expected_reason,
+            lambda: revalidate_authority_for_side_effect(
+                decision,
+                request,
+                ledger=ledger,
+                current_context=request.gate_context,
+                workspace_observation_sha256="6" * 64,
+                adapter_id="executor-a",
+                service_identity="service-a",
+                evaluated_at=NOW + timedelta(seconds=1),
+                purpose=VerificationPurpose.MUTATION,
+            ),
+        )
+        assert initial.verify_current_calls == 1
+        assert ledger.verify_current_calls == 1
+        assert ledger.revalidate_current_calls == 1
+        return
     raise AssertionError(f"unhandled policy row: {policy_path}")
 
 
@@ -874,6 +949,7 @@ def test_policy_bundle_has_complete_exact_matrix() -> None:
         "kill_switch",
         "R4.independent_approvers",
         "R4.standing_grant_forbidden",
+        "R4.short_expiry",
         *{
             f"hard_escalation_triggers.{trigger}"
             for trigger in policy.hard_escalation_triggers
@@ -887,11 +963,32 @@ def test_policy_bundle_has_complete_exact_matrix() -> None:
         == f"test_policy_enforcement_matrix_negative[{item.policy_path}]"
         and item.owner.split(".", 1)[0]
         in {"authority", "workflow", "mutation"}
-        and item.enforcement_phase in {"initial", "serialization", "predispatch"}
+        and item.enforcement_phase
+        in {
+            "initial",
+            "serialization",
+            "predispatch",
+            "initial_and_predispatch",
+        }
         for item in policy.enforcement_matrix
     )
     assert policy.self_approval_forbidden is True
     assert policy.release_campaign_enabled is False
+    assert policy.maximum_r4_validity_seconds == 300
+    by_path = {item.policy_path: item for item in policy.enforcement_matrix}
+    assert by_path["material_change_invalidates_authority"].enforcement_phase == (
+        "predispatch"
+    )
+    assert by_path["R4.short_expiry"].enforcement_phase == (
+        "initial_and_predispatch"
+    )
+    assert all(
+        by_path[f"hard_escalation_triggers.{trigger}"].owner
+        == "authority.policy"
+        and by_path[f"hard_escalation_triggers.{trigger}"].enforcement_phase
+        == "initial"
+        for trigger in policy.hard_escalation_triggers
+    )
     root = Path(__file__).resolve().parents[2]
     assert str(policy.governance_policy_sha256) == sha256(
         (root / "docs/governance/authority-policy-v2.1.yaml").read_bytes()
@@ -925,7 +1022,7 @@ def test_policy_enforcement_matrix_negative(row) -> None:
 def test_requester_cannot_approve_own_action() -> None:
     request = _request(requester_principal_id="human-a")
     ledger = FakeLedger(AuthoritySource.ONE_SHOT_HUMAN, ("human-a",))
-    _, decision = evaluate_authority(
+    risk, decision = evaluate_authority(
         request,
         target_policy_bundle(),
         ledger=ledger,
@@ -1090,6 +1187,216 @@ def test_current_one_human_ledger_authorizes_r2_but_dispatch_revalidates_fresh()
             evaluated_at=NOW + timedelta(seconds=2),
             purpose=VerificationPurpose.DISPATCH,
         )
+
+
+def test_policy_workflow_authority_requires_trusted_evaluation_receipt() -> None:
+    request = _request("create_storyboard")
+    risk, missing = evaluate_authority(
+        request,
+        target_policy_bundle(),
+        ledger=None,
+        evaluated_at=NOW,
+    )
+    assert risk.effective_risk is ActionRisk.R1
+    assert missing.status is AuthorityDecisionStatus.DENIED
+    assert missing.authority_effect == "none"
+
+    ledger = FakeLedger(AuthoritySource.POLICY, ())
+    _, granted = evaluate_authority(
+        request,
+        target_policy_bundle(),
+        ledger=ledger,
+        evaluated_at=NOW,
+    )
+    assert granted.status is AuthorityDecisionStatus.AUTHORIZED
+    assert granted.source is AuthoritySource.POLICY
+    assert granted.verification_receipt_sha256 is not None
+    assert granted.authority_basis_sha256 is not None
+
+
+@pytest.mark.parametrize(
+    ("attribute", "bad_value", "reason_code"),
+    (
+        (
+            "ledger_entry_version",
+            "brief/1.0",
+            "authority.evidence.role",
+        ),
+        (
+            "requester_authentication_version",
+            "brief/1.0",
+            "authority.evidence.role",
+        ),
+        (
+            "signature_verification_version",
+            "brief/1.0",
+            "authority.evidence.role",
+        ),
+        (
+            "ledger_head_sha256",
+            "not-a-sha256",
+            "authority.scope.digest",
+        ),
+    ),
+)
+def test_receipt_roles_and_ledger_head_fail_closed_initial_and_predispatch(
+    attribute: str,
+    bad_value: str,
+    reason_code: str,
+) -> None:
+    request = _request()
+    invalid_initial = FakeLedger(
+        AuthoritySource.ONE_SHOT_HUMAN,
+        ("human-a",),
+    )
+    setattr(invalid_initial, attribute, bad_value)
+    with pytest.raises(AuthorityContractError) as initial:
+        evaluate_authority(
+            request,
+            target_policy_bundle(),
+            ledger=invalid_initial,
+            authority_references=(
+                _ref(
+                    "ledger/human-a.json",
+                    "5",
+                    "human-approval/1.0",
+                ),
+            ),
+            evaluated_at=NOW,
+        )
+    assert initial.value.reason_code == reason_code
+
+    ledger = FakeLedger(AuthoritySource.ONE_SHOT_HUMAN, ("human-a",))
+    risk, decision = evaluate_authority(
+        request,
+        target_policy_bundle(),
+        ledger=ledger,
+        authority_references=(
+            _ref("ledger/human-a.json", "5", "human-approval/1.0"),
+        ),
+        evaluated_at=NOW,
+    )
+    receipt_document = authority_verification_receipt_to_mapping(
+        ledger._receipt(
+            request,
+            risk.assessment_sha256,
+            purpose=VerificationPurpose.INITIAL_DECISION,
+            evaluated_at=NOW,
+        )
+    )
+    if attribute == "ledger_entry_version":
+        receipt_document["ledger_entry"]["artifact_version"] = bad_value
+    elif attribute == "requester_authentication_version":
+        receipt_document["requester_authentication_ref"][
+            "artifact_version"
+        ] = bad_value
+    elif attribute == "signature_verification_version":
+        receipt_document["principal_verifications"][0][
+            "signature_verification_ref"
+        ]["artifact_version"] = bad_value
+    else:
+        receipt_document["ledger_head_sha256"] = bad_value
+    assert validate_artifact_mapping(receipt_document).ok is False
+
+    setattr(ledger, attribute, bad_value)
+    with pytest.raises(AuthorityContractError) as predispatch:
+        revalidate_authority_for_side_effect(
+            decision,
+            request,
+            ledger=ledger,
+            current_context=request.gate_context,
+            workspace_observation_sha256="6" * 64,
+            adapter_id="executor-a",
+            service_identity="service-a",
+            evaluated_at=NOW + timedelta(seconds=1),
+            purpose=VerificationPurpose.DISPATCH,
+        )
+    assert predispatch.value.reason_code == reason_code
+
+
+def test_standing_grant_evidence_roles_are_exact_in_code_and_schema() -> None:
+    request = _request()
+    valid = _standing_grant(request)
+    assert validate_standing_authorization(valid) == valid
+
+    for field, reference in (
+        (
+            "ledger_record",
+            replace(valid.ledger_record, artifact_version="brief/1.0"),
+        ),
+        (
+            "signature_verification_refs",
+            (
+                replace(
+                    valid.signature_verification_refs[0],
+                    artifact_version="brief/1.0",
+                ),
+            ),
+        ),
+    ):
+        invalid = _rehash_standing_grant(valid, **{field: reference})
+        with pytest.raises(AuthorityContractError) as rejected:
+            validate_standing_authorization(invalid)
+        assert rejected.value.reason_code == "authority.evidence.role"
+
+        document = standing_authorization_to_mapping(valid)
+        if field == "ledger_record":
+            document["ledger_record"]["artifact_version"] = "brief/1.0"
+        else:
+            document["signature_verification_refs"][0][
+                "artifact_version"
+            ] = "brief/1.0"
+        assert validate_artifact_mapping(document).ok is False
+
+
+def test_r4_receipts_enforce_target_short_expiry_initial_and_predispatch() -> None:
+    request = _r4_request()
+    references = (
+        _ref("ledger/human-a.json", "7", "human-approval/1.0"),
+        _ref("ledger/human-b.json", "8", "human-approval/1.0"),
+    )
+    too_long = FakeLedger(
+        AuthoritySource.DUAL_HUMAN,
+        ("human-a", "human-b"),
+    )
+    too_long.validity_seconds = 301
+    with pytest.raises(AuthorityContractError) as initial:
+        evaluate_authority(
+            request,
+            target_policy_bundle(),
+            ledger=too_long,
+            authority_references=references,
+            evaluated_at=NOW,
+        )
+    assert initial.value.reason_code == "authority.r4.expiry_too_long"
+
+    ledger = FakeLedger(
+        AuthoritySource.DUAL_HUMAN,
+        ("human-a", "human-b"),
+    )
+    ledger.validity_seconds = 300
+    _, decision = evaluate_authority(
+        request,
+        target_policy_bundle(),
+        ledger=ledger,
+        authority_references=references,
+        evaluated_at=NOW,
+    )
+    assert decision.status is AuthorityDecisionStatus.AUTHORIZED
+    ledger.validity_seconds = 301
+    with pytest.raises(AuthorityContractError) as predispatch:
+        revalidate_authority_for_side_effect(
+            decision,
+            request,
+            ledger=ledger,
+            current_context=request.gate_context,
+            workspace_observation_sha256="6" * 64,
+            adapter_id="executor-a",
+            service_identity="service-a",
+            evaluated_at=NOW + timedelta(seconds=1),
+            purpose=VerificationPurpose.MUTATION,
+        )
+    assert predispatch.value.reason_code == "authority.r4.expiry_too_long"
 
 
 @pytest.mark.parametrize(

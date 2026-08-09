@@ -52,6 +52,9 @@ responsibilities.
 - the immutable mutation plan preserves the originating change-request
   requester. The W04 action requester must match it exactly, and that requester
   is forbidden from either W04 or break-glass human approver set;
+- before any authority or idempotency reservation, the W04 request ID,
+  idempotency key, and complete canonical managed-mutation envelope digest must
+  exactly match the W02 plan;
 - create/replace content is re-resolved by a trusted port and exact object ID,
   digest, and byte length are bound into the execution authorization; identical
   objects reused across operations are resolved once and conflicting reuse of

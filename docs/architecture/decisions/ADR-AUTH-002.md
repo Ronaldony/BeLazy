@@ -38,6 +38,11 @@ standing-source receipt must bind the exact standing-grant digest. The core
 rechecks those fields, the authenticated requester, and the exact current risk
 assessment after the trusted ledger returns and before handing
 authority to a side-effect boundary.
+The ledger-head identity must be a lowercase SHA-256, and receipt references
+are role-typed as `authority-ledger-entry/1.0`,
+`principal-authentication/1.0`, `signature-verification/1.0`, or
+`workflow-evaluation-verification/1.0`. R4 initial and fresh receipts may span
+at most 300 seconds from evaluation to expiry.
 
 An authorized decision seals an `authority_basis_sha256`: the exact authority
 source, grant identity when applicable, ledger entry, each
@@ -59,6 +64,9 @@ rebound receipt, revocation, kill switch, or reservation mismatch yields zero
 external calls.
 
 Managed mutation performs the same fresh `mutation`-purpose revalidation. The
+W04 request ID, idempotency key, and core-owned envelope digest of the complete
+canonical mutation plan must match before either W04 or W02 reservation runs.
+The
 generic W04 R4 dual-human decision is additive to the W02 exact plan-aware
 authorization, content observation, idempotency reservation, and break-glass
 snapshot/incident/audit evidence. Neither layer substitutes for the other.

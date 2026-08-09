@@ -277,6 +277,11 @@ def test_incremental_invalidation_matches_clean_semantics_and_reuses_upstream() 
     results[target] = _result(str(results[target].gate_id), False, "workflow.packet_review_pass.changed")
     incremental = evaluate_workflow(definition, results, _context(), previous=baseline)
     clean = evaluate_workflow(definition, results, _context())
+    assert incremental.previous_evaluation_sha256 == baseline.evaluation_sha256
+    assert require_target_workflow_evaluation(
+        incremental,
+        predecessors=(baseline,),
+    ) is incremental
     assert workflow_semantic_projection(incremental) == workflow_semantic_projection(clean)
     assert "artifact_graph_valid" in incremental.reused_claim_ids
     assert "packet_review_pass" in incremental.invalidated_claim_ids
@@ -317,6 +322,70 @@ def test_incremental_invalidation_matches_clean_semantics_and_reuses_upstream() 
     assert "artifact_graph_valid" in context_changed.reused_claim_ids
     assert "storyboard_approval_current" in context_changed.invalidated_claim_ids
     assert len(context_changed.invalidated_claim_ids) < len(definition.claims)
+    assert require_target_workflow_evaluation(
+        context_changed,
+        predecessors=(baseline, incremental),
+    ) is context_changed
+
+    forged_invalidated = tuple(
+        sorted(
+            {
+                *(
+                    str(value)
+                    for value in incremental.invalidated_claim_ids
+                    if str(value) != "packet_review_pass"
+                ),
+                "not-a-target-claim",
+            }
+        )
+    )
+    forged_mapping = workflow_evaluation_to_mapping(incremental)
+    forged_mapping["invalidated_claim_ids"] = list(forged_invalidated)
+    identity = {
+        key: value
+        for key, value in forged_mapping.items()
+        if key not in {"evaluation_id", "evaluation_sha256"}
+    }
+    forged_digest = canonical_sha256(identity)
+    forged = replace(
+        incremental,
+        evaluation_id=OpaqueId(
+            f"workflow-evaluation-{str(forged_digest)[:20]}"
+        ),
+        evaluation_sha256=forged_digest,
+        invalidated_claim_ids=tuple(
+            OpaqueId(value) for value in forged_invalidated
+        ),
+    )
+    assert validate_workflow_evaluation(forged) is forged
+    with pytest.raises(WorkflowContractError, match="target-DAG"):
+        require_target_workflow_evaluation(
+            forged,
+            predecessors=(baseline,),
+        )
+
+    rebound_mapping = workflow_evaluation_to_mapping(incremental)
+    rebound_mapping["previous_evaluation_sha256"] = "f" * 64
+    rebound_identity = {
+        key: value
+        for key, value in rebound_mapping.items()
+        if key not in {"evaluation_id", "evaluation_sha256"}
+    }
+    rebound_digest = canonical_sha256(rebound_identity)
+    rebound = replace(
+        incremental,
+        evaluation_id=OpaqueId(
+            f"workflow-evaluation-{str(rebound_digest)[:20]}"
+        ),
+        evaluation_sha256=rebound_digest,
+        previous_evaluation_sha256=HashDigest("f" * 64),
+    )
+    assert validate_workflow_evaluation(rebound) is rebound
+    with pytest.raises(WorkflowContractError, match="exact predecessor"):
+        require_target_workflow_evaluation(
+            rebound,
+            predecessors=(baseline,),
+        )
 
 
 def test_self_rehashed_frontier_rebound_cannot_feed_a_production_plan() -> None:
@@ -340,9 +409,9 @@ def test_self_rehashed_frontier_rebound_cannot_feed_a_production_plan() -> None:
         recommended_action_id=late.recommended_action_id,
     )
     assert validate_workflow_evaluation(forged) is forged
-    with pytest.raises(WorkflowContractError, match="clean target-DAG"):
+    with pytest.raises(WorkflowContractError, match="target-DAG"):
         require_target_workflow_evaluation(forged)
-    with pytest.raises(WorkflowContractError, match="clean target-DAG"):
+    with pytest.raises(WorkflowContractError, match="target-DAG"):
         build_executable_production_plan(
             definition,
             forged,
@@ -387,9 +456,21 @@ def test_parity_report_never_cuts_over_or_grants_authority() -> None:
     assert validate_artifact_mapping(workflow_parity_report_to_mapping(report)).ok
 
     unmapped = replace(legacy, blockers=("totally opaque legacy text",))
-    failed = compare_legacy_parity(unmapped, evaluation)
-    assert failed.parity_pass is False
-    assert "blockers" in failed.unexplained_dimensions
+    with pytest.raises(WorkflowContractError, match="not covered"):
+        compare_legacy_parity(unmapped, evaluation)
+
+    swapped_known_blocker = replace(
+        legacy,
+        blockers=("workspace missing",),
+    )
+    with pytest.raises(WorkflowContractError, match="unowned reason code"):
+        compare_legacy_parity(
+            swapped_known_blocker,
+            evaluation,
+            explained_dimensions={
+                "blockers": "EXPLAINED_FRONTIER_EXPANSION",
+            },
+        )
 
     weakened = replace(legacy, approval_required=True)
     weakened_report = compare_legacy_parity(weakened, evaluation)
@@ -456,11 +537,32 @@ def test_parity_report_never_cuts_over_or_grants_authority() -> None:
             },
         )
 
+    swapped_known_label = replace(
+        legacy,
+        consumed_evidence=("publish-approval",),
+    )
+    with pytest.raises(WorkflowContractError, match="exact legacy-label"):
+        compare_legacy_parity(
+            swapped_known_label,
+            evaluation,
+            explained_dimensions={
+                "blockers": "EXPLAINED_FRONTIER_EXPANSION",
+                "consumed_evidence": "EXPLAINED_BLUEPRINT_CONSOLIDATION",
+            },
+        )
+
     with pytest.raises(WorkflowContractError, match="contract"):
         validate_workflow_parity_report(
-            replace(failed, unexplained_dimensions=(), parity_pass=True)
+            replace(
+                weakened_report,
+                unexplained_dimensions=(),
+                parity_pass=True,
+            )
         )
     with pytest.raises(WorkflowContractError, match="contract"):
         validate_workflow_parity_report(
-            replace(failed, normalization_sha256=HashDigest("f" * 64))
+            replace(
+                weakened_report,
+                normalization_sha256=HashDigest("f" * 64),
+            )
         )

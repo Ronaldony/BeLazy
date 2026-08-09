@@ -52,7 +52,13 @@ _ORCHESTRATION_EXPORTS = frozenset(
         "plan_next_step",
     }
 )
-_DECLARATIVE_EXPORTS = frozenset({"build_declarative_gate_results"})
+_DECLARATIVE_EXPORTS = frozenset(
+    {
+        "DeclarativeGateRun",
+        "build_declarative_gate_results",
+        "build_declarative_gate_run",
+    }
+)
 
 
 def __getattr__(name: str) -> object:
@@ -83,6 +89,7 @@ __all__ = [
     "ArtifactGraphError",
     "ArtifactGraphFinding",
     "ArtifactSnapshot",
+    "DeclarativeGateRun",
     "EffectiveExecutionMode",
     "EpisodeStateObservation",
     "ExecutionMode",
@@ -102,6 +109,7 @@ __all__ = [
     "build_artifact_graph",
     "build_generation_readiness",
     "build_declarative_gate_results",
+    "build_declarative_gate_run",
     "make_artifact_snapshot",
     "make_artifact_snapshot_from_json_bytes",
     "mode_is_within_limit",

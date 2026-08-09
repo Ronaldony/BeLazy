@@ -210,6 +210,9 @@ def destination_binding_bytes_sha256(value: DestinationBinding) -> HashDigest:
 
 def _candidate_material(value: ReleaseCandidate) -> dict[str, object]:
     return {
+        "workspace_id": str(value.workspace_id),
+        "channel_id": str(value.channel_id),
+        "concept_id": str(value.concept_id),
         "episode_id": str(value.episode_id),
         "final_media": media_subject_to_mapping(value.final_media),
         "metadata_ref": reference_to_mapping(value.metadata_ref),
@@ -254,6 +257,9 @@ def release_candidate_to_mapping(value: ReleaseCandidate) -> dict[str, object]:
 
 def _build_release_candidate(
     *,
+    workspace_id: str,
+    channel_id: str,
+    concept_id: str,
     episode_id: str,
     final_media: MediaSubject,
     metadata_ref: ArtifactReference,
@@ -322,9 +328,15 @@ def _build_release_candidate(
             "release.candidate.thumbnail_stale",
             "thumbnail is not bound to current exact media bytes",
         )
+    workspace = require_token(workspace_id, "workspace_id")
+    channel = require_token(channel_id, "channel_id")
+    concept = require_token(concept_id, "concept_id")
     episode = require_token(episode_id, "episode_id")
     if (
-        str(quality_bundle.episode_id) != episode
+        str(candidate_decision.workspace_id) != workspace
+        or str(candidate_decision.channel_id) != channel
+        or str(candidate_decision.concept_id) != concept
+        or str(quality_bundle.episode_id) != episode
         or str(candidate_decision.episode_id) != episode
         or quality_bundle.gate_context != current_context
         or _material_context(candidate_decision.gate_context)
@@ -440,6 +452,9 @@ def _build_release_candidate(
         artifact_version=RELEASE_CANDIDATE_VERSION,
         candidate_id=OpaqueId("pending"),
         candidate_sha256=HashDigest("0" * 64),
+        workspace_id=OpaqueId(workspace),
+        channel_id=OpaqueId(channel),
+        concept_id=OpaqueId(concept),
         episode_id=OpaqueId(episode),
         final_media=final_media,
         metadata_ref=metadata_ref,
@@ -481,6 +496,9 @@ def _build_release_candidate(
 
 def build_release_candidate(
     *,
+    workspace_id: str,
+    channel_id: str,
+    concept_id: str,
     episode_id: str,
     final_media: MediaSubject,
     metadata_ref: ArtifactReference,
@@ -503,6 +521,9 @@ def build_release_candidate(
 
     created = parse_rfc3339_datetime(created_at)
     return _build_release_candidate(
+        workspace_id=workspace_id,
+        channel_id=channel_id,
+        concept_id=concept_id,
         episode_id=episode_id,
         final_media=final_media,
         metadata_ref=metadata_ref,
@@ -533,6 +554,9 @@ def validate_release_candidate_structure(value: ReleaseCandidate) -> ReleaseCand
             "release.candidate.contract",
             "release candidate must be non-authorizing",
         )
+    require_token(str(value.workspace_id), "workspace_id")
+    require_token(str(value.channel_id), "channel_id")
+    require_token(str(value.concept_id), "concept_id")
     require_token(str(value.episode_id), "episode_id")
     require_media_subject(value.final_media, "final_media")
     require_media_subject(value.thumbnail, "thumbnail")
@@ -775,6 +799,10 @@ def _validate_release_authority(
         str(request.action_id) != "approve_publish"
         or str(request.capability_id) != "publish_approval"
         or request.gate_context != current_context
+        or str(request.scope.workspace_id) != str(candidate.workspace_id)
+        or str(request.scope.channel_id) != str(candidate.channel_id)
+        or str(request.scope.concept_id) != str(candidate.concept_id)
+        or str(request.scope.episode_id) != str(candidate.episode_id)
         or request.scope.destination != str(destination.destination_id)
         or request.scope.input_artifacts != expected_refs
         or request.side_effect
@@ -1080,6 +1108,9 @@ def verify_release_candidate(
 ) -> ReleaseCandidate:
     validate_release_candidate_structure(value)
     expected = _build_release_candidate(
+        workspace_id=verification.workspace_id,
+        channel_id=verification.channel_id,
+        concept_id=verification.concept_id,
         episode_id=verification.episode_id,
         final_media=verification.final_media,
         metadata_ref=verification.metadata_ref,
@@ -1094,7 +1125,7 @@ def verify_release_candidate(
         destination=verification.destination,
         policy=verification.policy,
         current_context=verification.current_context,
-        created_at=value.created_at,
+        created_at=verification.created_at,
         verified_at=verification.verified_at,
         quality_resolver=verification.quality_resolver,
         evaluation_verifier=verification.evaluation_verifier,

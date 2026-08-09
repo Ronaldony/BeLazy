@@ -108,6 +108,9 @@ def _option_mapping(value: CandidateOption) -> dict[str, object]:
 
 
 def _selection_input_mapping(
+    workspace_id: str,
+    channel_id: str,
+    concept_id: str,
     episode_id: str,
     bundle_ref: ArtifactReference,
     bundle_sha256: HashDigest,
@@ -116,6 +119,9 @@ def _selection_input_mapping(
     shots: tuple[ShotCandidateSet, ...],
 ) -> dict[str, object]:
     return {
+        "workspace_id": workspace_id,
+        "channel_id": channel_id,
+        "concept_id": concept_id,
         "episode_id": episode_id,
         "quality_bundle_ref": reference_to_mapping(bundle_ref),
         "quality_bundle_sha256": str(bundle_sha256),
@@ -163,6 +169,9 @@ def _shot_mapping(value: ShotCandidateDecision) -> dict[str, object]:
 def _identity(value: CandidateDecision) -> dict[str, object]:
     return {
         "artifact_version": value.artifact_version,
+        "workspace_id": str(value.workspace_id),
+        "channel_id": str(value.channel_id),
+        "concept_id": str(value.concept_id),
         "episode_id": str(value.episode_id),
         "quality_bundle_ref": reference_to_mapping(value.quality_bundle_ref),
         "quality_bundle_sha256": str(value.quality_bundle_sha256),
@@ -272,6 +281,9 @@ def _normalize_shots(
 
 def candidate_selection_input_sha256(
     *,
+    workspace_id: str,
+    channel_id: str,
+    concept_id: str,
     episode_id: str,
     quality_bundle_ref: ArtifactReference,
     quality_bundle: QualityBundle,
@@ -284,6 +296,9 @@ def candidate_selection_input_sha256(
     validate_quality_bundle(quality_bundle)
     require_target_quality_policy(policy)
     require_gate_context(current_context)
+    workspace = require_token(workspace_id, "workspace_id")
+    channel = require_token(channel_id, "channel_id")
+    concept = require_token(concept_id, "concept_id")
     episode = require_token(episode_id, "episode_id")
     require_reference(quality_bundle_ref, "quality_bundle_ref")
     if (
@@ -309,6 +324,9 @@ def candidate_selection_input_sha256(
         )
     return canonical_sha256(
         _selection_input_mapping(
+            workspace,
+            channel,
+            concept,
             episode,
             quality_bundle_ref,
             quality_bundle.bundle_sha256,
@@ -321,6 +339,9 @@ def candidate_selection_input_sha256(
 
 def build_candidate_decision(
     *,
+    workspace_id: str,
+    channel_id: str,
+    concept_id: str,
     episode_id: str,
     quality_bundle_ref: ArtifactReference,
     quality_bundle: QualityBundle,
@@ -343,7 +364,16 @@ def build_candidate_decision(
             "selection.time",
             "evaluated_at must be timezone-aware",
         )
+    workspace = require_token(workspace_id, "workspace_id")
+    channel = require_token(channel_id, "channel_id")
+    concept = require_token(concept_id, "concept_id")
     episode = require_token(episode_id, "episode_id")
+    quality_evaluated_at = parse_rfc3339_datetime(quality_bundle.evaluated_at)
+    if quality_evaluated_at > evaluated_at:
+        raise SelectionContractError(
+            "selection.time",
+            "QualityBundle evaluation cannot postdate candidate selection",
+        )
     if (
         str(quality_bundle.episode_id) != episode
         or quality_bundle.policy_sha256 != policy.policy_sha256
@@ -376,6 +406,9 @@ def build_candidate_decision(
             "candidate sets must exactly cover QualityBundle media subjects",
         )
     selection_input_sha256 = candidate_selection_input_sha256(
+        workspace_id=workspace,
+        channel_id=channel,
+        concept_id=concept,
         episode_id=episode,
         quality_bundle_ref=quality_bundle_ref,
         quality_bundle=quality_bundle,
@@ -445,6 +478,9 @@ def build_candidate_decision(
             request = authority.request
             if (
                 request.request_envelope_sha256 != selection_input_sha256
+                or str(request.scope.workspace_id) != workspace
+                or str(request.scope.channel_id) != channel
+                or str(request.scope.concept_id) != concept
                 or str(request.scope.episode_id) != episode
                 or request.scope.candidate_count != len(candidate_subjects)
                 or request.scope.cost_minor_units != 0
@@ -571,6 +607,9 @@ def build_candidate_decision(
         artifact_version=CANDIDATE_DECISION_VERSION,
         decision_id=OpaqueId("pending"),
         decision_sha256=HashDigest("0" * 64),
+        workspace_id=OpaqueId(workspace),
+        channel_id=OpaqueId(channel),
+        concept_id=OpaqueId(concept),
         episode_id=OpaqueId(episode),
         quality_bundle_ref=quality_bundle_ref,
         quality_bundle_sha256=quality_bundle.bundle_sha256,
@@ -614,6 +653,9 @@ def validate_candidate_decision_structure(
             "selection.contract",
             "CandidateDecision is not a non-authorizing W05 decision",
         )
+    require_token(str(value.workspace_id), "workspace_id")
+    require_token(str(value.channel_id), "channel_id")
+    require_token(str(value.concept_id), "concept_id")
     require_token(str(value.episode_id), "episode_id")
     require_reference(value.quality_bundle_ref, "quality_bundle_ref")
     if str(value.quality_bundle_ref.artifact_version) != "quality-bundle/1.0":
@@ -772,6 +814,9 @@ def validate_candidate_decision_structure(
     )
     expected_selection_input = canonical_sha256(
         _selection_input_mapping(
+            str(value.workspace_id),
+            str(value.channel_id),
+            str(value.concept_id),
             str(value.episode_id),
             value.quality_bundle_ref,
             value.quality_bundle_sha256,
@@ -835,8 +880,45 @@ def verify_candidate_decision(
             "selection.verification_time",
             "current verification must be timezone-aware and not predate the decision",
         )
+    origin_has_authority = value.authority_request_sha256 is not None
+    origin_evidence_present = verification.origin_authority is not None
+    origin_ledger_present = verification.origin_authority_ledger is not None
+    if (
+        origin_evidence_present != origin_ledger_present
+        or origin_has_authority != origin_evidence_present
+    ):
+        raise SelectionContractError(
+            "selection.origin_authority",
+            "persisted authority lineage requires exact original evidence",
+        )
+    origin_expected = build_candidate_decision(
+        workspace_id=verification.workspace_id,
+        channel_id=verification.channel_id,
+        concept_id=verification.concept_id,
+        episode_id=verification.episode_id,
+        quality_bundle_ref=verification.quality_bundle_ref,
+        quality_bundle=verification.quality_bundle,
+        candidate_sets=verification.candidate_sets,
+        policy=verification.policy,
+        current_context=verification.current_context,
+        evaluated_at=persisted_at,
+        authority=verification.origin_authority,
+        authority_ledger=verification.origin_authority_ledger,
+        quality_resolver=verification.quality_resolver,
+        evaluation_verifier=verification.evaluation_verifier,
+        confidence_verifier=verification.confidence_verifier,
+        authority_references=verification.authority_references,
+    )
+    if value != origin_expected:
+        raise SelectionContractError(
+            "selection.origin_rebound",
+            "CandidateDecision differs from exact original issuance evidence",
+        )
     expected = build_candidate_decision(
-        episode_id=str(value.episode_id),
+        workspace_id=verification.workspace_id,
+        channel_id=verification.channel_id,
+        concept_id=verification.concept_id,
+        episode_id=verification.episode_id,
         quality_bundle_ref=verification.quality_bundle_ref,
         quality_bundle=verification.quality_bundle,
         candidate_sets=verification.candidate_sets,

@@ -29,13 +29,16 @@ Add the separate `candidate-decision/1.0` contract.
 - Legacy `rank_generation_candidates` / `rank_candidates` remains advisory.
   Automatic choice uses the separate target-owned non-workflow
   `auto_select_candidates` action/capability. Its W04 request envelope equals
-  the exact selection-input digest and its scope includes every media and
-  confidence-receipt reference. Caller-supplied receipt fields or a
-  self-rehashed document are insufficient.
+  the exact selection-input digest; that digest and the persisted decision
+  bind workspace, channel, concept, and episode IDs. Its scope includes those
+  exact four IDs plus every media and confidence-receipt reference.
+  Caller-supplied receipt fields or a self-rehashed document are insufficient.
 - A downstream consumer must cleanly recompute a persisted decision from its
-  original QualityBundle, candidate set, current resolvers, and freshly
-  evaluated authority evidence. The immutable decision timestamp is separate
-  from the trusted current-verification timestamp.
+  original QualityBundle, candidate set, original ledger authority evidence,
+  and current resolvers. Only after the complete original artifact matches may
+  it separately apply freshly evaluated authority evidence. The immutable
+  decision timestamp is separate from the trusted current-verification
+  timestamp, and selection cannot predate its QualityBundle.
 - The legacy projection is read-only, non-current, and non-authorizing. It
   never emits an edit manifest or `selected_by_human=true`.
 

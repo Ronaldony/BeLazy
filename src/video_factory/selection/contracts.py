@@ -70,6 +70,9 @@ class CandidateDecision:
     artifact_version: str
     decision_id: OpaqueId
     decision_sha256: HashDigest
+    workspace_id: OpaqueId
+    channel_id: OpaqueId
+    concept_id: OpaqueId
     episode_id: OpaqueId
     quality_bundle_ref: ArtifactReference
     quality_bundle_sha256: HashDigest
@@ -90,12 +93,18 @@ class CandidateDecision:
 class CandidateDecisionVerificationInputs:
     """Ephemeral evidence required to cleanly re-verify a persisted decision."""
 
+    workspace_id: str
+    channel_id: str
+    concept_id: str
+    episode_id: str
     quality_bundle_ref: ArtifactReference
     quality_bundle: QualityBundle
     candidate_sets: tuple[ShotCandidateSet, ...]
     policy: QualityPolicy
     current_context: GateContext
     verified_at: datetime
+    origin_authority: InitialAuthorityEvidence | None
+    origin_authority_ledger: TrustedAuthorizationLedger | None
     authority: InitialAuthorityEvidence | None
     authority_ledger: TrustedAuthorizationLedger | None
     quality_resolver: CurrentQualityEvidenceResolver | None

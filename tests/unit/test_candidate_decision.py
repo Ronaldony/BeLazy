@@ -16,6 +16,7 @@ from video_factory.authority import (
     evaluate_authority,
     target_policy_bundle,
 )
+from video_factory.config import canonical_sha256
 from video_factory.domain import ArtifactReference, ArtifactVersion, HashDigest, OpaqueId, RelativeArtifactPath
 from video_factory.quality import (
     InitialAuthorityEvidence,
@@ -41,6 +42,7 @@ from video_factory.selection import (
     verify_candidate_decision,
 )
 from video_factory.workflow import AuthorityRequirement
+from video_factory.selection.decision import _identity as _selection_identity
 from tests.unit.test_authority_control import FakeLedger, NOW, _request
 from tests.unit.test_quality_bundle import (
     _CurrentEvaluationVerifier,
@@ -118,7 +120,14 @@ class _CurrentConfidenceVerifier:
         return option
 
 
-def _authority(bundle_ref, candidate_set, selection_input_sha256, context):
+def _authority(
+    bundle_ref,
+    candidate_set,
+    selection_input_sha256,
+    context,
+    *,
+    scope_overrides=None,
+):
     base = _request("rank_generation_candidates")
     inputs = tuple(
         sorted(
@@ -158,6 +167,7 @@ def _authority(bundle_ref, candidate_set, selection_input_sha256, context):
             retry_index=0,
             input_artifacts=inputs,
             allowed_outputs=(),
+            **(scope_overrides or {}),
         ),
         hard_escalation_facts=base.hard_escalation_facts,
     )
@@ -209,6 +219,9 @@ def _decision(
     )
     current_confidence = confidence_verifier or _CurrentConfidenceVerifier()
     selection_input = candidate_selection_input_sha256(
+        workspace_id=str(base.scope.workspace_id),
+        channel_id=str(base.scope.channel_id),
+        concept_id=str(base.scope.concept_id),
         episode_id="episode-a",
         quality_bundle_ref=bundle_ref,
         quality_bundle=bundle,
@@ -227,6 +240,9 @@ def _decision(
         else (None, None)
     )
     value = build_candidate_decision(
+        workspace_id=str(base.scope.workspace_id),
+        channel_id=str(base.scope.channel_id),
+        concept_id=str(base.scope.concept_id),
         episode_id="episode-a",
         quality_bundle_ref=bundle_ref,
         quality_bundle=bundle,
@@ -249,12 +265,18 @@ def test_candidate_auto_selects_only_at_all_thresholds_with_current_authority() 
     assert value.shots[0].selected_subject == candidates.candidates[0].subject
     assert value.shots[0].margin_to_second_bps == 800
     verification = CandidateDecisionVerificationInputs(
+        workspace_id=str(value.workspace_id),
+        channel_id=str(value.channel_id),
+        concept_id=str(value.concept_id),
+        episode_id=str(value.episode_id),
         quality_bundle_ref=bundle_ref,
         quality_bundle=bundle,
         candidate_sets=(candidates,),
         policy=target_quality_policy(),
         current_context=value.gate_context,
         verified_at=NOW,
+        origin_authority=evidence,
+        origin_authority_ledger=ledger,
         authority=evidence,
         authority_ledger=ledger,
         quality_resolver=_CurrentMediaResolver(),
@@ -296,6 +318,9 @@ def test_exact_thresholds_pass_and_current_evidence_failures_deny() -> None:
             return replace(subject, byte_length=subject.byte_length + 1)
 
     denied = build_candidate_decision(
+        workspace_id=str(value.workspace_id),
+        channel_id=str(value.channel_id),
+        concept_id=str(value.concept_id),
         episode_id="episode-a",
         quality_bundle_ref=bundle_ref,
         quality_bundle=bundle,
@@ -313,6 +338,9 @@ def test_exact_thresholds_pass_and_current_evidence_failures_deny() -> None:
     assert "selection.quality.current_evidence_invalid" in denied.reason_codes
 
     unverified_authority = build_candidate_decision(
+        workspace_id=str(value.workspace_id),
+        channel_id=str(value.channel_id),
+        concept_id=str(value.concept_id),
         episode_id="episode-a",
         quality_bundle_ref=bundle_ref,
         quality_bundle=bundle,
@@ -361,6 +389,9 @@ def test_every_confidence_receipt_is_current_and_authority_binds_full_input() ->
         ),
     )
     rebound = build_candidate_decision(
+        workspace_id=str(value.workspace_id),
+        channel_id=str(value.channel_id),
+        concept_id=str(value.concept_id),
         episode_id="episode-a",
         quality_bundle_ref=bundle_ref,
         quality_bundle=bundle,
@@ -433,6 +464,9 @@ def test_every_confidence_receipt_is_current_and_authority_binds_full_input() ->
         legacy_receipt,
     )
     legacy_rebound = build_candidate_decision(
+        workspace_id=str(value.workspace_id),
+        channel_id=str(value.channel_id),
+        concept_id=str(value.concept_id),
         episode_id="episode-a",
         quality_bundle_ref=bundle_ref,
         quality_bundle=bundle,
@@ -472,12 +506,18 @@ def test_candidate_decision_reverifies_authority_at_current_time() -> None:
         receipt,
     )
     verification = CandidateDecisionVerificationInputs(
+        workspace_id=str(value.workspace_id),
+        channel_id=str(value.channel_id),
+        concept_id=str(value.concept_id),
+        episode_id=str(value.episode_id),
         quality_bundle_ref=bundle_ref,
         quality_bundle=bundle,
         candidate_sets=(candidates,),
         policy=target_quality_policy(),
         current_context=value.gate_context,
         verified_at=later,
+        origin_authority=evidence,
+        origin_authority_ledger=ledger,
         authority=current_evidence,
         authority_ledger=ledger,
         quality_resolver=_CurrentMediaResolver(),
@@ -489,3 +529,132 @@ def test_candidate_decision_reverifies_authority_at_current_time() -> None:
     ledger.ledger_state = LedgerRecordState.REVOKED
     with pytest.raises(SelectionContractError):
         verify_candidate_decision(value, verification)
+
+
+@pytest.mark.parametrize(
+    "scope_field",
+    ("workspace_id", "channel_id", "concept_id", "episode_id"),
+)
+def test_candidate_authority_requires_exact_production_scope(scope_field: str) -> None:
+    value, bundle_ref, bundle, candidates, _, _ = _decision()
+    foreign_evidence, foreign_ledger = _authority(
+        bundle_ref,
+        candidates,
+        value.selection_input_sha256,
+        value.gate_context,
+        scope_overrides={scope_field: OpaqueId(f"foreign-{scope_field}")},
+    )
+    rebound = build_candidate_decision(
+        workspace_id=str(value.workspace_id),
+        channel_id=str(value.channel_id),
+        concept_id=str(value.concept_id),
+        episode_id=str(value.episode_id),
+        quality_bundle_ref=bundle_ref,
+        quality_bundle=bundle,
+        candidate_sets=(candidates,),
+        policy=target_quality_policy(),
+        current_context=value.gate_context,
+        evaluated_at=NOW,
+        authority=foreign_evidence,
+        authority_ledger=foreign_ledger,
+        quality_resolver=_CurrentMediaResolver(),
+        evaluation_verifier=_CurrentEvaluationVerifier(),
+        confidence_verifier=_CurrentConfidenceVerifier(),
+    )
+    assert rebound.status is not CandidateDecisionStatus.AUTO_SELECTED
+    assert "selection.authority.invalid" in rebound.reason_codes
+
+
+def test_candidate_origin_authority_and_timestamp_are_immutable() -> None:
+    value, bundle_ref, bundle, candidates, evidence, ledger = _decision()
+    later = NOW + timedelta(seconds=1)
+    current_risk, current_decision = evaluate_authority(
+        evidence.request,
+        target_policy_bundle(),
+        ledger=ledger,
+        evaluated_at=later,
+    )
+    current_receipt = ledger._receipt(
+        evidence.request,
+        current_risk.assessment_sha256,
+        purpose=VerificationPurpose.INITIAL_DECISION,
+        evaluated_at=later,
+    )
+    verification = CandidateDecisionVerificationInputs(
+        workspace_id=str(value.workspace_id),
+        channel_id=str(value.channel_id),
+        concept_id=str(value.concept_id),
+        episode_id=str(value.episode_id),
+        quality_bundle_ref=bundle_ref,
+        quality_bundle=bundle,
+        candidate_sets=(candidates,),
+        policy=target_quality_policy(),
+        current_context=value.gate_context,
+        verified_at=later,
+        origin_authority=evidence,
+        origin_authority_ledger=ledger,
+        authority=InitialAuthorityEvidence(
+            evidence.request,
+            current_risk,
+            current_decision,
+            current_receipt,
+        ),
+        authority_ledger=ledger,
+        quality_resolver=_CurrentMediaResolver(),
+        evaluation_verifier=_CurrentEvaluationVerifier(),
+        confidence_verifier=_CurrentConfidenceVerifier(),
+    )
+
+    changes = (
+        {"evaluated_at": (NOW + timedelta(milliseconds=500)).isoformat()},
+        {"authority_decision_sha256": HashDigest("f" * 64)},
+        {"authority_receipt_sha256": HashDigest("e" * 64)},
+    )
+    for change in changes:
+        provisional = replace(
+            value,
+            decision_id=OpaqueId("pending"),
+            decision_sha256=HashDigest("0" * 64),
+            **change,
+        )
+        digest = canonical_sha256(_selection_identity(provisional))
+        forged = replace(
+            provisional,
+            decision_id=OpaqueId(f"candidate-decision-{str(digest)[:20]}"),
+            decision_sha256=digest,
+        )
+        with pytest.raises(SelectionContractError, match="origin"):
+            verify_candidate_decision(forged, verification)
+
+
+def test_candidate_rejects_quality_bundle_from_the_future() -> None:
+    value, bundle_ref, bundle, candidates, evidence, ledger = _decision()
+    future_bundle = build_quality_bundle(
+        episode_id=str(bundle.episode_id),
+        gate_context=bundle.gate_context,
+        evaluations=bundle.evaluations,
+        policy=target_quality_policy(),
+        evaluated_at=(NOW + timedelta(seconds=1)).isoformat(),
+    )
+    future_ref = replace(
+        bundle_ref,
+        sha256=quality_bundle_bytes_sha256(future_bundle),
+    )
+    with pytest.raises(SelectionContractError, match="cannot postdate"):
+        build_candidate_decision(
+            workspace_id=str(value.workspace_id),
+            channel_id=str(value.channel_id),
+            concept_id=str(value.concept_id),
+            episode_id=str(value.episode_id),
+            quality_bundle_ref=future_ref,
+            quality_bundle=future_bundle,
+            candidate_sets=(candidates,),
+            policy=target_quality_policy(),
+            current_context=value.gate_context,
+            evaluated_at=NOW,
+            authority=evidence,
+            authority_ledger=ledger,
+            quality_resolver=_CurrentMediaResolver(),
+            evaluation_verifier=_CurrentEvaluationVerifier(),
+            confidence_verifier=_CurrentConfidenceVerifier(),
+        )

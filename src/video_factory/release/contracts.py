@@ -66,6 +66,9 @@ class ReleaseCandidate:
     artifact_version: str
     candidate_id: OpaqueId
     candidate_sha256: HashDigest
+    workspace_id: OpaqueId
+    channel_id: OpaqueId
+    concept_id: OpaqueId
     episode_id: OpaqueId
     final_media: MediaSubject
     metadata_ref: ArtifactReference
@@ -89,7 +92,11 @@ class ReleaseCandidate:
 class ReleaseCandidateVerificationInputs:
     """Exact current evidence required by every release consumer."""
 
+    workspace_id: str
+    channel_id: str
+    concept_id: str
     episode_id: str
+    created_at: str
     final_media: MediaSubject
     metadata_ref: ArtifactReference
     subtitle_accessibility_refs: tuple[ArtifactReference, ...]

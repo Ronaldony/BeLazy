@@ -87,12 +87,18 @@ def _release_fixture(*, quality_resolver=None):
         selection_ledger,
     ) = _decision()
     candidate_verification = CandidateDecisionVerificationInputs(
+        workspace_id=str(candidate_decision.workspace_id),
+        channel_id=str(candidate_decision.channel_id),
+        concept_id=str(candidate_decision.concept_id),
+        episode_id=str(candidate_decision.episode_id),
         quality_bundle_ref=selection_bundle_ref,
         quality_bundle=selection_bundle,
         candidate_sets=(selection_candidates,),
         policy=target_quality_policy(),
         current_context=candidate_decision.gate_context,
         verified_at=NOW,
+        origin_authority=selection_authority,
+        origin_authority_ledger=selection_ledger,
         authority=selection_authority,
         authority_ledger=selection_ledger,
         quality_resolver=resolver,
@@ -159,6 +165,9 @@ def _release_fixture(*, quality_resolver=None):
         _ref("release/subtitles.vtt", "7", "subtitle-track/1.0"),
     )
     candidate = build_release_candidate(
+        workspace_id=str(candidate_decision.workspace_id),
+        channel_id=str(candidate_decision.channel_id),
+        concept_id=str(candidate_decision.concept_id),
         episode_id="episode-a",
         final_media=final_media,
         metadata_ref=metadata,
@@ -182,7 +191,11 @@ def _release_fixture(*, quality_resolver=None):
         sha256=release_candidate_bytes_sha256(candidate),
     )
     verification = ReleaseCandidateVerificationInputs(
+        workspace_id=str(candidate_decision.workspace_id),
+        channel_id=str(candidate_decision.channel_id),
+        concept_id=str(candidate_decision.concept_id),
         episode_id="episode-a",
+        created_at=NOW.isoformat(),
         final_media=final_media,
         metadata_ref=metadata,
         subtitle_accessibility_refs=subtitles,
@@ -203,7 +216,15 @@ def _release_fixture(*, quality_resolver=None):
     return candidate, candidate_ref, destination, verification
 
 
-def _authority(candidate, candidate_ref, destination, *, granted: bool, evaluated_at=NOW):
+def _authority(
+    candidate,
+    candidate_ref,
+    destination,
+    *,
+    granted: bool,
+    evaluated_at=NOW,
+    scope_overrides=None,
+):
     values = (
         candidate_ref,
         candidate.final_media.reference,
@@ -232,6 +253,7 @@ def _authority(candidate, candidate_ref, destination, *, granted: bool, evaluate
             base.scope,
             destination=str(destination.destination_id),
             input_artifacts=inputs,
+            **(scope_overrides or {}),
         ),
     )
     if not granted:
@@ -533,8 +555,11 @@ def test_release_causal_time_order_is_fail_closed() -> None:
         verification.candidate_decision_ref,
         sha256=candidate_decision_bytes_sha256(decision_after_quality),
     )
-    with pytest.raises(ReleaseContractError, match="causal ordering"):
+    with pytest.raises(ReleaseContractError, match="current trusted evidence"):
         build_release_candidate(
+            workspace_id=verification.workspace_id,
+            channel_id=verification.channel_id,
+            concept_id=verification.concept_id,
             episode_id=verification.episode_id,
             final_media=verification.final_media,
             metadata_ref=verification.metadata_ref,
@@ -567,6 +592,9 @@ def test_release_causal_time_order_is_fail_closed() -> None:
     )
     with pytest.raises(ReleaseContractError, match="causal ordering"):
         build_release_candidate(
+            workspace_id=verification.workspace_id,
+            channel_id=verification.channel_id,
+            concept_id=verification.concept_id,
             episode_id=verification.episode_id,
             final_media=verification.final_media,
             metadata_ref=verification.metadata_ref,
@@ -585,3 +613,58 @@ def test_release_causal_time_order_is_fail_closed() -> None:
             quality_resolver=verification.quality_resolver,
             evaluation_verifier=verification.evaluation_verifier,
         )
+
+
+@pytest.mark.parametrize(
+    "scope_field",
+    ("workspace_id", "channel_id", "concept_id", "episode_id"),
+)
+def test_release_authority_requires_exact_production_scope(scope_field: str) -> None:
+    candidate, candidate_ref, destination, verification = _release_fixture()
+    authority, ledger, authority_references = _authority(
+        candidate,
+        candidate_ref,
+        destination,
+        granted=True,
+        scope_overrides={scope_field: OpaqueId(f"foreign-{scope_field}")},
+    )
+    with pytest.raises(ReleaseContractError, match="another action"):
+        assess_release_candidate(
+            release_candidate_ref=candidate_ref,
+            release_candidate=candidate,
+            release_candidate_verification=verification,
+            destination=destination,
+            current_context=candidate.gate_context,
+            evaluated_at=NOW,
+            authority=authority,
+            authority_ledger=ledger,
+            authority_references=authority_references,
+        )
+
+
+def test_release_candidate_creation_time_is_independently_bound() -> None:
+    candidate, _, _, verification = _release_fixture()
+    forged_created_at = (NOW + timedelta(seconds=1)).isoformat()
+    provisional = replace(
+        candidate,
+        candidate_id=OpaqueId("pending"),
+        candidate_sha256=HashDigest("0" * 64),
+        release_intent_sha256=HashDigest("0" * 64),
+        created_at=forged_created_at,
+    )
+    provisional = replace(
+        provisional,
+        release_intent_sha256=canonical_sha256(_candidate_material(provisional)),
+    )
+    digest = canonical_sha256(_candidate_identity(provisional))
+    forged = replace(
+        provisional,
+        candidate_id=OpaqueId(f"release-candidate-{str(digest)[:20]}"),
+        candidate_sha256=digest,
+    )
+    current = _current_release_verification(
+        verification,
+        NOW + timedelta(seconds=2),
+    )
+    with pytest.raises(ReleaseContractError, match="clean current recomputation"):
+        verify_release_candidate(forged, current)

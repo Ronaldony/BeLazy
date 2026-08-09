@@ -77,7 +77,7 @@
     },
     {
       "filename": "candidate-decision.schema.json",
-      "sha256": "e65acd548fbff32c576ebb2055954cd6aad7eb2193f1b1c1274531f63c77b007",
+      "sha256": "c0b7a06573771bba9f76934ecd36999c6e2976dca052c2ef97a9ba3f21fa901d",
       "schema_id": "https://schemas.video-factory.invalid/selection/candidate-decision.schema.json",
       "artifact_version": "candidate-decision/1.0"
     },
@@ -383,7 +383,7 @@
     },
     {
       "filename": "release-candidate.schema.json",
-      "sha256": "82489ba88d8a1f10b52e43b268fb49ec139395d19168ae0ca2800ce5f3e3b384",
+      "sha256": "667e7a09dc9f339717b29fd4367fe799fef3cc67be24f41f86f8176f5cac320d",
       "schema_id": "https://schemas.video-factory.invalid/release/release-candidate.schema.json",
       "artifact_version": "release-candidate/1.0"
     },

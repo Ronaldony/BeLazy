@@ -8,6 +8,7 @@ from hashlib import sha256
 from pathlib import Path
 
 import pytest
+import video_factory.authority.evaluator as authority_evaluator
 
 from video_factory.approvals import GateContext, gate_context_sha256
 from video_factory.artifacts import validate_artifact_mapping
@@ -39,6 +40,7 @@ from video_factory.authority import (
     build_action_authority_request,
     build_approval_request,
     build_bound_action_authority_request,
+    classify_action_risk,
     evaluate_authority,
     revalidate_authority_for_side_effect,
     standing_authorization_to_mapping,
@@ -1177,6 +1179,69 @@ def test_material_escalation_remains_dual_human_at_predispatch() -> None:
     )
     assert verified.decision is decision
     assert verified.receipt.authority_source is AuthoritySource.DUAL_HUMAN
+
+
+@pytest.mark.parametrize(
+    "purpose",
+    (
+        VerificationPurpose.DISPATCH,
+        VerificationPurpose.RECONCILE,
+        VerificationPurpose.MUTATION,
+    ),
+)
+def test_unsupported_risk_cannot_reach_predispatch_ledger(
+    purpose: VerificationPurpose,
+) -> None:
+    trigger = "material_blueprint_change_after_authorization"
+    request = _request(
+        "run_external_generation",
+        hard_escalation_facts=_hard_escalation_facts(
+            {trigger: HardEscalationState.UNKNOWN}
+        ),
+    )
+    policy = target_policy_bundle()
+    risk = classify_action_risk(request, policy)
+    assert risk.supported is False
+    ledger = FakeLedger(AuthoritySource.DUAL_HUMAN, ("human-a", "human-b"))
+    references = (
+        _ref("ledger/human-a.json", "7", "human-approval/1.0"),
+        _ref("ledger/human-b.json", "8", "human-approval/1.0"),
+    )
+    receipt = ledger.verify_current(
+        request,
+        risk,
+        None,
+        references,
+        current_context=request.gate_context,
+        evaluated_at=NOW,
+    )
+    assert receipt is not None
+    # Simulate a structurally valid, self-rehashed caller document. A trusted
+    # ledger must never see it once the current classifier says unsupported.
+    decision = authority_evaluator._build_decision(
+        request,
+        risk,
+        status=AuthorityDecisionStatus.AUTHORIZED,
+        source=AuthoritySource.DUAL_HUMAN,
+        reasons=("authority.test.self_rehashed",),
+        evaluated_at=NOW,
+        required_authority=AuthorityRequirement.TWO_INDEPENDENT_HUMANS,
+        receipt=receipt,
+    )
+    with pytest.raises(AuthorityContractError) as rejected:
+        revalidate_authority_for_side_effect(
+            decision,
+            request,
+            ledger=ledger,
+            current_context=request.gate_context,
+            workspace_observation_sha256="6" * 64,
+            adapter_id="executor-a",
+            service_identity="service-a",
+            evaluated_at=NOW + timedelta(seconds=1),
+            purpose=purpose,
+        )
+    assert rejected.value.reason_code == "authority.predispatch.risk_unsupported"
+    assert ledger.revalidate_current_calls == 0
 
 
 def test_hard_escalation_fact_coverage_order_and_evidence_are_closed() -> None:

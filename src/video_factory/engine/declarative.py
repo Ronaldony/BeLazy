@@ -43,6 +43,7 @@ from video_factory.workflow import (
     evaluate_workflow,
     gate_consumed_context_sha256,
     validate_gate_result,
+    validate_workflow_evaluation,
 )
 
 from .artifact_graph import ArtifactSnapshot
@@ -63,7 +64,30 @@ from .orchestration import (
 )
 
 
-_DECLARATIVE_GATE_RUN_SEAL = object()
+class _DeclarativeGateRunSeal:
+    """Bind one ephemeral cache seal to exactly one builder-created run."""
+
+    __slots__ = ("owner",)
+
+    def __init__(self) -> None:
+        self.owner: DeclarativeGateRun | None = None
+
+    def bind(self, run: DeclarativeGateRun) -> None:
+        if self.owner is not None:
+            raise WorkflowContractError(
+                "workflow.adapter.construction",
+                "declarative gate run seal is already bound",
+            )
+        self.owner = run
+
+    def is_bound_to(self, run: DeclarativeGateRun) -> bool:
+        return self.owner is run
+
+    def __copy__(self) -> _DeclarativeGateRunSeal:
+        return self
+
+    def __deepcopy__(self, memo: dict[int, object]) -> _DeclarativeGateRunSeal:
+        return self
 
 
 @dataclass(frozen=True, slots=True)
@@ -75,7 +99,12 @@ class DeclarativeGateRun:
     input_sha256s: tuple[tuple[str, HashDigest], ...]
     evaluated_claim_ids: tuple[str, ...]
     reused_claim_ids: tuple[str, ...]
-    _construction_seal: object = field(repr=False, compare=False)
+    _construction_seal: _DeclarativeGateRunSeal = field(
+        init=False,
+        repr=False,
+        compare=False,
+        default_factory=_DeclarativeGateRunSeal,
+    )
     authority_effect: str = "none"
 
 
@@ -833,7 +862,7 @@ def _validate_declarative_gate_run(run: DeclarativeGateRun) -> None:
     claim_ids = tuple(str(claim.claim_id) for claim in definition.claims)
     if (
         run.authority_effect != "none"
-        or run._construction_seal is not _DECLARATIVE_GATE_RUN_SEAL
+        or not run._construction_seal.is_bound_to(run)
         or run.workflow_definition_sha256 != definition.definition_sha256
         or tuple(value for value, _ in run.input_sha256s) != claim_ids
         or len(run.gate_results) != len(claim_ids)
@@ -941,8 +970,8 @@ def build_declarative_gate_run(
         reused_claim_ids=tuple(
             claim_id for claim_id in claim_ids if claim_id in reused
         ),
-        _construction_seal=_DECLARATIVE_GATE_RUN_SEAL,
     )
+    run._construction_seal.bind(run)
     _validate_declarative_gate_run(run)
     return run
 
@@ -957,6 +986,45 @@ def evaluate_declarative_gate_run(
 
     _validate_declarative_gate_run(run)
     definition = default_workflow_definition()
+    if previous is None:
+        if run.reused_claim_ids:
+            raise WorkflowContractError(
+                "workflow.adapter.previous_evaluation_missing",
+                "a run with reused gates requires its exact previous evaluation",
+            )
+    else:
+        validate_workflow_evaluation(previous)
+        previous_inputs = {
+            str(gate_id): str(digest)
+            for gate_id, digest in previous.gate_input_sha256s
+        }
+        previous_results = {
+            str(result.gate_id): result for result in previous.gate_results
+        }
+        current_inputs = dict(run.input_sha256s)
+        expected_reused = tuple(
+            str(claim.claim_id)
+            for claim in definition.claims
+            if previous_inputs.get(str(claim.gate_id))
+            == str(current_inputs[str(claim.claim_id)])
+        )
+        if run.reused_claim_ids != expected_reused:
+            raise WorkflowContractError(
+                "workflow.adapter.reuse_rebound",
+                "reused gates do not match unchanged predecessor inputs",
+            )
+        current_results = {
+            str(result.gate_id): result for result in run.gate_results
+        }
+        for claim in definition.claims:
+            if str(claim.claim_id) not in expected_reused:
+                continue
+            gate_id = str(claim.gate_id)
+            if current_results.get(gate_id) != previous_results.get(gate_id):
+                raise WorkflowContractError(
+                    "workflow.adapter.reuse_result_rebound",
+                    "reused gate result differs from the exact predecessor result",
+                )
     return evaluate_workflow(
         definition,
         run.gate_results,

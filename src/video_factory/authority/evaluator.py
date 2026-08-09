@@ -1605,6 +1605,11 @@ def revalidate_authority_for_side_effect(
             "request is not bound to the current target authority policy",
         )
     risk = classify_action_risk(request, policy)
+    if not risk.supported:
+        raise AuthorityContractError(
+            "authority.predispatch.risk_unsupported",
+            "current risk assessment is unsupported for side-effect authorization",
+        )
     required = _effective_authority_requirement(request, risk)
     expected_limit = canonical_sha256(
         {

@@ -8,7 +8,10 @@
   the routine storyboard human checkpoint with non-human integrated preflight,
   recorded the exact two-row legacy parity consolidation, and escalated known
   material creative deviations to short-lived R4 dual-human authority while
-  UNKNOWN classifier facts remain denied.
+  UNKNOWN classifier facts remain denied. Final review hardening rejects an
+  unsupported current risk before any pre-dispatch ledger reservation and
+  binds cached gate reuse to a non-copyable run seal plus the exact predecessor
+  inputs and results.
 - Closed W04 fail-closed review gaps: actual gate-helper reuse with exact
   predecessor-chain invalidation and ordered plan/parity/authority consumption,
   an eight-predecessor clean-rebase boundary, action-row-specific parity normalization,

@@ -1426,6 +1426,128 @@ def test_actual_adapter_late_evidence_change_reuses_unaffected_claims(
     assert len(incremental.invalidated_claim_ids) < len(definition.claims)
 
 
+def test_declarative_gate_run_rejects_copied_or_wrong_cache_provenance() -> None:
+    definition = default_workflow_definition()
+    context = MaterialContextSeed(
+        workflow_definition_sha256=GATE_CONTEXT.workflow_definition_sha256,
+        policy_bundle_sha256=GATE_CONTEXT.policy_bundle_sha256,
+        rules_bundle_sha256=GATE_CONTEXT.rules_bundle_sha256,
+        effective_config_sha256=GATE_CONTEXT.effective_config_sha256,
+        current_manifest_sha256=GATE_CONTEXT.current_manifest_sha256,
+        evidence_graph_sha256=GATE_CONTEXT.evidence_graph_sha256,
+    )
+    snapshots = _legacy_characterization_snapshots(
+        "ready_for_human_publish", "standard"
+    )
+    observation = observe_episode_state(snapshots)
+    kwargs = _characterization_inputs(
+        "ready_for_human_publish", "standard"
+    )[1]
+    baseline_run = build_declarative_gate_run(
+        observation, "standard", context, **kwargs
+    )
+    baseline = evaluate_declarative_gate_run(baseline_run, context)
+
+    without_generation_approval = observe_episode_state(
+        tuple(
+            snapshot
+            for snapshot in snapshots
+            if snapshot.family != "packet-approval"
+        )
+    )
+    clean_current_run = build_declarative_gate_run(
+        without_generation_approval,
+        "standard",
+        context,
+        **kwargs,
+    )
+    copied = replace(
+        baseline_run,
+        input_sha256s=clean_current_run.input_sha256s,
+    )
+    with pytest.raises(WorkflowContractError) as copied_rejected:
+        build_declarative_gate_run(
+            without_generation_approval,
+            "standard",
+            context,
+            previous=copied,
+            **kwargs,
+        )
+    assert copied_rejected.value.reason_code == "workflow.adapter.previous_run"
+
+    with pytest.raises(WorkflowContractError) as deep_copied_rejected:
+        build_declarative_gate_run(
+            observation,
+            "standard",
+            context,
+            previous=deepcopy(baseline_run),
+            **kwargs,
+        )
+    assert (
+        deep_copied_rejected.value.reason_code
+        == "workflow.adapter.previous_run"
+    )
+
+    incremental_run = build_declarative_gate_run(
+        without_generation_approval,
+        "standard",
+        context,
+        previous=baseline_run,
+        **kwargs,
+    )
+    with pytest.raises(WorkflowContractError) as missing_previous:
+        evaluate_declarative_gate_run(incremental_run, context)
+    assert (
+        missing_previous.value.reason_code
+        == "workflow.adapter.previous_evaluation_missing"
+    )
+
+    clean_current = evaluate_declarative_gate_run(clean_current_run, context)
+    with pytest.raises(WorkflowContractError) as wrong_previous:
+        evaluate_declarative_gate_run(
+            incremental_run,
+            context,
+            previous=clean_current,
+        )
+    assert wrong_previous.value.reason_code == "workflow.adapter.reuse_rebound"
+
+    fully_reused_run = build_declarative_gate_run(
+        observation,
+        "standard",
+        context,
+        previous=baseline_run,
+        **kwargs,
+    )
+    changed_result = build_gate_result(
+        str(baseline.gate_results[0].gate_id),
+        GateStatus.BLOCKED,
+        consumed_context_sha256=str(
+            baseline.gate_results[0].consumed_context_sha256
+        ),
+        reason_codes=("workflow.test.changed",),
+        messages=("changed predecessor result",),
+    )
+    changed_previous = evaluate_workflow(
+        definition,
+        (changed_result, *baseline.gate_results[1:]),
+        context,
+        gate_input_sha256s=tuple(
+            (str(gate_id), str(digest))
+            for gate_id, digest in baseline.gate_input_sha256s
+        ),
+    )
+    with pytest.raises(WorkflowContractError) as result_rebound:
+        evaluate_declarative_gate_run(
+            fully_reused_run,
+            context,
+            previous=changed_previous,
+        )
+    assert (
+        result_rebound.value.reason_code
+        == "workflow.adapter.reuse_result_rebound"
+    )
+
+
 def test_actual_adapter_time_change_is_mode_aware_and_input_bound() -> None:
     context = MaterialContextSeed(
         workflow_definition_sha256=GATE_CONTEXT.workflow_definition_sha256,

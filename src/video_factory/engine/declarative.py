@@ -29,6 +29,7 @@ from video_factory.policy import (
     STAGE_STORYBOARD,
     ApprovalKind,
     ReviewMode,
+    WorkflowPolicy,
     resolve_workflow_policy,
 )
 from video_factory.workflow import (
@@ -36,8 +37,10 @@ from video_factory.workflow import (
     GateStatus,
     MaterialContextSeed,
     WorkflowContractError,
+    WorkflowEvaluation,
     build_gate_result,
     default_workflow_definition,
+    evaluate_workflow,
     gate_consumed_context_sha256,
     validate_gate_result,
 )
@@ -155,18 +158,6 @@ _GATE_ARTIFACT_FAMILIES: Mapping[str, tuple[str, ...]] = {
         PipelineKind.PUBLISH_APPROVAL.value,
     ),
 }
-_MODE_DEPENDENT_CLAIMS = frozenset(
-    {
-        "storyboard_review_pass",
-        "storyboard_approval_current",
-        "packet_review_pass",
-        "generation_approval_current",
-        "generation_mode_permits_execution",
-        "workspace_trusted",
-        "final_review_pass",
-        "publish_approval_current",
-    }
-)
 _APPROVAL_CLAIMS = frozenset(
     {
         "storyboard_approval_current",
@@ -174,6 +165,46 @@ _APPROVAL_CLAIMS = frozenset(
         "publish_approval_current",
     }
 )
+_REVIEW_STAGE_BY_CLAIM: Mapping[str, str] = {
+    "storyboard_review_pass": STAGE_STORYBOARD,
+    "packet_review_pass": STAGE_GENERATION_PLAN,
+    "final_review_pass": STAGE_FINAL_VIDEO,
+}
+_TARGET_PREFLIGHT_STAGES = frozenset(
+    {STAGE_STORYBOARD, STAGE_GENERATION_PLAN}
+)
+_EVIDENCE_REVIEW_MODES = frozenset(
+    {
+        ReviewMode.PEER_AI,
+        ReviewMode.HUMAN,
+        ReviewMode.PEER_AI_AND_HUMAN,
+        ReviewMode.TWO_INDEPENDENT_REVIEWERS,
+    }
+)
+
+
+def _target_review_mode(policy: WorkflowPolicy, stage: str) -> ReviewMode:
+    """Project routine design/preflight review onto non-human target gates."""
+
+    configured = policy.review_policy_by_stage.get(stage, ReviewMode.NONE)
+    if stage in _TARGET_PREFLIGHT_STAGES and policy.mode is not WorkflowMode.RAPID:
+        return ReviewMode.PEER_AI
+    return configured
+
+
+def _approval_required(policy: WorkflowPolicy, claim_id: str) -> bool:
+    """Return whether the target adapter actually evaluates human evidence."""
+
+    if claim_id == "storyboard_approval_current":
+        # The legacy identity remains for dual-run compatibility.  Routine
+        # storyboard approval is removed from the target path; material
+        # creative deviations are escalated by the authority classifier.
+        return False
+    if claim_id == "generation_approval_current":
+        return ApprovalKind.GENERATION_APPROVAL in policy.required_approval_kinds
+    if claim_id == "publish_approval_current":
+        return ApprovalKind.PUBLISH_APPROVAL in policy.required_approval_kinds
+    return False
 
 
 def _snapshot_input(snapshot: ArtifactSnapshot) -> dict[str, object]:
@@ -209,6 +240,24 @@ def _gate_input_sha256s(
     values: list[tuple[str, HashDigest]] = []
     for claim in definition.claims:
         claim_id = str(claim.claim_id)
+        families = _GATE_ARTIFACT_FAMILIES.get(claim_id, ())
+        review_stage = _REVIEW_STAGE_BY_CLAIM.get(claim_id)
+        review_mode = (
+            _target_review_mode(policy, review_stage)
+            if review_stage is not None
+            else None
+        )
+        approval_required = (
+            _approval_required(policy, claim_id)
+            if claim_id in _APPROVAL_CLAIMS
+            else False
+        )
+        if review_mode is not None and review_mode not in _EVIDENCE_REVIEW_MODES:
+            # A bypassed/self-check review depends on subject presence only,
+            # not on review artifacts that the evaluator never reads.
+            families = families[:1]
+        if claim_id in _APPROVAL_CLAIMS and not approval_required:
+            families = ()
         payload: dict[str, object] = {
             "claim_id": claim_id,
             "gate_id": str(claim.gate_id),
@@ -225,14 +274,16 @@ def _gate_input_sha256s(
                         for snapshot in observation.graph.family(family)
                     ],
                 }
-                for family in _GATE_ARTIFACT_FAMILIES.get(claim_id, ())
+                for family in families
             ],
         }
         if claim_id == "artifact_graph_valid":
             payload["findings"] = list(observation.findings)
-        if claim_id in _MODE_DEPENDENT_CLAIMS:
-            payload["workflow_mode"] = policy.mode.value
+        if review_mode is not None:
+            payload["review_mode"] = review_mode.value
         if claim_id in _APPROVAL_CLAIMS:
+            payload["approval_required"] = approval_required
+        if approval_required:
             payload["current_context"] = (
                 gate_context_to_mapping(current_context)
                 if current_context is not None
@@ -241,7 +292,12 @@ def _gate_input_sha256s(
             payload["evaluated_at"] = (
                 evaluated_at.isoformat() if evaluated_at is not None else None
             )
+        if claim_id == "generation_mode_permits_execution":
+            payload["preview_only"] = policy.mode is WorkflowMode.RAPID
         if claim_id == "workspace_trusted":
+            workspace_required = policy.mode is not WorkflowMode.RAPID
+            payload["workspace_required"] = workspace_required
+        if claim_id == "workspace_trusted" and workspace_required:
             payload["workspace"] = {
                 "observation": (
                     workspace_observation_mapping(workspace_observation)
@@ -298,7 +354,10 @@ def _build_declarative_gate_results(
 
     definition = default_workflow_definition()
     policy = resolve_workflow_policy(workflow_mode)
-    if current_context is not None:
+    current_approval_required = any(
+        _approval_required(policy, claim_id) for claim_id in _APPROVAL_CLAIMS
+    )
+    if current_context is not None and current_approval_required:
         shared_fields = (
             "workflow_definition_sha256",
             "policy_bundle_sha256",
@@ -416,9 +475,7 @@ def _build_declarative_gate_results(
                 observation,
                 subject=storyboard,
                 review_family=PipelineKind.STORYBOARD_REVIEW.value,
-                mode=policy.review_policy_by_stage.get(
-                    STAGE_STORYBOARD, ReviewMode.NONE
-                ),
+                mode=_target_review_mode(policy, STAGE_STORYBOARD),
             )
         record(
             "storyboard_review_pass",
@@ -428,29 +485,11 @@ def _build_declarative_gate_results(
         )
 
     if not reuse("storyboard_approval_current"):
-        storyboard_approval = None
-        if not policy.hash_binding_required:
-            storyboard_approval_blockers: tuple[str, ...] = ()
-        elif storyboard is None:
-            storyboard_approval_blockers = ("storyboard unavailable",)
-        else:
-            storyboard_approval_blockers, storyboard_approval = _approval_blockers(
-                observation,
-                family=PipelineKind.STORYBOARD_APPROVAL.value,
-                expected_version="storyboard-approval/2.0",
-                expected_capability="storyboard_approval",
-                required_artifacts=(storyboard, *storyboard_reviews),
-                current_context=current_context,
-                evaluated_at=evaluated_at,
-                enforce_current_context=True,
-            )
         record(
             "storyboard_approval_current",
-            storyboard_approval_blockers,
+            (),
             reason_code="workflow.approval.blocked",
-            evidence=_evidence(
-                storyboard, storyboard_reviews, storyboard_approval
-            ),
+            evidence=(),
         )
 
     packet = observation.graph.one(PipelineKind.GENERATION_PACKET.value)
@@ -489,9 +528,7 @@ def _build_declarative_gate_results(
                 observation,
                 subject=packet,
                 review_family=PipelineKind.PACKET_REVIEW.value,
-                mode=policy.review_policy_by_stage.get(
-                    STAGE_GENERATION_PLAN, ReviewMode.NONE
-                ),
+                mode=_target_review_mode(policy, STAGE_GENERATION_PLAN),
             )
         record(
             "packet_review_pass",
@@ -539,11 +576,16 @@ def _build_declarative_gate_results(
             "generation_approval_current",
             generation_approval_blockers,
             reason_code="workflow.approval.blocked",
-            evidence=_evidence(
-                packet,
-                packet_reviews,
-                feasibility,
-                generation_approval,
+            evidence=(
+                _evidence(
+                    packet,
+                    packet_reviews,
+                    feasibility,
+                    generation_approval,
+                )
+                if ApprovalKind.GENERATION_APPROVAL
+                in policy.required_approval_kinds
+                else ()
             ),
         )
 
@@ -711,9 +753,7 @@ def _build_declarative_gate_results(
                 observation,
                 subject=delivery,
                 review_family=PipelineKind.FINAL_REVIEW.value,
-                mode=policy.review_policy_by_stage.get(
-                    STAGE_FINAL_VIDEO, ReviewMode.NONE
-                ),
+                mode=_target_review_mode(policy, STAGE_FINAL_VIDEO),
             )
         record(
             "final_review_pass",
@@ -770,8 +810,11 @@ def _build_declarative_gate_results(
             "publish_approval_current",
             publish_blockers,
             reason_code="workflow.approval.blocked",
-            evidence=_evidence(
-                delivery, final_reviews, metadata, publish_approval
+            evidence=(
+                _evidence(delivery, final_reviews, metadata, publish_approval)
+                if ApprovalKind.PUBLISH_APPROVAL
+                in policy.required_approval_kinds
+                else ()
             ),
         )
     if not reuse("external_publish_complete"):
@@ -902,6 +945,30 @@ def build_declarative_gate_run(
     )
     _validate_declarative_gate_run(run)
     return run
+
+
+def evaluate_declarative_gate_run(
+    run: DeclarativeGateRun,
+    material_context: MaterialContextSeed,
+    *,
+    previous: WorkflowEvaluation | None = None,
+) -> WorkflowEvaluation:
+    """Bind sealed adapter-input identities into incremental evaluation."""
+
+    _validate_declarative_gate_run(run)
+    definition = default_workflow_definition()
+    return evaluate_workflow(
+        definition,
+        run.gate_results,
+        material_context,
+        previous=previous,
+        gate_input_sha256s=tuple(
+            (str(claim.gate_id), str(digest))
+            for claim, (_, digest) in zip(
+                definition.claims, run.input_sha256s
+            )
+        ),
+    )
 
 
 def build_declarative_gate_results(

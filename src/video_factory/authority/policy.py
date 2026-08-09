@@ -282,12 +282,19 @@ def classify_action_risk(
         for value in request.hard_escalation_facts
         if value.state is not HardEscalationState.CLEAR
     )
+    unknown_facts = tuple(
+        value
+        for value in nonclear_facts
+        if value.state is HardEscalationState.UNKNOWN
+    )
     action_supported = action_id in risk_by_action
-    supported = action_supported and not nonclear_facts
+    # A known, observed trigger is supported as an R4 escalation.  Unknown
+    # classifier state remains unsupported and therefore fails closed.
+    supported = action_supported and not unknown_facts
     effective = (
-        risk_by_action[action_id]
-        if supported
-        else ActionRisk.R4
+        ActionRisk.R4
+        if nonclear_facts or not action_supported
+        else risk_by_action[action_id]
     )
     if nonclear_facts:
         reasons = (

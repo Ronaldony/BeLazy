@@ -27,6 +27,7 @@ from video_factory.workflow import (
     gate_result_to_mapping,
     require_target_workflow_definition,
     require_target_workflow_evaluation,
+    validate_executable_production_plan,
     validate_workflow_parity_report,
     validate_workflow_evaluation,
     validate_workflow_definition,
@@ -287,6 +288,59 @@ def test_incremental_invalidation_matches_clean_semantics_and_reuses_upstream() 
     assert "packet_review_pass" in incremental.invalidated_claim_ids
     assert "generation_approval_current" in incremental.invalidated_claim_ids
 
+    incremental_action = str(incremental.recommended_action_id)
+    incremental_plan = build_executable_production_plan(
+        definition,
+        incremental,
+        incremental_action,
+        predecessors=(baseline,),
+    )
+    assert validate_executable_production_plan(
+        definition,
+        incremental_plan,
+        incremental,
+        predecessors=(baseline,),
+    ) is incremental_plan
+    with pytest.raises(WorkflowContractError, match="exact predecessor"):
+        build_executable_production_plan(
+            definition,
+            incremental,
+            incremental_action,
+        )
+    with pytest.raises(WorkflowContractError, match="exact predecessor"):
+        validate_executable_production_plan(
+            definition,
+            incremental_plan,
+            incremental,
+            predecessors=(clean,),
+        )
+
+    incremental_item = next(
+        item
+        for item in incremental.action_frontier
+        if item.action_id == incremental.recommended_action_id
+    )
+    incremental_legacy = LegacyNextStepProjection(
+        action_type=incremental_action,
+        actor_role=incremental_item.actor_role,
+        approval_required=(
+            incremental_item.authority_requirement.value != "policy"
+        ),
+        blockers=(),
+        consumed_evidence=tuple(
+            str(value) for value in incremental_item.consumed_evidence_sha256s
+        ),
+        prohibited_actions=incremental_item.prohibited_actions,
+        authority_effect="none",
+    )
+    assert compare_legacy_parity(
+        incremental_legacy,
+        incremental,
+        predecessors=(baseline,),
+    ).workflow_evaluation_sha256 == incremental.evaluation_sha256
+    with pytest.raises(WorkflowContractError, match="exact predecessor"):
+        compare_legacy_parity(incremental_legacy, incremental)
+
     changed_context = replace(
         _context(), current_manifest_sha256=HashDigest("f" * 64)
     )
@@ -326,6 +380,32 @@ def test_incremental_invalidation_matches_clean_semantics_and_reuses_upstream() 
         context_changed,
         predecessors=(baseline, incremental),
     ) is context_changed
+    with pytest.raises(WorkflowContractError, match="oldest-to-newest"):
+        require_target_workflow_evaluation(
+            context_changed,
+            predecessors=(incremental, baseline),
+        )
+    with pytest.raises(WorkflowContractError, match="oldest-to-newest"):
+        require_target_workflow_evaluation(
+            incremental,
+            predecessors=(baseline, clean),
+        )
+
+    predecessor_chain = [baseline]
+    chained = baseline
+    for _ in range(9):
+        chained = evaluate_workflow(
+            definition,
+            chained.gate_results,
+            chained.material_context,
+            previous=chained,
+        )
+        predecessor_chain.append(chained)
+    with pytest.raises(WorkflowContractError, match="predecessor limit"):
+        require_target_workflow_evaluation(
+            chained,
+            predecessors=tuple(predecessor_chain[:-1]),
+        )
 
     forged_invalidated = tuple(
         sorted(

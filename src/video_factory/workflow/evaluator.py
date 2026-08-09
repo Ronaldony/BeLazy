@@ -31,6 +31,7 @@ from .definition import (
 WORKFLOW_EVALUATION_VERSION = "workflow-evaluation/1.0"
 EXECUTABLE_PLAN_VERSION = "executable-production-plan/1.0"
 GATE_RESULT_VERSION = "gate-result/1.0"
+MAX_INCREMENTAL_PREDECESSORS = 8
 
 
 def _digest(value: object, label: str) -> str:
@@ -345,6 +346,7 @@ def evaluate_workflow(
     material_context: MaterialContextSeed,
     *,
     previous: WorkflowEvaluation | None = None,
+    gate_input_sha256s: Sequence[tuple[str, str]] | None = None,
 ) -> WorkflowEvaluation:
     """Evaluate every gate without short-circuiting and return the full frontier."""
 
@@ -387,9 +389,28 @@ def evaluate_workflow(
         )
 
     ordered_results = tuple(complete[str(gate.gate_id)] for gate in definition.gates)
-    input_digests = tuple(
-        (result.gate_id, result.result_sha256) for result in ordered_results
-    )
+    if gate_input_sha256s is None:
+        input_digests = tuple(
+            (result.gate_id, result.result_sha256) for result in ordered_results
+        )
+    else:
+        supplied_inputs = tuple(gate_input_sha256s)
+        expected_gate_ids = tuple(
+            str(result.gate_id) for result in ordered_results
+        )
+        supplied_gate_ids = tuple(str(value[0]) for value in supplied_inputs)
+        if supplied_gate_ids != expected_gate_ids:
+            raise WorkflowContractError(
+                "workflow.incremental.input_order",
+                "gate input digests must cover the exact target gate order",
+            )
+        input_digests = tuple(
+            (
+                OpaqueId(str(gate_id)),
+                HashDigest(_digest(str(digest), f"gate input {gate_id}")),
+            )
+            for gate_id, digest in supplied_inputs
+        )
     claim_by_id = {str(value.claim_id): value for value in definition.claims}
     satisfied: set[str] = set()
     blockers_by_claim: dict[str, tuple[ActionBlocker, ...]] = {}
@@ -548,6 +569,17 @@ def validate_workflow_evaluation(evaluation: WorkflowEvaluation) -> WorkflowEval
         raise WorkflowContractError("workflow.evaluation.context", "workflow digest is not bound to material context")
     for result in evaluation.gate_results:
         validate_gate_result(result)
+    gate_result_ids = tuple(str(value.gate_id) for value in evaluation.gate_results)
+    gate_input_ids = tuple(
+        str(gate_id) for gate_id, _ in evaluation.gate_input_sha256s
+    )
+    if gate_input_ids != gate_result_ids:
+        raise WorkflowContractError(
+            "workflow.incremental.input_order",
+            "evaluation gate inputs do not cover the exact gate-result order",
+        )
+    for gate_id, digest in evaluation.gate_input_sha256s:
+        _digest(str(digest), f"gate input {gate_id}")
     if tuple(str(value) for value in evaluation.satisfied_claim_ids) != tuple(
         sorted(set(str(value) for value in evaluation.satisfied_claim_ids))
     ):
@@ -611,6 +643,11 @@ def require_target_workflow_evaluation(
 
     definition = default_workflow_definition()
     require_target_workflow_definition(definition)
+    if len(predecessors) > MAX_INCREMENTAL_PREDECESSORS:
+        raise WorkflowContractError(
+            "workflow.incremental.rebase_required",
+            "incremental evaluation exceeds the target predecessor limit; materialize a clean evaluation",
+        )
     predecessor_by_digest: dict[str, WorkflowEvaluation] = {}
     for predecessor in predecessors:
         validate_workflow_evaluation(predecessor)
@@ -658,6 +695,10 @@ def require_target_workflow_evaluation(
             current.gate_results,
             current.material_context,
             previous=previous,
+            gate_input_sha256s=tuple(
+                (str(gate_id), str(digest))
+                for gate_id, digest in current.gate_input_sha256s
+            ),
         )
         target_claims = {
             str(value.claim_id) for value in definition.claims
@@ -683,6 +724,25 @@ def require_target_workflow_evaluation(
         verified.add(current_digest)
 
     verify(evaluation, set())
+    ordered_chain: list[WorkflowEvaluation] = []
+    cursor = evaluation
+    while cursor.previous_evaluation_sha256 is not None:
+        previous = predecessor_by_digest.get(
+            str(cursor.previous_evaluation_sha256)
+        )
+        if previous is None:
+            raise WorkflowContractError(
+                "workflow.incremental.predecessor_missing",
+                "incremental evaluation lacks its exact predecessor",
+            )
+        ordered_chain.append(previous)
+        cursor = previous
+    expected_predecessors = tuple(reversed(ordered_chain))
+    if tuple(predecessors) != expected_predecessors:
+        raise WorkflowContractError(
+            "workflow.incremental.predecessor_order",
+            "incremental predecessor evidence must be the exact oldest-to-newest chain",
+        )
     return evaluation
 
 
@@ -719,11 +779,13 @@ def build_executable_production_plan(
     definition: WorkflowDefinition,
     evaluation: WorkflowEvaluation,
     action_id: str,
+    *,
+    predecessors: Sequence[WorkflowEvaluation] = (),
 ) -> ExecutableProductionPlan:
     """Finalize one frontier item into its own seven-digest GateContext."""
 
     require_target_workflow_definition(definition)
-    require_target_workflow_evaluation(evaluation)
+    require_target_workflow_evaluation(evaluation, predecessors=predecessors)
     if str(evaluation.workflow_definition_sha256) != str(definition.definition_sha256):
         raise WorkflowContractError("workflow.plan.definition", "evaluation uses another definition")
     item = next((value for value in evaluation.action_frontier if str(value.action_id) == action_id), None)
@@ -768,7 +830,12 @@ def build_executable_production_plan(
         prohibited_actions=item.prohibited_actions,
         authority_effect="none",
     )
-    return validate_executable_production_plan(definition, plan, evaluation)
+    return validate_executable_production_plan(
+        definition,
+        plan,
+        evaluation,
+        predecessors=predecessors,
+    )
 
 
 def validate_executable_production_plan_structure(
@@ -821,11 +888,13 @@ def validate_executable_production_plan(
     definition: WorkflowDefinition,
     plan: ExecutableProductionPlan,
     evaluation: WorkflowEvaluation,
+    *,
+    predecessors: Sequence[WorkflowEvaluation] = (),
 ) -> ExecutableProductionPlan:
     """Verify a plan against the exact clean evaluation and frontier item."""
 
     validate_executable_production_plan_structure(definition, plan)
-    require_target_workflow_evaluation(evaluation)
+    require_target_workflow_evaluation(evaluation, predecessors=predecessors)
     if (
         plan.workflow_evaluation_sha256 != evaluation.evaluation_sha256
         or plan.workflow_definition_sha256 != definition.definition_sha256

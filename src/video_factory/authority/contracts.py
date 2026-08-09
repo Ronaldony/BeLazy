@@ -133,6 +133,7 @@ class ActionAuthorityRequest:
     side_effect: bool
     plan: ExecutableProductionPlan | None
     workflow_evaluation: WorkflowEvaluation | None
+    workflow_evaluation_predecessors: tuple[WorkflowEvaluation, ...]
     gate_context: GateContext
     profiles: ProfileSelection
     scope: AuthorityScope

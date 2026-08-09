@@ -29,6 +29,7 @@ from video_factory.authority import (
     ProfileSelection,
     UnverifiedStandingAuthorization,
     VerificationPurpose,
+    action_authority_request_to_mapping,
     approval_request_to_mapping,
     authority_artifact_from_bytes,
     authority_artifact_to_bytes,
@@ -43,6 +44,7 @@ from video_factory.authority import (
     standing_authorization_to_mapping,
     standing_authorization_sha256,
     target_policy_bundle,
+    validate_action_authority_request,
     validate_approval_request,
     validate_standing_authorization,
 )
@@ -58,6 +60,7 @@ from video_factory.workflow import (
     AuthorityRequirement,
     GateStatus,
     MaterialContextSeed,
+    WorkflowContractError,
     build_executable_production_plan,
     build_gate_result,
     default_workflow_definition,
@@ -628,22 +631,19 @@ def _assert_matrix_negative(policy_path: str, expected_reason: str) -> None:
                 {trigger: HardEscalationState.TRIGGERED}
             )
         )
-        ledger = FakeLedger(
-            AuthoritySource.ONE_SHOT_HUMAN,
-            ("human-a",),
-        )
-        _, decision = evaluate_authority(
+        risk, decision = evaluate_authority(
             request,
             target_policy_bundle(),
-            ledger=ledger,
-            authority_references=(
-                _ref("ledger/human-a.json", "5", "human-approval/1.0"),
-            ),
+            ledger=None,
             evaluated_at=NOW,
         )
-        assert decision.status is AuthorityDecisionStatus.DENIED
+        approval = build_approval_request(request, risk, decision)
+        assert risk.supported is True
+        assert risk.effective_risk is ActionRisk.R4
+        assert decision.status is AuthorityDecisionStatus.HUMAN_APPROVAL_REQUIRED
+        assert decision.required_authority is AuthorityRequirement.TWO_INDEPENDENT_HUMANS
         assert expected_reason in decision.reason_codes
-        assert ledger.verify_current_calls == 0
+        assert approval.required_independent_humans == 2
         return
     if policy_path == "default_decision":
         request = _request()
@@ -1084,21 +1084,99 @@ def test_each_hard_escalation_fact_fails_closed(
         hard_escalation_facts=_hard_escalation_facts({trigger: state})
     )
     risk, decision = evaluate_authority(
-        request,
-        target_policy_bundle(),
-        ledger=FakeLedger(AuthoritySource.ONE_SHOT_HUMAN, ("human-a",)),
-        authority_references=(
-            _ref("ledger/human-a.json", "5", "human-approval/1.0"),
-        ),
-        evaluated_at=NOW,
+        request, target_policy_bundle(), ledger=None, evaluated_at=NOW
     )
     reason = f"authority.escalation.{trigger}.{state.value}"
     assert risk.effective_risk is ActionRisk.R4
-    assert risk.supported is False
     assert reason in risk.reason_codes
-    assert decision.status is AuthorityDecisionStatus.DENIED
     assert reason in decision.reason_codes
     assert decision.authority_effect == "none"
+    if state is HardEscalationState.TRIGGERED:
+        assert risk.supported is True
+        assert decision.status is AuthorityDecisionStatus.HUMAN_APPROVAL_REQUIRED
+        assert decision.required_authority is AuthorityRequirement.TWO_INDEPENDENT_HUMANS
+        assert build_approval_request(
+            request, risk, decision
+        ).required_independent_humans == 2
+    else:
+        assert risk.supported is False
+        assert decision.status is AuthorityDecisionStatus.DENIED
+
+
+def test_material_blueprint_change_escalates_routine_packet_work_to_r4() -> None:
+    trigger = "material_blueprint_change_after_authorization"
+    request = _request(
+        "create_generation_packet",
+        hard_escalation_facts=_hard_escalation_facts(
+            {trigger: HardEscalationState.TRIGGERED}
+        ),
+    )
+    risk, missing = evaluate_authority(
+        request, target_policy_bundle(), ledger=None, evaluated_at=NOW
+    )
+    assert request.action_risk is ActionRisk.R1
+    assert request.authority_requirement is AuthorityRequirement.POLICY
+    assert risk.effective_risk is ActionRisk.R4
+    assert risk.supported is True
+    assert missing.status is AuthorityDecisionStatus.HUMAN_APPROVAL_REQUIRED
+    assert missing.required_authority is AuthorityRequirement.TWO_INDEPENDENT_HUMANS
+    assert build_approval_request(
+        request, risk, missing
+    ).required_independent_humans == 2
+
+    ledger = FakeLedger(AuthoritySource.DUAL_HUMAN, ("human-a", "human-b"))
+    _, granted = evaluate_authority(
+        request,
+        target_policy_bundle(),
+        ledger=ledger,
+        authority_references=(
+            _ref("ledger/human-a.json", "7", "human-approval/1.0"),
+            _ref("ledger/human-b.json", "8", "human-approval/1.0"),
+        ),
+        evaluated_at=NOW,
+    )
+    assert granted.status is AuthorityDecisionStatus.AUTHORIZED
+    assert granted.required_authority is AuthorityRequirement.TWO_INDEPENDENT_HUMANS
+    assert granted.source is AuthoritySource.DUAL_HUMAN
+
+
+def test_material_escalation_remains_dual_human_at_predispatch() -> None:
+    request = _request(
+        "run_external_generation",
+        hard_escalation_facts=_hard_escalation_facts(
+            {
+                "material_blueprint_change_after_authorization": (
+                    HardEscalationState.TRIGGERED
+                )
+            }
+        ),
+    )
+    ledger = FakeLedger(AuthoritySource.DUAL_HUMAN, ("human-a", "human-b"))
+    risk, decision = evaluate_authority(
+        request,
+        target_policy_bundle(),
+        ledger=ledger,
+        authority_references=(
+            _ref("ledger/human-a.json", "7", "human-approval/1.0"),
+            _ref("ledger/human-b.json", "8", "human-approval/1.0"),
+        ),
+        evaluated_at=NOW,
+    )
+    assert risk.effective_risk is ActionRisk.R4
+    assert decision.required_authority is AuthorityRequirement.TWO_INDEPENDENT_HUMANS
+    verified = revalidate_authority_for_side_effect(
+        decision,
+        request,
+        ledger=ledger,
+        current_context=request.gate_context,
+        workspace_observation_sha256="6" * 64,
+        adapter_id="executor-a",
+        service_identity="service-a",
+        evaluated_at=NOW + timedelta(seconds=1),
+        purpose=VerificationPurpose.DISPATCH,
+    )
+    assert verified.decision is decision
+    assert verified.receipt.authority_source is AuthoritySource.DUAL_HUMAN
 
 
 def test_hard_escalation_fact_coverage_order_and_evidence_are_closed() -> None:
@@ -1212,6 +1290,89 @@ def test_policy_workflow_authority_requires_trusted_evaluation_receipt() -> None
     assert granted.source is AuthoritySource.POLICY
     assert granted.verification_receipt_sha256 is not None
     assert granted.authority_basis_sha256 is not None
+
+
+def test_incremental_workflow_authority_preserves_exact_predecessor_chain() -> None:
+    definition = default_workflow_definition()
+    _, baseline = _plan("run_external_generation")
+    first_incremental = evaluate_workflow(
+        definition,
+        baseline.gate_results,
+        baseline.material_context,
+        previous=baseline,
+    )
+    incremental = evaluate_workflow(
+        definition,
+        first_incremental.gate_results,
+        first_incremental.material_context,
+        previous=first_incremental,
+    )
+    predecessors = (baseline, first_incremental)
+    action_id = str(incremental.recommended_action_id)
+    plan = build_executable_production_plan(
+        definition,
+        incremental,
+        action_id,
+        predecessors=predecessors,
+    )
+    request = build_action_authority_request(
+        request_id="incremental-request",
+        request_envelope_sha256="1" * 64,
+        idempotency_key="incremental-idempotency",
+        requester_principal_id="requester-a",
+        plan=plan,
+        workflow_evaluation=incremental,
+        workflow_evaluation_predecessors=predecessors,
+        profiles=ProfileSelection(
+            AssuranceProfile.PRODUCTION,
+            AutonomyProfile.ASSISTED,
+        ),
+        scope=_scope(inputs=(_ref("inputs/packet.json"),)),
+        hard_escalation_facts=_hard_escalation_facts(),
+    )
+    assert action_authority_request_to_mapping(request)[
+        "workflow_evaluation_predecessor_sha256s"
+    ] == [
+        str(baseline.evaluation_sha256),
+        str(first_incremental.evaluation_sha256),
+    ]
+
+    ledger = FakeLedger(AuthoritySource.ONE_SHOT_HUMAN, ("human-a",))
+    _, decision = evaluate_authority(
+        request,
+        target_policy_bundle(),
+        ledger=ledger,
+        authority_references=(
+            _ref("ledger/human-a.json", "5", "human-approval/1.0"),
+        ),
+        evaluated_at=NOW,
+    )
+    assert decision.status is AuthorityDecisionStatus.AUTHORIZED
+    verified = revalidate_authority_for_side_effect(
+        decision,
+        request,
+        ledger=ledger,
+        current_context=request.gate_context,
+        workspace_observation_sha256="6" * 64,
+        adapter_id="executor-a",
+        service_identity="service-a",
+        evaluated_at=NOW + timedelta(seconds=1),
+        purpose=VerificationPurpose.DISPATCH,
+    )
+    assert verified.purpose is VerificationPurpose.DISPATCH
+
+    without_predecessor = replace(
+        request,
+        workflow_evaluation_predecessors=(),
+    )
+    with pytest.raises(WorkflowContractError, match="exact predecessor"):
+        validate_action_authority_request(without_predecessor)
+    reordered = replace(
+        request,
+        workflow_evaluation_predecessors=tuple(reversed(predecessors)),
+    )
+    with pytest.raises(WorkflowContractError, match="oldest-to-newest"):
+        validate_action_authority_request(reordered)
 
 
 @pytest.mark.parametrize(

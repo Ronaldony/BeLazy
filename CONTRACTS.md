@@ -83,7 +83,7 @@ This generalizes the existing `EncodeCommandPlan` pattern (`executed=False` alwa
 | `build_approval_requirement` | `ApprovalRequirement` | path+sha256-bound requirement document | empty artifacts; invalid sha256 |
 | `observe_episode_state` / `plan_next_step` | `EpisodeStateObservation` / `NextStepPlan` | validated current snapshot graph and deterministic next action | raw docs, mixed provenance, ambiguous current artifacts, missing mode |
 | `build_generation_readiness` | `GenerationReadinessPlan` | `ready` preserves structural legacy planning and diagnostics; `authorization_ready` is always false in W04 and a separate authority decision is required | stale/missing/expired evidence, context, or workspace trust; Rapid mode |
-| `evaluate_workflow` / `build_executable_production_plan` | `WorkflowEvaluation` / `ExecutableProductionPlan` | every gate result is evaluated, every blocker is preserved, the parallel action frontier is explicit, and each action gets its own material-context/plan digest; `authority_effect=none` | unknown/cyclic definition, missing gate, stale context, invalid incremental reuse |
+| `build_declarative_gate_run` / `evaluate_declarative_gate_run` / `build_executable_production_plan` | `DeclarativeGateRun` / `WorkflowEvaluation` / `ExecutableProductionPlan` | only mode-material gate helpers run; sealed input digests drive transitive invalidation, every blocker/frontier item is preserved, and each action gets its own material-context/plan digest; `authority_effect=none` | unknown/cyclic definition, missing gate, stale context, invalid incremental reuse |
 | `evaluate_authority` / `revalidate_authority_for_side_effect` | `ActionRiskAssessment` / `AuthorityDecision` / `AuthorityVerificationReceipt` | target policy recomputes risk and a trusted ledger proves current scope, signature/ledger state, revocation, limits, identity, and purpose immediately before a side effect | unknown action, stale context, insufficient source, revoked/expired grant, kill switch, budget/idempotency mismatch |
 | `draft_*_config` | validated config mapping | schema-valid channel/concept/episode draft | invalid scope id / settings |
 | `build_core_lock` | TOML `str` | deterministic lock document text (caller writes file) | invalid artifact / path escape |
@@ -150,11 +150,24 @@ action, consumed evidence, and the six material context inputs. Packet review
 and feasibility, and final review and metadata preparation, can appear together
 on the frontier. Each gate binds only the material-context fields it declares;
 a stale PASS is rejected, while an unrelated context change invalidates only
-the transitive dependent claims. Its semantic projection must equal a clean
+the transitive dependent claims. The target adapter fingerprints only inputs
+read by the selected mode and `evaluate_declarative_gate_run` binds those
+sealed input digests into the evaluation. Rapid therefore reuses review and
+approval gates across irrelevant time/evidence changes; Standard and
+Controlled invalidate the current approval gates and their dependants when
+evaluation time or bound approval evidence changes. Its semantic projection must equal a clean
 full recomputation. The incremental adapter skips unchanged gate helpers,
 binds the previous evaluation SHA, and requires the complete predecessor chain
 and exact target-claim invalidated/reused partition before reuse metadata can
-be accepted.
+be accepted. Plan construction, parity comparison, and workflow authority
+requests receive that same ordered oldest-to-newest evidence bundle and repeat
+the target-DAG verification. At most eight predecessors may be carried; the
+next update must materialize a predecessor-free clean evaluation.
+
+Routine storyboard and packet assessment is a non-human integrated preflight;
+the compatibility storyboard-approval gate is satisfied without consuming
+human evidence. A material creative deviation is handled as R4 action
+authority, not as a restored routine storyboard checkpoint.
 
 Each frontier action produces a distinct `executable-production-plan/1.0` and
 full seven-digest `GateContext`, including that action's plan digest. A
@@ -164,8 +177,10 @@ Director result, Blueprint, mode name, or AI consensus has
 The characterization corpus contains 26 fixed seed states evaluated in Rapid,
 Standard, and Controlled (78 rows). Rapid intentionally maps production-ready
 seeds to preview-only; a committed expected-action matrix records this rather
-than pretending every action is reachable in every mode. The corpus union
-covers all 26 action identities and compares action, blockers, actor, required
+than pretending every action is reachable in every mode. The legacy matrix
+covers all 26 identities; the target matrix intentionally omits the dormant
+`approve_storyboard` recommendation and records its exact consolidation into
+`create_generation_packet`. The corpus compares action, blockers, actor, required
 authority, consumed evidence, and prohibited actions. Loaded evaluations are
 cleanly recomputed from their gate results under the exact target DAG before
 comparison or plan construction. A parity report cannot cut over or authorize,
@@ -174,13 +189,16 @@ observation to the legacy planner and an independent declarative gate adapter;
 no expected action is fed into that adapter. Explanation codes are
 dimension-scoped and validate target-owned blocker codes or the committed
 action-row-specific blocker and legacy-label-to-target-claim/SHA evidence
-shape. Unmapped blockers and labels borrowed from another valid row fail.
+shape. The process-consolidation explanation is likewise restricted to the
+single exact storyboard transition across action, blocker, actor, authority,
+and evidence dimensions. Unmapped blockers and labels borrowed from another valid row fail.
 
 `video_factory.authority` keeps three independent axes: `AssuranceProfile`
 describes evidence rigor, `AutonomyProfile` describes how work may be proposed,
 and `ActionRisk` determines authority. An `ActionAuthorityRequest` binds the
 exact request-envelope/idempotency identity and requester principal, workflow
-action, exact clean workflow evaluation, and executable plan, all seven
+action, exact target-verified workflow evaluation plus its ordered predecessor
+digests and objects, and executable plan, all seven
 current-context digests, workspace/channel/concept/episode,
 provider/model/destination, canonical artifact and output scopes, cost/currency,
 candidate/retry limits, requested profiles, and the closed target
@@ -188,7 +206,8 @@ hard-escalation catalog with exact evidence. The target-owned policy bundle
 recomputes risk; an unknown action is unsupported and fails closed. Its
 resource also binds the exact governance YAML digest, hard-escalation trigger
 catalog, self-approval prohibition, and disabled W04 release-campaign state.
-Triggered or unknown facts deny as R4 escalation; omitted, reordered, or
+Known triggered facts raise the effective risk and authority floor to R4 plus
+two independent humans; UNKNOWN facts deny. Omitted, reordered, or
 evidence-free facts are invalid. Every enforcement-matrix row names its own
 executable positive and negative test node, owner, phase, and observed reason.
 

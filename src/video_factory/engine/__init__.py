@@ -57,6 +57,7 @@ _DECLARATIVE_EXPORTS = frozenset(
         "DeclarativeGateRun",
         "build_declarative_gate_results",
         "build_declarative_gate_run",
+        "evaluate_declarative_gate_run",
     }
 )
 
@@ -110,6 +111,7 @@ __all__ = [
     "build_generation_readiness",
     "build_declarative_gate_results",
     "build_declarative_gate_run",
+    "evaluate_declarative_gate_run",
     "make_artifact_snapshot",
     "make_artifact_snapshot_from_json_bytes",
     "mode_is_within_limit",

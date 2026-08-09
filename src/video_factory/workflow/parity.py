@@ -34,11 +34,21 @@ ALLOWED_EXPLANATIONS = {
     "EXPLAINED_FRONTIER_EXPANSION",
     "EXPLAINED_BLUEPRINT_CONSOLIDATION",
     "EXPLAINED_AUTHORITY_HARDENING",
+    "EXPLAINED_PROCESS_CONSOLIDATION",
 }
 EXPLANATION_DIMENSIONS = {
     "EXPLAINED_FRONTIER_EXPANSION": frozenset({"blockers"}),
     "EXPLAINED_BLUEPRINT_CONSOLIDATION": frozenset({"consumed_evidence"}),
     "EXPLAINED_AUTHORITY_HARDENING": frozenset({"required_authority"}),
+    "EXPLAINED_PROCESS_CONSOLIDATION": frozenset(
+        {
+            "action",
+            "blockers",
+            "actor",
+            "required_authority",
+            "consumed_evidence",
+        }
+    ),
 }
 
 
@@ -219,6 +229,44 @@ _PARITY_ACTION_ROWS = {
 }
 
 
+_PROCESS_CONSOLIDATIONS = {
+    "approve_storyboard": {
+        "legacy_action": "approve_storyboard",
+        "declarative_action": "create_generation_packet",
+        "legacy_actor": "human-approver",
+        "declarative_actor": "creator",
+        "legacy_required_authority": {
+            "requirement": "human_or_campaign",
+            "approval_required": True,
+        },
+        "declarative_required_authority": {
+            "requirement": "policy",
+            "approval_required": False,
+        },
+        "legacy_blockers": list(_PARITY_ACTION_ROWS["approve_storyboard"][0]),
+        "declarative_blockers": ["workflow.packet_present.blocked"],
+        "legacy_evidence": list(_PARITY_ACTION_ROWS["approve_storyboard"][2]),
+        "declarative_claim_ids": ["storyboard_approval_current"],
+    }
+}
+
+
+def _process_consolidations() -> dict[str, object]:
+    return {
+        action_id: {
+            key: (
+                list(value)
+                if isinstance(value, list)
+                else dict(value)
+                if isinstance(value, Mapping)
+                else value
+            )
+            for key, value in row.items()
+        }
+        for action_id, row in _PROCESS_CONSOLIDATIONS.items()
+    }
+
+
 def _parity_action_rows() -> dict[str, object]:
     definition = default_workflow_definition()
     action_claims = {
@@ -353,6 +401,7 @@ def default_parity_normalization() -> dict[str, object]:
             "trusted workspace observation",
         ],
         "parity_rows_by_action": _parity_action_rows(),
+        "process_consolidations_by_legacy_action": _process_consolidations(),
         "default_authority": "policy",
         "unmapped_behavior": "MISMATCH",
         "authority_effect": "none",
@@ -473,10 +522,11 @@ def compare_legacy_parity(
     legacy: LegacyNextStepProjection,
     evaluation: WorkflowEvaluation,
     *,
+    predecessors: Sequence[WorkflowEvaluation] = (),
     normalization: Mapping[str, object] | None = None,
     explained_dimensions: Mapping[str, str] | None = None,
 ) -> WorkflowParityReport:
-    require_target_workflow_evaluation(evaluation)
+    require_target_workflow_evaluation(evaluation, predecessors=predecessors)
     if legacy.authority_effect != "none":
         raise WorkflowContractError("workflow.parity.legacy_authority", "legacy projection cannot grant authority")
     normalized = default_parity_normalization() if normalization is None else dict(normalization)
@@ -500,6 +550,13 @@ def compare_legacy_parity(
             "workflow.parity.action_catalog",
             "legacy action has no target-owned parity row",
         )
+    process_rows = normalized["process_consolidations_by_legacy_action"]
+    if not isinstance(process_rows, Mapping):
+        raise WorkflowContractError(
+            "workflow.parity.process_catalog",
+            "target process-consolidation rows are malformed",
+        )
+    process_row = process_rows.get(legacy.action_type)
     frontier_item = next(
         (
             value
@@ -583,6 +640,58 @@ def compare_legacy_parity(
                 raise WorkflowContractError(
                     "workflow.parity.explanation_values",
                     "authority explanation is not a one-way exact authority hardening",
+                )
+        elif explanation == "EXPLAINED_PROCESS_CONSOLIDATION":
+            if not isinstance(process_row, Mapping):
+                raise WorkflowContractError(
+                    "workflow.parity.explanation_values",
+                    "legacy action has no target-owned process consolidation",
+                )
+            exact_pairs = {
+                "action": ("legacy_action", "declarative_action"),
+                "blockers": ("legacy_blockers", "declarative_blockers"),
+                "actor": ("legacy_actor", "declarative_actor"),
+                "required_authority": (
+                    "legacy_required_authority",
+                    "declarative_required_authority",
+                ),
+            }
+            if dimension in exact_pairs:
+                legacy_key, declarative_key = exact_pairs[dimension]
+                valid_process_value = (
+                    legacy_values[dimension] == process_row.get(legacy_key)
+                    and declarative_values[dimension]
+                    == process_row.get(declarative_key)
+                )
+            else:
+                legacy_evidence = legacy_values[dimension]
+                declarative_evidence = declarative_values[dimension]
+                valid_process_value = (
+                    frontier_item is not None
+                    and str(frontier_item.action_id)
+                    == process_row.get("declarative_action")
+                    and legacy_evidence == process_row.get("legacy_evidence")
+                    and [
+                        str(value)
+                        for value in frontier_item.consumed_claim_ids
+                    ]
+                    == process_row.get("declarative_claim_ids")
+                    and isinstance(declarative_evidence, list)
+                    and all(
+                        isinstance(value, str)
+                        and len(value) == 64
+                        and value.lower() == value
+                        and all(
+                            character in "0123456789abcdef"
+                            for character in value
+                        )
+                        for value in declarative_evidence
+                    )
+                )
+            if not valid_process_value:
+                raise WorkflowContractError(
+                    "workflow.parity.explanation_values",
+                    "process consolidation does not match the exact target-owned transition",
                 )
         differences.append(
             ParityDifference(dimension, legacy_digest, declarative_digest, explanation)

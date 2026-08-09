@@ -504,6 +504,37 @@
       ]
     }
   },
+  "process_consolidations_by_legacy_action": {
+    "approve_storyboard": {
+      "legacy_action": "approve_storyboard",
+      "declarative_action": "create_generation_packet",
+      "legacy_actor": "human-approver",
+      "declarative_actor": "creator",
+      "legacy_required_authority": {
+        "requirement": "human_or_campaign",
+        "approval_required": true
+      },
+      "declarative_required_authority": {
+        "requirement": "policy",
+        "approval_required": false
+      },
+      "legacy_blockers": [
+        "workflow.approval.blocked",
+        "workflow.artifact_graph_valid.blocked",
+        "workflow.storyboard_present.blocked"
+      ],
+      "declarative_blockers": [
+        "workflow.packet_present.blocked"
+      ],
+      "legacy_evidence": [
+        "storyboard",
+        "passing storyboard reviews"
+      ],
+      "declarative_claim_ids": [
+        "storyboard_approval_current"
+      ]
+    }
+  },
   "default_authority": "policy",
   "unmapped_behavior": "MISMATCH",
   "authority_effect": "none"

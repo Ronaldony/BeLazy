@@ -2,8 +2,16 @@
 
 ## Unreleased
 
+- Bound W04 incremental invalidation to sealed, mode-material adapter inputs:
+  Rapid skips irrelevant review/approval/time changes, while current Standard
+  and Controlled approvals invalidate their exact dependent claims. Replaced
+  the routine storyboard human checkpoint with non-human integrated preflight,
+  recorded the exact two-row legacy parity consolidation, and escalated known
+  material creative deviations to short-lived R4 dual-human authority while
+  UNKNOWN classifier facts remain denied.
 - Closed W04 fail-closed review gaps: actual gate-helper reuse with exact
-  predecessor-chain invalidation, action-row-specific parity normalization,
+  predecessor-chain invalidation and ordered plan/parity/authority consumption,
+  an eight-predecessor clean-rebase boundary, action-row-specific parity normalization,
   trusted receipts for POLICY workflow authority, a 300-second R4 ceiling,
   role-typed ledger/authentication/signature evidence, and exact W02/W04
   mutation request-envelope plus idempotency binding before reservation.
@@ -28,8 +36,8 @@
   revalidation/reservation receipts.
 - Bound every target policy field to a distinct executable positive and
   negative conformance-test node. Closed hard-escalation facts now cover the
-  exact target catalog with immutable evidence; triggered or unknown facts
-  fail closed at R4. Workflow approval context must exactly equal the six
+  exact target catalog with immutable evidence; triggered facts escalate to
+  R4 dual-human authority and UNKNOWN facts remain denied. Workflow approval context must exactly equal the six
   shared declarative material digests, while incremental invalidation remains
   gate-local and full-recompute equivalent.
 - Legacy approvals, readiness, sheets, modes, AI reviews, Director results, and

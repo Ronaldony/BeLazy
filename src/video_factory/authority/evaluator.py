@@ -317,6 +317,7 @@ def _request_identity(
     capability_id: str,
     executable_plan_sha256: str,
     workflow_evaluation_sha256: str | None,
+    workflow_evaluation_predecessor_sha256s: Sequence[str],
     action_risk: ActionRisk,
     authority_requirement: AuthorityRequirement,
     side_effect: bool,
@@ -334,6 +335,9 @@ def _request_identity(
         "capability_id": capability_id,
         "executable_plan_sha256": executable_plan_sha256,
         "workflow_evaluation_sha256": workflow_evaluation_sha256,
+        "workflow_evaluation_predecessor_sha256s": list(
+            workflow_evaluation_predecessor_sha256s
+        ),
         "action_risk": action_risk.value,
         "authority_requirement": authority_requirement.value,
         "side_effect": side_effect,
@@ -365,6 +369,10 @@ def action_authority_request_to_mapping(request: ActionAuthorityRequest) -> dict
                 if request.workflow_evaluation is not None
                 else None
             ),
+            tuple(
+                str(value.evaluation_sha256)
+                for value in request.workflow_evaluation_predecessors
+            ),
             request.action_risk,
             request.authority_requirement,
             request.side_effect,
@@ -385,12 +393,17 @@ def build_action_authority_request(
     requester_principal_id: str,
     plan: ExecutableProductionPlan,
     workflow_evaluation: WorkflowEvaluation,
+    workflow_evaluation_predecessors: Sequence[WorkflowEvaluation] = (),
     profiles: ProfileSelection,
     scope: AuthorityScope,
     hard_escalation_facts: Sequence[HardEscalationFact],
 ) -> ActionAuthorityRequest:
+    predecessors = tuple(workflow_evaluation_predecessors)
     validate_executable_production_plan(
-        default_workflow_definition(), plan, workflow_evaluation
+        default_workflow_definition(),
+        plan,
+        workflow_evaluation,
+        predecessors=predecessors,
     )
     identity = _request_identity(
         request_id,
@@ -401,6 +414,7 @@ def build_action_authority_request(
         str(plan.capability_id),
         str(plan.plan_sha256),
         str(workflow_evaluation.evaluation_sha256),
+        tuple(str(value.evaluation_sha256) for value in predecessors),
         plan.risk,
         plan.authority_requirement,
         plan.side_effect,
@@ -423,6 +437,7 @@ def build_action_authority_request(
         side_effect=plan.side_effect,
         plan=plan,
         workflow_evaluation=workflow_evaluation,
+        workflow_evaluation_predecessors=predecessors,
         gate_context=plan.gate_context,
         profiles=profiles,
         scope=scope,
@@ -459,7 +474,7 @@ def build_bound_action_authority_request(
     identity = _request_identity(
         request_id, request_envelope_sha256, idempotency_key,
         requester_principal_id, action_id,
-        capability_id, executable_plan_sha256, None, action_risk,
+        capability_id, executable_plan_sha256, None, (), action_risk,
         authority_requirement, side_effect, gate_context, profiles, scope,
         hard_escalation_facts,
     )
@@ -478,6 +493,7 @@ def build_bound_action_authority_request(
             side_effect=side_effect,
             plan=None,
             workflow_evaluation=None,
+            workflow_evaluation_predecessors=(),
             gate_context=gate_context,
             profiles=profiles,
             scope=scope,
@@ -497,6 +513,7 @@ def validate_action_authority_request(request: ActionAuthorityRequest) -> Action
             default_workflow_definition(),
             request.plan,
             request.workflow_evaluation,
+            predecessors=request.workflow_evaluation_predecessors,
         )
         if (
             request.gate_context != request.plan.gate_context
@@ -508,12 +525,16 @@ def validate_action_authority_request(request: ActionAuthorityRequest) -> Action
             or request.side_effect is not request.plan.side_effect
         ):
             raise AuthorityContractError("authority.request.plan_rebound", "request fields differ from the workflow plan")
-    elif request.workflow_evaluation is not None or (
+    elif (
+        request.workflow_evaluation is not None
+        or request.workflow_evaluation_predecessors
+        or (
         request.action_id != "managed_mutation"
         or request.capability_id != "managed_mutation"
         or request.action_risk is not ActionRisk.R4
         or request.authority_requirement is not AuthorityRequirement.TWO_INDEPENDENT_HUMANS
         or request.side_effect is not True
+        )
     ):
         raise AuthorityContractError("authority.request.unowned_action", "non-workflow action is not the W02 R4 bridge")
     if request.gate_context.executable_plan_sha256 != request.executable_plan_sha256:
@@ -574,6 +595,10 @@ def validate_action_authority_request(request: ActionAuthorityRequest) -> Action
             str(request.workflow_evaluation.evaluation_sha256)
             if request.workflow_evaluation is not None
             else None
+        ),
+        tuple(
+            str(value.evaluation_sha256)
+            for value in request.workflow_evaluation_predecessors
         ),
         request.action_risk,
         request.authority_requirement, request.side_effect, request.gate_context,
@@ -1322,6 +1347,32 @@ def _source_allowed(
     return False
 
 
+_AUTHORITY_REQUIREMENT_RANK = {
+    AuthorityRequirement.POLICY: 0,
+    AuthorityRequirement.STANDING_OR_ONE_HUMAN: 1,
+    AuthorityRequirement.HUMAN_OR_CAMPAIGN: 2,
+    AuthorityRequirement.TWO_INDEPENDENT_HUMANS: 3,
+    AuthorityRequirement.PROHIBITED_UNTIL_IMPLEMENTED: 4,
+}
+
+
+def _effective_authority_requirement(
+    request: ActionAuthorityRequest,
+    risk: ActionRiskAssessment,
+) -> AuthorityRequirement:
+    risk_floor = {
+        ActionRisk.R0: AuthorityRequirement.POLICY,
+        ActionRisk.R1: AuthorityRequirement.POLICY,
+        ActionRisk.R2: AuthorityRequirement.STANDING_OR_ONE_HUMAN,
+        ActionRisk.R3: AuthorityRequirement.HUMAN_OR_CAMPAIGN,
+        ActionRisk.R4: AuthorityRequirement.TWO_INDEPENDENT_HUMANS,
+    }[risk.effective_risk]
+    return max(
+        (request.authority_requirement, risk_floor),
+        key=_AUTHORITY_REQUIREMENT_RANK.__getitem__,
+    )
+
+
 def evaluate_authority(
     request: ActionAuthorityRequest,
     policy: PolicyBundle,
@@ -1346,15 +1397,7 @@ def evaluate_authority(
             required_authority=AuthorityRequirement.PROHIBITED_UNTIL_IMPLEMENTED,
             receipt=None,
         )
-    if risk.effective_risk is not request.action_risk:
-        return risk, _build_decision(
-            request, risk, status=AuthorityDecisionStatus.DENIED, source=AuthoritySource.NONE,
-            reasons=("authority.risk.plan_mismatch",), evaluated_at=evaluated_at,
-            required_authority=AuthorityRequirement.PROHIBITED_UNTIL_IMPLEMENTED,
-            receipt=None,
-        )
-
-    required = request.authority_requirement
+    required = _effective_authority_requirement(request, risk)
     references = _validate_reference_set(tuple(authority_references))
     if presented_grant is not None:
         if risk.effective_risk is ActionRisk.R4:
@@ -1376,6 +1419,11 @@ def evaluate_authority(
         and not references
     )
     if ledger is None or missing_authority_evidence:
+        missing_reasons = (
+            (*risk.reason_codes, "authority.evidence.missing")
+            if risk.effective_risk is not request.action_risk
+            else ("authority.evidence.missing",)
+        )
         return risk, _build_decision(
             request,
             risk,
@@ -1384,7 +1432,7 @@ def evaluate_authority(
                 if required is AuthorityRequirement.POLICY
                 else AuthorityDecisionStatus.HUMAN_APPROVAL_REQUIRED
             ),
-            source=AuthoritySource.NONE, reasons=("authority.evidence.missing",),
+            source=AuthoritySource.NONE, reasons=missing_reasons,
             evaluated_at=evaluated_at, required_authority=required, receipt=None,
         )
     try:
@@ -1557,6 +1605,7 @@ def revalidate_authority_for_side_effect(
             "request is not bound to the current target authority policy",
         )
     risk = classify_action_risk(request, policy)
+    required = _effective_authority_requirement(request, risk)
     expected_limit = canonical_sha256(
         {
             "scope": _scope_mapping(request.scope),
@@ -1569,7 +1618,7 @@ def revalidate_authority_for_side_effect(
     if (
         decision.risk_assessment_sha256 != risk.assessment_sha256
         or decision.effective_risk is not risk.effective_risk
-        or decision.required_authority is not request.authority_requirement
+        or decision.required_authority is not required
         or decision.matched_limit_sha256 != expected_limit
     ):
         raise AuthorityContractError(
@@ -1653,7 +1702,7 @@ def revalidate_authority_for_side_effect(
     ):
         raise AuthorityContractError("authority.predispatch.rebound", "predispatch receipt is bound to another action")
     if not _source_allowed(
-        request.authority_requirement,
+        required,
         risk.effective_risk,
         receipt.authority_source,
         receipt.principal_verifications,

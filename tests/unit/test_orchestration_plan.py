@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from dataclasses import replace
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import pytest
 import video_factory.engine.declarative as declarative_adapter
@@ -26,6 +26,7 @@ from video_factory.engine import (
     build_declarative_gate_run,
     build_declarative_gate_results,
     build_generation_readiness as _build_generation_readiness,
+    evaluate_declarative_gate_run,
     make_artifact_snapshot,
     next_step_to_mapping,
     observe_episode_state,
@@ -978,7 +979,7 @@ def _two_shot_generation_characterization_snapshots(
 CHARACTERIZATION_SEEDS = tuple(
     str(item.action_id) for item in default_workflow_definition().actions
 )
-EXPECTED_CHARACTERIZATION_ACTIONS = {
+LEGACY_EXPECTED_CHARACTERIZATION_ACTIONS = {
     "resolve_artifact_graph": ("resolve_artifact_graph",) * 3,
     "create_brief": ("create_brief",) * 3,
     "create_storyboard": ("create_storyboard",) * 3,
@@ -1063,6 +1064,10 @@ EXPECTED_CHARACTERIZATION_ACTIONS = {
     "ready_for_human_publish": (
         "preview_complete", "ready_for_human_publish", "ready_for_human_publish"
     ),
+}
+TARGET_EXPECTED_CHARACTERIZATION_ACTIONS = {
+    **LEGACY_EXPECTED_CHARACTERIZATION_ACTIONS,
+    "approve_storyboard": ("create_generation_packet",) * 3,
 }
 
 
@@ -1229,17 +1234,13 @@ def _declarative_characterization(seed: str, mode: str):
         evidence_graph_sha256=GATE_CONTEXT.evidence_graph_sha256,
     )
     observation, kwargs = _characterization_inputs(seed, mode)
-    results = build_declarative_gate_results(
+    run = build_declarative_gate_run(
         observation,
         mode,
         context,
         **kwargs,
     )
-    return evaluate_workflow(
-        definition,
-        results,
-        context,
-    )
+    return evaluate_declarative_gate_run(run, context)
 
 
 @pytest.mark.parametrize("mode", ("rapid", "standard", "controlled"))
@@ -1250,17 +1251,34 @@ def test_legacy_and_declarative_evaluators_dual_run_over_78_rows(
 ) -> None:
     legacy_plan = _legacy_characterization_plan(seed, mode)
     mode_index = ("rapid", "standard", "controlled").index(mode)
-    expected_action = EXPECTED_CHARACTERIZATION_ACTIONS[seed][mode_index]
-    assert legacy_plan.action_type == expected_action
+    legacy_action = LEGACY_EXPECTED_CHARACTERIZATION_ACTIONS[seed][mode_index]
+    target_action = TARGET_EXPECTED_CHARACTERIZATION_ACTIONS[seed][mode_index]
+    assert legacy_plan.action_type == legacy_action
     declarative = _declarative_characterization(seed, mode)
-    assert str(declarative.recommended_action_id) == expected_action
+    assert str(declarative.recommended_action_id) == target_action
+    process_consolidation = legacy_action != target_action
     report = compare_legacy_parity(
         legacy_projection_from_plan(legacy_plan),
         declarative,
         explained_dimensions={
-            "blockers": "EXPLAINED_FRONTIER_EXPANSION",
-            "consumed_evidence": "EXPLAINED_BLUEPRINT_CONSOLIDATION",
-            "required_authority": "EXPLAINED_AUTHORITY_HARDENING",
+            **(
+                {
+                    dimension: "EXPLAINED_PROCESS_CONSOLIDATION"
+                    for dimension in (
+                        "action",
+                        "blockers",
+                        "actor",
+                        "required_authority",
+                        "consumed_evidence",
+                    )
+                }
+                if process_consolidation
+                else {
+                    "blockers": "EXPLAINED_FRONTIER_EXPANSION",
+                    "consumed_evidence": "EXPLAINED_BLUEPRINT_CONSOLIDATION",
+                    "required_authority": "EXPLAINED_AUTHORITY_HARDENING",
+                }
+            ),
         },
     )
     assert report.parity_pass, (seed, mode, report.unexplained_dimensions)
@@ -1268,14 +1286,63 @@ def test_legacy_and_declarative_evaluators_dual_run_over_78_rows(
     assert report.authority_effect == "none"
 
 
-def test_characterization_matrix_covers_every_target_action_identity() -> None:
-    assert tuple(EXPECTED_CHARACTERIZATION_ACTIONS) == CHARACTERIZATION_SEEDS
-    observed = {
+def test_characterization_matrix_preserves_legacy_catalog_and_target_consolidation() -> None:
+    assert tuple(LEGACY_EXPECTED_CHARACTERIZATION_ACTIONS) == CHARACTERIZATION_SEEDS
+    assert tuple(TARGET_EXPECTED_CHARACTERIZATION_ACTIONS) == CHARACTERIZATION_SEEDS
+    legacy_observed = {
         action
-        for actions in EXPECTED_CHARACTERIZATION_ACTIONS.values()
+        for actions in LEGACY_EXPECTED_CHARACTERIZATION_ACTIONS.values()
         for action in actions
     }
-    assert observed == set(CHARACTERIZATION_SEEDS)
+    target_observed = {
+        action
+        for actions in TARGET_EXPECTED_CHARACTERIZATION_ACTIONS.values()
+        for action in actions
+    }
+    assert legacy_observed == set(CHARACTERIZATION_SEEDS)
+    assert target_observed == set(CHARACTERIZATION_SEEDS) - {
+        "approve_storyboard"
+    }
+
+
+def test_storyboard_process_consolidation_accepts_only_exact_target_transition() -> None:
+    legacy = legacy_projection_from_plan(
+        _legacy_characterization_plan("approve_storyboard", "standard")
+    )
+    target = _declarative_characterization("approve_storyboard", "standard")
+    explanations = {
+        dimension: "EXPLAINED_PROCESS_CONSOLIDATION"
+        for dimension in (
+            "action",
+            "blockers",
+            "actor",
+            "required_authority",
+            "consumed_evidence",
+        )
+    }
+    assert compare_legacy_parity(
+        legacy, target, explained_dimensions=explanations
+    ).parity_pass
+    with pytest.raises(WorkflowContractError, match="exact target-owned transition"):
+        compare_legacy_parity(
+            replace(legacy, actor_role="reviewer"),
+            target,
+            explained_dimensions=explanations,
+        )
+    unrelated = replace(
+        legacy_projection_from_plan(
+            _legacy_characterization_plan("create_brief", "standard")
+        ),
+        blockers=("workspace missing",),
+    )
+    with pytest.raises(WorkflowContractError, match="no target-owned"):
+        compare_legacy_parity(
+            unrelated,
+            _declarative_characterization("create_brief", "standard"),
+            explained_dimensions={
+                "blockers": "EXPLAINED_PROCESS_CONSOLIDATION"
+            },
+        )
 
 
 def test_actual_adapter_late_evidence_change_reuses_unaffected_claims(
@@ -1314,11 +1381,7 @@ def test_actual_adapter_late_evidence_change_reuses_unaffected_claims(
         observation, "standard", context, **kwargs
     )
     assert packet_contract_calls == 1
-    baseline = evaluate_workflow(
-        definition,
-        baseline_run.gate_results,
-        context,
-    )
+    baseline = evaluate_declarative_gate_run(baseline_run, context)
 
     without_publish_approval = observe_episode_state(
         tuple(
@@ -1340,19 +1403,18 @@ def test_actual_adapter_late_evidence_change_reuses_unaffected_claims(
         "publish_approval_current",
     )
     assert "packet_contract_valid" in changed_run.reused_claim_ids
-    incremental = evaluate_workflow(
-        definition,
-        changed_run.gate_results,
+    incremental = evaluate_declarative_gate_run(
+        changed_run,
         context,
         previous=baseline,
     )
-    clean_results = build_declarative_gate_results(
+    clean_run = build_declarative_gate_run(
         without_publish_approval,
         "standard",
         context,
         **kwargs,
     )
-    clean = evaluate_workflow(definition, clean_results, context)
+    clean = evaluate_declarative_gate_run(clean_run, context)
 
     assert workflow_semantic_projection(
         incremental
@@ -1362,6 +1424,133 @@ def test_actual_adapter_late_evidence_change_reuses_unaffected_claims(
     assert "publish_approval_current" in incremental.invalidated_claim_ids
     assert "external_publish_complete" in incremental.invalidated_claim_ids
     assert len(incremental.invalidated_claim_ids) < len(definition.claims)
+
+
+def test_actual_adapter_time_change_is_mode_aware_and_input_bound() -> None:
+    context = MaterialContextSeed(
+        workflow_definition_sha256=GATE_CONTEXT.workflow_definition_sha256,
+        policy_bundle_sha256=GATE_CONTEXT.policy_bundle_sha256,
+        rules_bundle_sha256=GATE_CONTEXT.rules_bundle_sha256,
+        effective_config_sha256=GATE_CONTEXT.effective_config_sha256,
+        current_manifest_sha256=GATE_CONTEXT.current_manifest_sha256,
+        evidence_graph_sha256=GATE_CONTEXT.evidence_graph_sha256,
+    )
+    observation, standard_kwargs = _characterization_inputs(
+        "ready_for_human_publish", "standard"
+    )
+    standard_run = build_declarative_gate_run(
+        observation, "standard", context, **standard_kwargs
+    )
+    standard = evaluate_declarative_gate_run(standard_run, context)
+    later_standard = build_declarative_gate_run(
+        observation,
+        "standard",
+        context,
+        previous=standard_run,
+        **{
+            **standard_kwargs,
+            "evaluated_at": EVALUATED_AT + timedelta(seconds=1),
+        },
+    )
+    assert later_standard.evaluated_claim_ids == (
+        "generation_approval_current",
+        "publish_approval_current",
+    )
+    later_standard_evaluation = evaluate_declarative_gate_run(
+        later_standard, context, previous=standard
+    )
+    assert "generation_approval_current" in (
+        str(value) for value in later_standard_evaluation.invalidated_claim_ids
+    )
+    assert "publish_approval_current" in (
+        str(value) for value in later_standard_evaluation.invalidated_claim_ids
+    )
+
+    rapid_observation, rapid_kwargs = _characterization_inputs(
+        "ready_for_human_publish", "rapid"
+    )
+    rapid_run = build_declarative_gate_run(
+        rapid_observation, "rapid", context, **rapid_kwargs
+    )
+    rapid = evaluate_declarative_gate_run(rapid_run, context)
+    later_rapid = build_declarative_gate_run(
+        rapid_observation,
+        "rapid",
+        context,
+        previous=rapid_run,
+        **{
+            **rapid_kwargs,
+            "evaluated_at": EVALUATED_AT + timedelta(seconds=1),
+        },
+    )
+    assert later_rapid.evaluated_claim_ids == ()
+    assert len(later_rapid.reused_claim_ids) == 24
+    later_rapid_evaluation = evaluate_declarative_gate_run(
+        later_rapid, context, previous=rapid
+    )
+    assert later_rapid_evaluation.invalidated_claim_ids == ()
+    assert len(later_rapid_evaluation.reused_claim_ids) == 24
+
+
+def test_rapid_ignores_review_and_approval_artifacts_but_mode_upgrade_rechecks() -> None:
+    context = MaterialContextSeed(
+        workflow_definition_sha256=GATE_CONTEXT.workflow_definition_sha256,
+        policy_bundle_sha256=GATE_CONTEXT.policy_bundle_sha256,
+        rules_bundle_sha256=GATE_CONTEXT.rules_bundle_sha256,
+        effective_config_sha256=GATE_CONTEXT.effective_config_sha256,
+        current_manifest_sha256=GATE_CONTEXT.current_manifest_sha256,
+        evidence_graph_sha256=GATE_CONTEXT.evidence_graph_sha256,
+    )
+    snapshots = _legacy_characterization_snapshots(
+        "ready_for_human_publish", "rapid"
+    )
+    observation, kwargs = _characterization_inputs(
+        "ready_for_human_publish", "rapid"
+    )
+    baseline = build_declarative_gate_run(
+        observation, "rapid", context, **kwargs
+    )
+    ignored_families = {
+        "storyboard-review",
+        "storyboard-approval",
+        "packet-review",
+        "packet-approval",
+        "final-review",
+        "publish-approval",
+    }
+    stripped = observe_episode_state(
+        tuple(
+            snapshot
+            for snapshot in snapshots
+            if snapshot.family not in ignored_families
+        )
+    )
+    stripped_run = build_declarative_gate_run(
+        stripped,
+        "rapid",
+        context,
+        previous=baseline,
+        **kwargs,
+    )
+    assert stripped_run.evaluated_claim_ids == ()
+    assert len(stripped_run.reused_claim_ids) == 24
+
+    upgraded = build_declarative_gate_run(
+        observation,
+        "standard",
+        context,
+        previous=baseline,
+        **kwargs,
+    )
+    assert upgraded.evaluated_claim_ids == (
+        "storyboard_review_pass",
+        "packet_review_pass",
+        "generation_approval_current",
+        "generation_mode_permits_execution",
+        "workspace_trusted",
+        "final_review_pass",
+        "publish_approval_current",
+    )
 
 
 @pytest.mark.parametrize(
@@ -1424,11 +1613,14 @@ def test_declarative_adapter_missing_approval_context_never_reaches_effect(
     results = build_declarative_gate_results(
         observation, "standard", context, **kwargs
     )
-    approval_results = tuple(
-        value for value in results if "approval" in str(value.gate_id)
-    )
-    assert approval_results
-    assert all(value.status is GateStatus.BLOCKED for value in approval_results)
+    approval_results = {
+        str(value.gate_id): value
+        for value in results
+        if "approval" in str(value.gate_id)
+    }
+    assert approval_results["gate.storyboard_approval_current"].status is GateStatus.PASS
+    assert approval_results["gate.generation_approval_current"].status is GateStatus.BLOCKED
+    assert approval_results["gate.publish_approval_current"].status is GateStatus.BLOCKED
     evaluation = evaluate_workflow(definition, results, context)
     assert str(evaluation.recommended_action_id) not in {
         "run_external_generation",

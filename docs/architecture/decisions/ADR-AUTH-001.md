@@ -26,7 +26,10 @@ executable plan, and exact clean workflow evaluation; all seven
 destination; canonical collision-free input and output references;
 cost/currency, candidate and retry limits; requested profiles; and the closed
 target hard-escalation catalog with exact evidence for every fact. Workflow
-requests must match a validated target-owned executable plan. The only
+requests must match a validated target-owned executable plan and retain the
+complete ordered predecessor evaluations that were used to validate an
+incremental workflow result. Their ordered digests are part of the request
+identity and are rechecked at initial and pre-side-effect evaluation. The only
 non-workflow bridge is exact R4 `managed_mutation`.
 
 The target-owned `authority-policy/2.1` bundle binds the exact governance YAML
@@ -38,8 +41,12 @@ and negative test identifier for every policy field. Each row identifies a
 distinct executable parameterized test node that exercises the real positive
 and negative boundary and checks the observed reason code. Unknown actions are
 unsupported and denied as R4 escalation; caller risk can never lower policy.
-Triggered or unknown hard-escalation facts are unsupported R4 escalation;
-missing, reordered, or evidence-free facts are invalid requests.
+A known triggered hard-escalation fact is supported only at effective R4 and
+raises the required authority floor to two independent humans. An UNKNOWN fact
+is unsupported and denied. Missing, reordered, or evidence-free facts are
+invalid requests. Thus routine storyboard work remains POLICY-owned, while a
+material Blueprint change after authorization becomes an exact, short-lived
+dual-human decision instead of restoring the legacy per-storyboard checkpoint.
 
 `standing-authorization/1.0` is explicitly unverified parse-only input. Core has
 no grant builder, issuer, signer, or authentication API. R4 standing grants are
@@ -70,7 +77,9 @@ cost, candidates, retries, profiles, validity, and material context. A content
 digest alone cannot transfer authority to a different artifact path or
 version. Human-required actions are evaluated from their explicit
 `AuthorityRequirement`, even when action risk is R0; risk does not erase an
-approval checkpoint.
+approval checkpoint. Conversely, policy classification may strengthen that
+requirement: R2 floors at standing-or-one-human, R3 at human-or-campaign, and
+R4 at two independent humans.
 Input identities, output prefixes, grant signature references, and principal
 verification pairs have one canonical order.
 

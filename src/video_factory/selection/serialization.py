@@ -111,6 +111,7 @@ def candidate_decision_from_mapping(
     context = value["gate_context"]
     assert isinstance(context, Mapping)
     request_sha = value["authority_request_sha256"]
+    risk_sha = value["authority_risk_sha256"]
     decision_sha = value["authority_decision_sha256"]
     receipt_sha = value["authority_receipt_sha256"]
     decision = CandidateDecision(
@@ -129,6 +130,9 @@ def candidate_decision_from_mapping(
         selection_input_sha256=HashDigest(str(value["selection_input_sha256"])),
         authority_request_sha256=(
             HashDigest(str(request_sha)) if request_sha is not None else None
+        ),
+        authority_risk_sha256=(
+            HashDigest(str(risk_sha)) if risk_sha is not None else None
         ),
         authority_decision_sha256=(
             HashDigest(str(decision_sha)) if decision_sha is not None else None

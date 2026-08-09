@@ -8,7 +8,7 @@
     "channel_id", "concept_id", "episode_id",
     "quality_bundle_ref", "quality_bundle_sha256", "policy_sha256",
     "gate_context", "evaluated_at", "selection_input_sha256",
-    "authority_request_sha256", "authority_decision_sha256",
+    "authority_request_sha256", "authority_risk_sha256", "authority_decision_sha256",
     "authority_receipt_sha256", "shots", "status", "reason_codes",
     "authority_effect"
   ],
@@ -27,6 +27,7 @@
     "evaluated_at": { "type": "string", "format": "date-time" },
     "selection_input_sha256": { "$ref": "artifact-common.schema.json#/$defs/sha256" },
     "authority_request_sha256": { "$ref": "#/$defs/nullableSha" },
+    "authority_risk_sha256": { "$ref": "#/$defs/nullableSha" },
     "authority_decision_sha256": { "$ref": "#/$defs/nullableSha" },
     "authority_receipt_sha256": { "$ref": "#/$defs/nullableSha" },
     "shots": {

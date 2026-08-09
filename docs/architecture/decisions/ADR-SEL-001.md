@@ -42,7 +42,7 @@ Add the separate `candidate-decision/1.0` contract.
   authority was issued; selection cannot predate its QualityBundle.
 - Authority evidence and its trusted ledger are an indivisible input pair.
   Complete evidence that fails scope or current-authority validation remains
-  non-authorizing, but its request, decision, and receipt digests are retained
+  non-authorizing, but its request, risk, decision, and receipt digests are retained
   as exact attempt provenance so the resulting escalation can be reproduced
   and audited. Partial evidence is rejected instead of being collapsed into a
   generic missing-authority decision.

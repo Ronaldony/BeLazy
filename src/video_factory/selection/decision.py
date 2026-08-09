@@ -184,6 +184,11 @@ def _identity(value: CandidateDecision) -> dict[str, object]:
             if value.authority_request_sha256 is not None
             else None
         ),
+        "authority_risk_sha256": (
+            str(value.authority_risk_sha256)
+            if value.authority_risk_sha256 is not None
+            else None
+        ),
         "authority_decision_sha256": (
             str(value.authority_decision_sha256)
             if value.authority_decision_sha256 is not None
@@ -488,6 +493,19 @@ def build_candidate_decision(
     else:
         try:
             request = authority.request
+            validate_initial_authority_evidence(
+                authority,
+                current_context=current_context,
+                evaluated_at=evaluated_at,
+                expected_action_id=AUTO_SELECT_CANDIDATES_ACTION_ID,
+                expected_capability_id=AUTO_SELECT_CANDIDATES_CAPABILITY_ID,
+                expected_plan_sha256=str(current_context.executable_plan_sha256),
+                expected_input_artifacts=authority_inputs,
+                expected_destination=None,
+                expected_side_effect=False,
+                ledger=authority_ledger,
+                authority_references=authority_references,
+            )
             if (
                 request.request_envelope_sha256 != selection_input_sha256
                 or str(request.scope.workspace_id) != workspace
@@ -505,19 +523,6 @@ def build_candidate_decision(
                     "selection.authority.scope",
                     "candidate authority request does not bind the exact selection input",
                 )
-            validate_initial_authority_evidence(
-                authority,
-                current_context=current_context,
-                evaluated_at=evaluated_at,
-                expected_action_id=AUTO_SELECT_CANDIDATES_ACTION_ID,
-                expected_capability_id=AUTO_SELECT_CANDIDATES_CAPABILITY_ID,
-                expected_plan_sha256=str(current_context.executable_plan_sha256),
-                expected_input_artifacts=authority_inputs,
-                expected_destination=None,
-                expected_side_effect=False,
-                ledger=authority_ledger,
-                authority_references=authority_references,
-            )
         except (QualityContractError, ValueError):
             authority_reasons.append("selection.authority.invalid")
     bundle_reasons: list[str] = []
@@ -632,6 +637,9 @@ def build_candidate_decision(
         authority_request_sha256=(
             authority.request.request_sha256 if authority_presented else None
         ),
+        authority_risk_sha256=(
+            authority.risk.assessment_sha256 if authority_presented else None
+        ),
         authority_decision_sha256=(
             authority.decision.decision_sha256 if authority_presented else None
         ),
@@ -689,6 +697,7 @@ def validate_candidate_decision_structure(
     require_sha256(str(value.selection_input_sha256), "selection_input_sha256")
     authority_values = (
         value.authority_request_sha256,
+        value.authority_risk_sha256,
         value.authority_decision_sha256,
         value.authority_receipt_sha256,
     )

@@ -81,6 +81,7 @@ class CandidateDecision:
     evaluated_at: str
     selection_input_sha256: HashDigest
     authority_request_sha256: HashDigest | None
+    authority_risk_sha256: HashDigest | None
     authority_decision_sha256: HashDigest | None
     authority_receipt_sha256: HashDigest | None
     shots: tuple[ShotCandidateDecision, ...]

@@ -21,6 +21,7 @@ from video_factory.domain import ArtifactReference, ArtifactVersion, HashDigest,
 from video_factory.quality import (
     InitialAuthorityEvidence,
     MediaSubject,
+    QualityContractError,
     QualityDimension,
     QualityVerdict,
     build_dimension_evaluation,
@@ -575,6 +576,7 @@ def test_candidate_authority_requires_exact_production_scope(scope_field: str) -
     assert rebound.status is not CandidateDecisionStatus.AUTO_SELECTED
     assert "selection.authority.invalid" in rebound.reason_codes
     assert rebound.authority_request_sha256 == foreign_evidence.request.request_sha256
+    assert rebound.authority_risk_sha256 == foreign_evidence.risk.assessment_sha256
     assert rebound.authority_decision_sha256 == foreign_evidence.decision.decision_sha256
     assert rebound.authority_receipt_sha256 == foreign_evidence.receipt.receipt_sha256
     verification = CandidateDecisionVerificationInputs(
@@ -617,6 +619,44 @@ def test_candidate_authority_requires_exact_production_scope(scope_field: str) -
                 authority_ledger=substituted_ledger,
             ),
         )
+    with pytest.raises(QualityContractError, match="not coherent"):
+        InitialAuthorityEvidence(
+            request=foreign_evidence.request,
+            risk=substituted_evidence.risk,
+            decision=foreign_evidence.decision,
+            receipt=foreign_evidence.receipt,
+        )
+
+
+def test_candidate_authority_evidence_rejects_missing_internal_components() -> None:
+    _, _, _, _, evidence, _ = _decision()
+    fields = ("request", "risk", "decision", "receipt")
+    for field in fields:
+        values = {
+            "request": evidence.request,
+            "risk": evidence.risk,
+            "decision": evidence.decision,
+            "receipt": evidence.receipt,
+        }
+        values[field] = None
+        with pytest.raises(QualityContractError, match="structurally invalid"):
+            InitialAuthorityEvidence(**values)
+
+    malformed_components = (
+        {"request": replace(evidence.request, requester_principal_id=OpaqueId("other"))},
+        {"decision": replace(evidence.decision, authority_effect="none")},
+        {"receipt": replace(evidence.receipt, kill_switch_clear=False)},
+    )
+    for change in malformed_components:
+        values = {
+            "request": evidence.request,
+            "risk": evidence.risk,
+            "decision": evidence.decision,
+            "receipt": evidence.receipt,
+            **change,
+        }
+        with pytest.raises(QualityContractError, match="structurally invalid"):
+            InitialAuthorityEvidence(**values)
 
 
 def test_candidate_origin_authority_and_timestamp_are_immutable() -> None:

@@ -38,6 +38,62 @@ class InitialAuthorityEvidence:
     decision: AuthorityDecision
     receipt: AuthorityVerificationReceipt
 
+    def __post_init__(self) -> None:
+        try:
+            validate_action_authority_request(self.request)
+            validate_risk_assessment(self.risk)
+            validate_authority_decision(self.decision)
+            validate_authority_verification_receipt(self.receipt)
+        except (AttributeError, TypeError, ValueError) as error:
+            raise QualityContractError(
+                "quality.authority.invalid",
+                "authority evidence is structurally invalid",
+            ) from error
+        request = self.request
+        risk = self.risk
+        decision = self.decision
+        receipt = self.receipt
+        request_context_sha256 = gate_context_sha256(request.gate_context)
+        if (
+            not risk.supported
+            or risk.action_request_sha256 != request.request_sha256
+            or decision.action_request_sha256 != request.request_sha256
+            or decision.gate_context_sha256 != request_context_sha256
+            or decision.risk_assessment_sha256 != risk.assessment_sha256
+            or decision.effective_risk is not risk.effective_risk
+            or decision.status is not AuthorityDecisionStatus.AUTHORIZED
+            or decision.authority_effect != "execution_authority"
+            or decision.verification_receipt_id != receipt.receipt_id
+            or decision.verification_receipt_sha256 != receipt.receipt_sha256
+            or receipt.purpose is not VerificationPurpose.INITIAL_DECISION
+            or receipt.authority_decision_sha256 is not None
+            or receipt.action_request_sha256 != request.request_sha256
+            or receipt.gate_context_sha256 != request_context_sha256
+            or receipt.risk_assessment_sha256 != risk.assessment_sha256
+            or receipt.authority_source is not decision.source
+            or receipt.ledger_state is not LedgerRecordState.ACTIVE
+            or not receipt.kill_switch_clear
+            or receipt.requester_principal_id != request.requester_principal_id
+            or receipt.idempotency_key != request.idempotency_key
+        ):
+            raise QualityContractError(
+                "quality.authority.binding",
+                "authority request, risk, decision, and receipt are not coherent",
+            )
+        issued = parse_rfc3339_datetime(receipt.evaluated_at)
+        valid_until = parse_rfc3339_datetime(receipt.valid_until)
+        decision_issued = parse_rfc3339_datetime(decision.evaluated_at)
+        if (
+            issued != decision_issued
+            or issued >= valid_until
+            or decision.valid_until is None
+            or parse_rfc3339_datetime(decision.valid_until) != valid_until
+        ):
+            raise QualityContractError(
+                "quality.authority.window",
+                "authority decision and receipt validity windows are incoherent",
+            )
+
 
 def validate_initial_authority_evidence(
     evidence: InitialAuthorityEvidence,
@@ -62,7 +118,7 @@ def validate_initial_authority_evidence(
         validate_risk_assessment(evidence.risk)
         validate_authority_decision(evidence.decision)
         validate_authority_verification_receipt(evidence.receipt)
-    except ValueError as error:
+    except (AttributeError, TypeError, ValueError) as error:
         raise QualityContractError("quality.authority.invalid", "authority evidence is structurally invalid") from error
     request = evidence.request
     risk = evidence.risk

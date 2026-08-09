@@ -114,6 +114,7 @@ class WorkflowDefinition:
 class GateResult:
     artifact_version: str
     gate_id: OpaqueId
+    consumed_context_sha256: HashDigest
     status: GateStatus
     reason_codes: tuple[str, ...]
     messages: tuple[str, ...]

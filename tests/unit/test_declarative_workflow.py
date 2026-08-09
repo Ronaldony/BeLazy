@@ -23,6 +23,7 @@ from video_factory.workflow import (
     default_workflow_definition,
     evaluate_workflow,
     executable_plan_to_mapping,
+    gate_consumed_context_sha256,
     gate_result_to_mapping,
     require_target_workflow_definition,
     require_target_workflow_evaluation,
@@ -63,10 +64,36 @@ def _context(mode: str = "standard") -> MaterialContextSeed:
     )
 
 
-def _result(gate_id: str, passed: bool, reason: str | None = None):
+def _consumed_context(gate_id: str, context: MaterialContextSeed) -> str:
+    gate = next(
+        (
+            item
+            for item in default_workflow_definition().gates
+            if str(item.gate_id) == gate_id
+        ),
+        None,
+    )
+    return str(
+        gate_consumed_context_sha256(gate, context)
+        if gate is not None
+        else canonical_sha256({})
+    )
+
+
+def _result(
+    gate_id: str,
+    passed: bool,
+    reason: str | None = None,
+    *,
+    context: MaterialContextSeed | None = None,
+):
+    effective_context = context or _context()
     return build_gate_result(
         gate_id,
         GateStatus.PASS if passed else GateStatus.BLOCKED,
+        consumed_context_sha256=_consumed_context(
+            gate_id, effective_context
+        ),
         reason_codes=() if passed else (reason or "workflow.test.blocked",),
         messages=() if passed else ("blocked",),
         evidence_sha256s=("a" * 64,),
@@ -75,6 +102,7 @@ def _result(gate_id: str, passed: bool, reason: str | None = None):
 
 def _evaluation_for_action(action_id: str, mode: str = "standard"):
     definition = default_workflow_definition()
+    context = _context(mode)
     action = next(item for item in definition.actions if str(item.action_id) == action_id)
     results = {}
     # Pass every earlier target so independent parallel work cannot hide the
@@ -89,11 +117,16 @@ def _evaluation_for_action(action_id: str, mode: str = "standard"):
     for claim in definition.claims:
         claim_id = str(claim.claim_id)
         if claim_id in earlier_claims:
-            results[str(claim.gate_id)] = _result(str(claim.gate_id), True)
+            results[str(claim.gate_id)] = _result(
+                str(claim.gate_id), True, context=context
+            )
         else:
             results[str(claim.gate_id)] = build_gate_result(
                 str(claim.gate_id),
                 GateStatus.UNKNOWN,
+                consumed_context_sha256=_consumed_context(
+                    str(claim.gate_id), context
+                ),
                 reason_codes=("workflow.gate.missing",),
                 messages=("not observed",),
             )
@@ -107,11 +140,13 @@ def _evaluation_for_action(action_id: str, mode: str = "standard"):
         for claim in definition.claims
         if claim.claim_id == action.satisfies_claim_id
     )
-    results[str(target_gate)] = _result(str(target_gate), False, reason)
+    results[str(target_gate)] = _result(
+        str(target_gate), False, reason, context=context
+    )
     evaluation = evaluate_workflow(
         definition,
         tuple(results[str(gate.gate_id)] for gate in definition.gates),
-        _context(mode),
+        context,
     )
     return definition, evaluation
 
@@ -211,6 +246,9 @@ def test_packet_review_and_feasibility_are_exposed_as_parallel_frontier() -> Non
             results.append(
                 build_gate_result(
                     str(claim.gate_id), GateStatus.UNKNOWN,
+                    consumed_context_sha256=_consumed_context(
+                        str(claim.gate_id), _context()
+                    ),
                     reason_codes=("workflow.gate.missing",), messages=("missing",),
                 )
             )
@@ -244,12 +282,41 @@ def test_incremental_invalidation_matches_clean_semantics_and_reuses_upstream() 
     assert "packet_review_pass" in incremental.invalidated_claim_ids
     assert "generation_approval_current" in incremental.invalidated_claim_ids
 
+    changed_context = replace(
+        _context(), current_manifest_sha256=HashDigest("f" * 64)
+    )
+    with pytest.raises(WorkflowContractError, match="another material context"):
+        evaluate_workflow(
+            definition, results, changed_context, previous=incremental
+        )
+    rebound_results = tuple(
+        build_gate_result(
+            str(item.gate_id),
+            item.status,
+            consumed_context_sha256=_consumed_context(
+                str(item.gate_id), changed_context
+            ),
+            reason_codes=item.reason_codes,
+            messages=item.messages,
+            evidence_sha256s=tuple(str(value) for value in item.evidence_sha256s),
+        )
+        for item in results
+    )
     context_changed = evaluate_workflow(
-        definition, results,
-        replace(_context(), current_manifest_sha256=HashDigest("f" * 64)),
+        definition,
+        rebound_results,
+        changed_context,
         previous=incremental,
     )
-    assert len(context_changed.invalidated_claim_ids) == len(definition.claims)
+    context_clean = evaluate_workflow(
+        definition, rebound_results, changed_context
+    )
+    assert workflow_semantic_projection(
+        context_changed
+    ) == workflow_semantic_projection(context_clean)
+    assert "artifact_graph_valid" in context_changed.reused_claim_ids
+    assert "storyboard_approval_current" in context_changed.invalidated_claim_ids
+    assert len(context_changed.invalidated_claim_ids) < len(definition.claims)
 
 
 def test_self_rehashed_frontier_rebound_cannot_feed_a_production_plan() -> None:
@@ -289,6 +356,7 @@ def test_gate_result_is_strict_and_schema_registered() -> None:
     with pytest.raises(WorkflowContractError, match="passing gate"):
         build_gate_result(
             "gate.example", GateStatus.PASS,
+            consumed_context_sha256=str(canonical_sha256({})),
             reason_codes=("workflow.invalid",), messages=("bad",),
         )
 
@@ -309,8 +377,8 @@ def test_parity_report_never_cuts_over_or_grants_authority() -> None:
         legacy,
         evaluation,
         explained_dimensions={
-            "blockers": "EXPLAINED_AUTHORITY_HARDENING",
-            "consumed_evidence": "EXPLAINED_AUTHORITY_HARDENING",
+            "blockers": "EXPLAINED_FRONTIER_EXPANSION",
+            "consumed_evidence": "EXPLAINED_BLUEPRINT_CONSOLIDATION",
         },
     )
     assert report.parity_pass
@@ -322,6 +390,71 @@ def test_parity_report_never_cuts_over_or_grants_authority() -> None:
     failed = compare_legacy_parity(unmapped, evaluation)
     assert failed.parity_pass is False
     assert "blockers" in failed.unexplained_dimensions
+
+    weakened = replace(legacy, approval_required=True)
+    weakened_report = compare_legacy_parity(weakened, evaluation)
+    assert weakened_report.parity_pass is False
+    assert "required_authority" in weakened_report.unexplained_dimensions
+    with pytest.raises(WorkflowContractError, match="one-way exact authority hardening"):
+        compare_legacy_parity(
+            weakened,
+            evaluation,
+            explained_dimensions={
+                "required_authority": "EXPLAINED_AUTHORITY_HARDENING"
+            },
+        )
+
+    _, external_evaluation = _evaluation_for_action("run_external_generation")
+    external_item = next(
+        value
+        for value in external_evaluation.action_frontier
+        if value.action_id == external_evaluation.recommended_action_id
+    )
+    hardened = LegacyNextStepProjection(
+        action_type="run_external_generation",
+        actor_role=external_item.actor_role,
+        approval_required=False,
+        blockers=(),
+        consumed_evidence=tuple(
+            str(value) for value in external_item.consumed_evidence_sha256s
+        ),
+        prohibited_actions=external_item.prohibited_actions,
+        authority_effect="none",
+    )
+    hardened_report = compare_legacy_parity(
+        hardened,
+        external_evaluation,
+        explained_dimensions={
+            "required_authority": "EXPLAINED_AUTHORITY_HARDENING"
+        },
+    )
+    hardened_difference = next(
+        value
+        for value in hardened_report.differences
+        if value.dimension == "required_authority"
+    )
+    assert hardened_difference.explanation_code == "EXPLAINED_AUTHORITY_HARDENING"
+    assert "required_authority" not in hardened_report.unexplained_dimensions
+
+    with pytest.raises(WorkflowContractError, match="semantic dimension"):
+        compare_legacy_parity(
+            legacy,
+            evaluation,
+            explained_dimensions={
+                "blockers": "EXPLAINED_BLUEPRINT_CONSOLIDATION"
+            },
+        )
+
+    forged_label = replace(legacy, consumed_evidence=("unowned evidence",))
+    with pytest.raises(WorkflowContractError, match="exact legacy-label"):
+        compare_legacy_parity(
+            forged_label,
+            evaluation,
+            explained_dimensions={
+                "blockers": "EXPLAINED_FRONTIER_EXPANSION",
+                "consumed_evidence": "EXPLAINED_BLUEPRINT_CONSOLIDATION",
+            },
+        )
 
     with pytest.raises(WorkflowContractError, match="contract"):
         validate_workflow_parity_report(

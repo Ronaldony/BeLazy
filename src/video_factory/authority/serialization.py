@@ -35,6 +35,7 @@ from .contracts import (
     OutputScope,
     PolicyBundle,
     PolicyEnforcementRule,
+    PrincipalSignatureVerification,
     UnverifiedStandingAuthorization,
     VerificationPurpose,
 )
@@ -104,8 +105,16 @@ def policy_bundle_from_mapping(document: Mapping[str, object]) -> PolicyBundle:
         bundle_sha256=HashDigest(str(value["bundle_sha256"])),
         policy_version=str(value["policy_version"]),
         classifier_version=str(value["classifier_version"]),
+        governance_policy_sha256=HashDigest(
+            str(value["governance_policy_sha256"])
+        ),
         default_decision=AuthorityDecisionStatus(str(value["default_decision"])),
         unknown_state_fail_closed=bool(value["unknown_state_fail_closed"]),
+        self_approval_forbidden=bool(value["self_approval_forbidden"]),
+        release_campaign_enabled=bool(value["release_campaign_enabled"]),
+        hard_escalation_triggers=tuple(
+            cast(list[str], value["hard_escalation_triggers"])
+        ),
         action_risk_by_action=tuple(
             (OpaqueId(str(item["action_id"])), ActionRisk(str(item["risk"])))
             for item in cast(list[dict[str, object]], value["action_risk_by_action"])
@@ -229,6 +238,11 @@ def authority_decision_from_mapping(document: Mapping[str, object]) -> Authority
         source=AuthoritySource(str(value["source"])),
         reason_codes=tuple(cast(list[str], value["reason_codes"])),
         matched_limit_sha256=(HashDigest(str(value["matched_limit_sha256"])) if value["matched_limit_sha256"] is not None else None),
+        authority_basis_sha256=(
+            HashDigest(str(value["authority_basis_sha256"]))
+            if value["authority_basis_sha256"] is not None
+            else None
+        ),
         verification_receipt_id=(OpaqueId(str(value["verification_receipt_id"])) if value["verification_receipt_id"] is not None else None),
         verification_receipt_sha256=(HashDigest(str(value["verification_receipt_sha256"])) if value["verification_receipt_sha256"] is not None else None),
         evaluated_at=str(value["evaluated_at"]),
@@ -254,12 +268,36 @@ def authority_verification_receipt_from_mapping(
         authority_decision_sha256=(HashDigest(str(value["authority_decision_sha256"])) if value["authority_decision_sha256"] is not None else None),
         gate_context_sha256=HashDigest(str(value["gate_context_sha256"])),
         risk_assessment_sha256=HashDigest(str(value["risk_assessment_sha256"])),
+        workflow_evaluation_sha256=(
+            HashDigest(str(value["workflow_evaluation_sha256"]))
+            if value["workflow_evaluation_sha256"] is not None
+            else None
+        ),
+        workflow_evaluation_verification_ref=(
+            _reference(value["workflow_evaluation_verification_ref"])
+            if value["workflow_evaluation_verification_ref"] is not None
+            else None
+        ),
         authority_source=AuthoritySource(str(value["authority_source"])),
         ledger_state=LedgerRecordState(str(value["ledger_state"])),
         ledger_head_sha256=HashDigest(str(value["ledger_head_sha256"])),
         ledger_entry=_reference(value["ledger_entry"]),
+        requester_principal_id=OpaqueId(
+            str(value["requester_principal_id"])
+        ),
+        requester_authentication_ref=_reference(
+            value["requester_authentication_ref"]
+        ),
         grant_sha256=(HashDigest(str(value["grant_sha256"])) if value["grant_sha256"] is not None else None),
-        principal_ids=tuple(OpaqueId(str(item)) for item in cast(list[str], value["principal_ids"])),
+        principal_verifications=tuple(
+            PrincipalSignatureVerification(
+                principal_id=OpaqueId(str(cast(Mapping[str, object], item)["principal_id"])),
+                signature_verification_ref=_reference(
+                    cast(Mapping[str, object], item)["signature_verification_ref"]
+                ),
+            )
+            for item in cast(list[object], value["principal_verifications"])
+        ),
         signature_verification_refs=tuple(_reference(item) for item in cast(list[object], value["signature_verification_refs"])),
         revocation_checked_at=str(value["revocation_checked_at"]),
         kill_switch_clear=bool(value["kill_switch_clear"]),

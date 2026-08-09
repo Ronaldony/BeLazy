@@ -35,13 +35,13 @@
     },
     {
       "filename": "authority-decision.schema.json",
-      "sha256": "cddbc64b1c98e4d41cfb16c308933c7349bcd44fa42c0a878716146fe9eab691",
+      "sha256": "cb2960b5fd5028ce523b890a2eabc554e20b68b3ad78dc4e6567189403d03f59",
       "schema_id": "https://schemas.video-factory.invalid/authority/authority-decision.schema.json",
       "artifact_version": "authority-decision/1.0"
     },
     {
       "filename": "authority-verification-receipt.schema.json",
-      "sha256": "0b4afd9e997283dadd77dd2e9fb31a050b096d32b53a4de3c6c10a899c0ec8a8",
+      "sha256": "aab496a73efa5dd085d2231b3c9931ed0b6dcb4258cd028c616d4d6bb325a1ad",
       "schema_id": "https://schemas.video-factory.invalid/authority/authority-verification-receipt.schema.json",
       "artifact_version": "authority-verification-receipt/1.0"
     },
@@ -281,7 +281,7 @@
     },
     {
       "filename": "mutation-plan.schema.json",
-      "sha256": "51a86afcfbed312f2f2e29abd00d83b09dc85dced27706125869d106b11e9514",
+      "sha256": "69b02125188c8a8fa570f991884f29c2a38d109fbc92d5d007eb74dce3d7b469",
       "schema_id": "https://schemas.video-factory.invalid/mutation/mutation-plan.schema.json",
       "artifact_version": "mutation-plan/1.0"
     },
@@ -317,7 +317,7 @@
     },
     {
       "filename": "policy-bundle.schema.json",
-      "sha256": "782fcf65afe7af226100a46ad95d7df370c4cc5f2d3d79d2527057c9c936e177",
+      "sha256": "60e36cdc2877649eff1ba05531061428b4cdab5f1d6052880702d024b7fddb48",
       "schema_id": "https://schemas.video-factory.invalid/authority/policy-bundle.schema.json",
       "artifact_version": "policy-bundle/1.0"
     },
@@ -407,7 +407,7 @@
     },
     {
       "filename": "workflow-authority-common.schema.json",
-      "sha256": "7ab6d329ed10eff6b22f9dab6fd23602e921027a8749c976415aae446bf90973",
+      "sha256": "4f5f9cf7dac3c442b3ce69284ab3b9cdc97fd2bfad5216fdc93b9ff17d6b517e",
       "schema_id": "https://schemas.video-factory.invalid/workflow/workflow-authority-common.schema.json",
       "artifact_version": null
     },

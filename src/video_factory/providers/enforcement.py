@@ -34,7 +34,12 @@ from video_factory.mutation import (
     workspace_trust_blockers,
 )
 
-from .contracts import AdapterKind, CapabilityDescriptor, RequestEnvelope
+from .contracts import (
+    AdapterKind,
+    CapabilityDescriptor,
+    ExecutorAuthorityScope,
+    RequestEnvelope,
+)
 
 
 class ModeEnforcementError(ValueError):
@@ -291,6 +296,7 @@ def enforce_adapter_dispatch(
     authority_decision: AuthorityDecision | None = None,
     authority_ledger: TrustedAuthorizationLedger | None = None,
     service_identity: str | None = None,
+    executor_authority_scope: ExecutorAuthorityScope | None = None,
     verification_purpose: VerificationPurpose = VerificationPurpose.DISPATCH,
 ) -> None:
     """ADR-004 point 4: recheck immediately before an external process."""
@@ -313,6 +319,8 @@ def enforce_adapter_dispatch(
         _reject("executor dispatch requires a trusted authority ledger")
     if not service_identity:
         _reject("executor dispatch requires a runtime service identity")
+    if executor_authority_scope is None:
+        _reject("executor dispatch requires exact runtime authority scope")
     if current_context is None:
         _reject("executor dispatch requires current gate context")
     if (
@@ -388,6 +396,10 @@ def enforce_adapter_dispatch(
             _reject("executor authorization evidence has expired")
     if authority_request.request_envelope_sha256 != request_envelope_sha256(request):
         _reject("W04 authority request is bound to another request envelope")
+    if authority_request.request_id != request.request_id:
+        _reject("W04 authority request is bound to another request id")
+    if authority_request.idempotency_key != request.idempotency_key:
+        _reject("W04 authority request is bound to another idempotency key")
     if authority_request.capability_id != request.capability_id:
         _reject("W04 authority request is bound to another capability")
     if authority_request.scope.input_artifacts != request.input_artifacts:
@@ -404,6 +416,26 @@ def enforce_adapter_dispatch(
         _reject("W04 authority request is bound to another output scope")
     if authority_request.scope.workspace_id != expected_workspace_id:
         _reject("W04 authority request is bound to another workspace")
+    runtime_scope = executor_authority_scope
+    authority_scope = authority_request.scope
+    scope_pairs = (
+        (runtime_scope.provider_id, descriptor.adapter_id),
+        (runtime_scope.workspace_id, authority_scope.workspace_id),
+        (runtime_scope.channel_id, authority_scope.channel_id),
+        (runtime_scope.concept_id, authority_scope.concept_id),
+        (runtime_scope.episode_id, authority_scope.episode_id),
+        (runtime_scope.provider_id, authority_scope.provider_id),
+        (runtime_scope.model_id, authority_scope.model_id),
+        (runtime_scope.destination, authority_scope.destination),
+        (runtime_scope.cost_minor_units, authority_scope.cost_minor_units),
+        (runtime_scope.currency, authority_scope.currency),
+        (runtime_scope.candidate_count, authority_scope.candidate_count),
+        (runtime_scope.retry_index, authority_scope.retry_index),
+    )
+    if any(actual != authorized for actual, authorized in scope_pairs):
+        _reject("executor runtime scope differs from the exact W04 authority request")
+    if str(runtime_scope.workspace_id) != expected_workspace_id:
+        _reject("executor runtime scope is bound to another workspace")
     assert workspace_observation is not None
     try:
         revalidate_authority_for_side_effect(

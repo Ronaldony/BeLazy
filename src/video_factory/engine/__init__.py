@@ -52,6 +52,7 @@ _ORCHESTRATION_EXPORTS = frozenset(
         "plan_next_step",
     }
 )
+_DECLARATIVE_EXPORTS = frozenset({"build_declarative_gate_results"})
 
 
 def __getattr__(name: str) -> object:
@@ -59,6 +60,8 @@ def __getattr__(name: str) -> object:
         module = import_module(".artifact_graph", __name__)
     elif name in _ORCHESTRATION_EXPORTS:
         module = import_module(".orchestration", __name__)
+    elif name in _DECLARATIVE_EXPORTS:
+        module = import_module(".declarative", __name__)
     else:
         raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
     value = getattr(module, name)
@@ -67,7 +70,12 @@ def __getattr__(name: str) -> object:
 
 
 def __dir__() -> list[str]:
-    return sorted(set(globals()) | _ARTIFACT_GRAPH_EXPORTS | _ORCHESTRATION_EXPORTS)
+    return sorted(
+        set(globals())
+        | _ARTIFACT_GRAPH_EXPORTS
+        | _ORCHESTRATION_EXPORTS
+        | _DECLARATIVE_EXPORTS
+    )
 
 
 __all__ = [
@@ -93,6 +101,7 @@ __all__ = [
     "bound_reference_from_mapping",
     "build_artifact_graph",
     "build_generation_readiness",
+    "build_declarative_gate_results",
     "make_artifact_snapshot",
     "make_artifact_snapshot_from_json_bytes",
     "mode_is_within_limit",

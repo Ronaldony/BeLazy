@@ -228,6 +228,11 @@ def mutation_plan_from_mapping(document: Mapping[str, object]) -> MutationPlan:
         risk_tier=MutationRiskTier(str(value["risk_tier"])),
         operations=tuple(_planned(item) for item in operations),
         semantic_diff=tuple(_semantic(item) for item in semantic_diff),
+        requester_id=(
+            OpaqueId(str(value["requester_id"]))
+            if value.get("requester_id") is not None
+            else None
+        ),
     )
     try:
         validate_mutation_plan(plan)

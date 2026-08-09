@@ -5,7 +5,9 @@
   "type": "object",
   "required": [
     "artifact_version", "bundle_id", "bundle_sha256", "policy_version",
-    "classifier_version", "default_decision", "unknown_state_fail_closed",
+    "classifier_version", "governance_policy_sha256", "default_decision",
+    "unknown_state_fail_closed", "self_approval_forbidden",
+    "release_campaign_enabled", "hard_escalation_triggers",
     "action_risk_by_action", "enforcement_matrix"
   ],
   "properties": {
@@ -14,8 +16,16 @@
     "bundle_sha256": { "$ref": "artifact-common.schema.json#/$defs/sha256" },
     "policy_version": { "const": "authority-policy/2.1" },
     "classifier_version": { "const": "authority-risk-classifier/1.0" },
+    "governance_policy_sha256": { "$ref": "artifact-common.schema.json#/$defs/sha256" },
     "default_decision": { "const": "denied" },
     "unknown_state_fail_closed": { "const": true },
+    "self_approval_forbidden": { "const": true },
+    "release_campaign_enabled": { "const": false },
+    "hard_escalation_triggers": {
+      "type": "array", "minItems": 13, "maxItems": 13,
+      "items": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
+      "uniqueItems": true
+    },
     "action_risk_by_action": {
       "type": "array", "minItems": 1,
       "items": {

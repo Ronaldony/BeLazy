@@ -2,8 +2,26 @@
   "artifact_version": "policy-bundle/1.0",
   "policy_version": "authority-policy/2.1",
   "classifier_version": "authority-risk-classifier/1.0",
+  "governance_policy_sha256": "624e4bc552e39c1e962593bd4d59e393425db7352c43f2067280ca96eda368b2",
   "default_decision": "denied",
   "unknown_state_fail_closed": true,
+  "self_approval_forbidden": true,
+  "release_campaign_enabled": false,
+  "hard_escalation_triggers": [
+    "unresolved_director_hard_blocker",
+    "low_or_conflicting_confidence",
+    "cost_over_grant",
+    "provider_or_model_not_allowlisted",
+    "new_publish_destination",
+    "material_blueprint_change_after_authorization",
+    "factual_or_rights_risk_unknown",
+    "kill_switch_not_clear",
+    "ledger_or_signature_invalid",
+    "workspace_trust_state_untrusted",
+    "out_of_band_file_mutation_detected",
+    "mutation_plan_precondition_mismatch",
+    "direct_human_mutation_requested"
+  ],
   "action_risk_by_action": [
     {
       "action_id": "resolve_artifact_graph",
@@ -119,147 +137,267 @@
       "policy_path": "default_decision",
       "owner": "authority.policy",
       "enforcement_phase": "initial",
-      "reason_code": "authority.policy.default_deny",
-      "positive_test_id": "test_policy_01_positive",
-      "negative_test_id": "test_policy_01_negative"
+      "reason_code": "authority.evidence.missing",
+      "positive_test_id": "test_policy_enforcement_matrix_positive[default_decision]",
+      "negative_test_id": "test_policy_enforcement_matrix_negative[default_decision]"
     },
     {
       "policy_path": "unknown_state_behavior",
       "owner": "authority.policy",
       "enforcement_phase": "initial",
-      "reason_code": "authority.policy.unknown",
-      "positive_test_id": "test_policy_02_positive",
-      "negative_test_id": "test_policy_02_negative"
+      "reason_code": "authority.risk.escalated_r4",
+      "positive_test_id": "test_policy_enforcement_matrix_positive[unknown_state_behavior]",
+      "negative_test_id": "test_policy_enforcement_matrix_negative[unknown_state_behavior]"
     },
     {
       "policy_path": "ai_human_approval_creation_forbidden",
       "owner": "authority.requests",
       "enforcement_phase": "serialization",
-      "reason_code": "authority.ai_cannot_grant",
-      "positive_test_id": "test_policy_03_positive",
-      "negative_test_id": "test_policy_03_negative"
+      "reason_code": "authority.approval_request.contract",
+      "positive_test_id": "test_policy_enforcement_matrix_positive[ai_human_approval_creation_forbidden]",
+      "negative_test_id": "test_policy_enforcement_matrix_negative[ai_human_approval_creation_forbidden]"
+    },
+    {
+      "policy_path": "self_approval_forbidden",
+      "owner": "authority.ledger",
+      "enforcement_phase": "initial",
+      "reason_code": "authority.self_approval_forbidden",
+      "positive_test_id": "test_policy_enforcement_matrix_positive[self_approval_forbidden]",
+      "negative_test_id": "test_policy_enforcement_matrix_negative[self_approval_forbidden]"
+    },
+    {
+      "policy_path": "release_campaign.activation",
+      "owner": "authority.policy",
+      "enforcement_phase": "initial",
+      "reason_code": "authority.source.insufficient",
+      "positive_test_id": "test_policy_enforcement_matrix_positive[release_campaign.activation]",
+      "negative_test_id": "test_policy_enforcement_matrix_negative[release_campaign.activation]"
     },
     {
       "policy_path": "executor_revalidation_required",
       "owner": "authority.guard",
       "enforcement_phase": "predispatch",
-      "reason_code": "authority.predispatch.required",
-      "positive_test_id": "test_policy_04_positive",
-      "negative_test_id": "test_policy_04_negative"
+      "reason_code": "authority.predispatch.ledger",
+      "positive_test_id": "test_policy_enforcement_matrix_positive[executor_revalidation_required]",
+      "negative_test_id": "test_policy_enforcement_matrix_negative[executor_revalidation_required]"
     },
     {
       "policy_path": "material_change_invalidates_authority",
       "owner": "authority.guard",
       "enforcement_phase": "initial",
-      "reason_code": "authority.context.mismatch",
-      "positive_test_id": "test_policy_05_positive",
-      "negative_test_id": "test_policy_05_negative"
+      "reason_code": "authority.predispatch.context",
+      "positive_test_id": "test_policy_enforcement_matrix_positive[material_change_invalidates_authority]",
+      "negative_test_id": "test_policy_enforcement_matrix_negative[material_change_invalidates_authority]"
     },
     {
       "policy_path": "scope.capability",
       "owner": "authority.scope",
       "enforcement_phase": "initial",
       "reason_code": "authority.scope.capability",
-      "positive_test_id": "test_policy_06_positive",
-      "negative_test_id": "test_policy_06_negative"
+      "positive_test_id": "test_policy_enforcement_matrix_positive[scope.capability]",
+      "negative_test_id": "test_policy_enforcement_matrix_negative[scope.capability]"
     },
     {
       "policy_path": "scope.channel_concept_episode",
       "owner": "authority.scope",
       "enforcement_phase": "initial",
-      "reason_code": "authority.scope.subject",
-      "positive_test_id": "test_policy_07_positive",
-      "negative_test_id": "test_policy_07_negative"
+      "reason_code": "authority.scope.channel",
+      "positive_test_id": "test_policy_enforcement_matrix_positive[scope.channel_concept_episode]",
+      "negative_test_id": "test_policy_enforcement_matrix_negative[scope.channel_concept_episode]"
     },
     {
       "policy_path": "scope.provider_model",
       "owner": "authority.scope",
       "enforcement_phase": "initial",
       "reason_code": "authority.scope.provider",
-      "positive_test_id": "test_policy_08_positive",
-      "negative_test_id": "test_policy_08_negative"
+      "positive_test_id": "test_policy_enforcement_matrix_positive[scope.provider_model]",
+      "negative_test_id": "test_policy_enforcement_matrix_negative[scope.provider_model]"
     },
     {
       "policy_path": "scope.destination",
       "owner": "authority.scope",
       "enforcement_phase": "initial",
       "reason_code": "authority.scope.destination",
-      "positive_test_id": "test_policy_09_positive",
-      "negative_test_id": "test_policy_09_negative"
+      "positive_test_id": "test_policy_enforcement_matrix_positive[scope.destination]",
+      "negative_test_id": "test_policy_enforcement_matrix_negative[scope.destination]"
     },
     {
       "policy_path": "scope.cost_per_run",
       "owner": "authority.scope",
       "enforcement_phase": "initial",
       "reason_code": "authority.scope.cost_run",
-      "positive_test_id": "test_policy_10_positive",
-      "negative_test_id": "test_policy_10_negative"
+      "positive_test_id": "test_policy_enforcement_matrix_positive[scope.cost_per_run]",
+      "negative_test_id": "test_policy_enforcement_matrix_negative[scope.cost_per_run]"
     },
     {
       "policy_path": "scope.cost_per_day",
       "owner": "authority.ledger",
       "enforcement_phase": "predispatch",
-      "reason_code": "authority.scope.cost_day",
-      "positive_test_id": "test_policy_11_positive",
-      "negative_test_id": "test_policy_11_negative"
+      "reason_code": "authority.predispatch.denied",
+      "positive_test_id": "test_policy_enforcement_matrix_positive[scope.cost_per_day]",
+      "negative_test_id": "test_policy_enforcement_matrix_negative[scope.cost_per_day]"
     },
     {
       "policy_path": "scope.candidates",
       "owner": "authority.scope",
       "enforcement_phase": "initial",
       "reason_code": "authority.scope.candidates",
-      "positive_test_id": "test_policy_12_positive",
-      "negative_test_id": "test_policy_12_negative"
+      "positive_test_id": "test_policy_enforcement_matrix_positive[scope.candidates]",
+      "negative_test_id": "test_policy_enforcement_matrix_negative[scope.candidates]"
     },
     {
       "policy_path": "scope.retries",
       "owner": "authority.scope",
       "enforcement_phase": "initial",
       "reason_code": "authority.scope.retries",
-      "positive_test_id": "test_policy_13_positive",
-      "negative_test_id": "test_policy_13_negative"
+      "positive_test_id": "test_policy_enforcement_matrix_positive[scope.retries]",
+      "negative_test_id": "test_policy_enforcement_matrix_negative[scope.retries]"
     },
     {
       "policy_path": "validity",
       "owner": "authority.ledger",
       "enforcement_phase": "initial",
       "reason_code": "authority.grant.expired",
-      "positive_test_id": "test_policy_14_positive",
-      "negative_test_id": "test_policy_14_negative"
+      "positive_test_id": "test_policy_enforcement_matrix_positive[validity]",
+      "negative_test_id": "test_policy_enforcement_matrix_negative[validity]"
     },
     {
       "policy_path": "revocation",
       "owner": "authority.ledger",
       "enforcement_phase": "predispatch",
       "reason_code": "authority.grant.revoked",
-      "positive_test_id": "test_policy_15_positive",
-      "negative_test_id": "test_policy_15_negative"
+      "positive_test_id": "test_policy_enforcement_matrix_positive[revocation]",
+      "negative_test_id": "test_policy_enforcement_matrix_negative[revocation]"
     },
     {
       "policy_path": "kill_switch",
       "owner": "authority.ledger",
       "enforcement_phase": "predispatch",
       "reason_code": "authority.kill_switch.engaged",
-      "positive_test_id": "test_policy_16_positive",
-      "negative_test_id": "test_policy_16_negative"
+      "positive_test_id": "test_policy_enforcement_matrix_positive[kill_switch]",
+      "negative_test_id": "test_policy_enforcement_matrix_negative[kill_switch]"
     },
     {
       "policy_path": "R4.independent_approvers",
       "owner": "authority.ledger",
       "enforcement_phase": "initial",
-      "reason_code": "authority.r4.principals",
-      "positive_test_id": "test_policy_17_positive",
-      "negative_test_id": "test_policy_17_negative"
+      "reason_code": "authority.source.insufficient",
+      "positive_test_id": "test_policy_enforcement_matrix_positive[R4.independent_approvers]",
+      "negative_test_id": "test_policy_enforcement_matrix_negative[R4.independent_approvers]"
     },
     {
       "policy_path": "R4.standing_grant_forbidden",
       "owner": "authority.policy",
       "enforcement_phase": "initial",
       "reason_code": "authority.r4.standing_forbidden",
-      "positive_test_id": "test_policy_18_positive",
-      "negative_test_id": "test_policy_18_negative"
+      "positive_test_id": "test_policy_enforcement_matrix_positive[R4.standing_grant_forbidden]",
+      "negative_test_id": "test_policy_enforcement_matrix_negative[R4.standing_grant_forbidden]"
+    },
+    {
+      "policy_path": "hard_escalation_triggers.unresolved_director_hard_blocker",
+      "owner": "workflow.gates",
+      "enforcement_phase": "initial",
+      "reason_code": "authority.escalation.unresolved_director_hard_blocker.triggered",
+      "positive_test_id": "test_policy_enforcement_matrix_positive[hard_escalation_triggers.unresolved_director_hard_blocker]",
+      "negative_test_id": "test_policy_enforcement_matrix_negative[hard_escalation_triggers.unresolved_director_hard_blocker]"
+    },
+    {
+      "policy_path": "hard_escalation_triggers.low_or_conflicting_confidence",
+      "owner": "workflow.gates",
+      "enforcement_phase": "initial",
+      "reason_code": "authority.escalation.low_or_conflicting_confidence.triggered",
+      "positive_test_id": "test_policy_enforcement_matrix_positive[hard_escalation_triggers.low_or_conflicting_confidence]",
+      "negative_test_id": "test_policy_enforcement_matrix_negative[hard_escalation_triggers.low_or_conflicting_confidence]"
+    },
+    {
+      "policy_path": "hard_escalation_triggers.cost_over_grant",
+      "owner": "authority.ledger",
+      "enforcement_phase": "predispatch",
+      "reason_code": "authority.escalation.cost_over_grant.triggered",
+      "positive_test_id": "test_policy_enforcement_matrix_positive[hard_escalation_triggers.cost_over_grant]",
+      "negative_test_id": "test_policy_enforcement_matrix_negative[hard_escalation_triggers.cost_over_grant]"
+    },
+    {
+      "policy_path": "hard_escalation_triggers.provider_or_model_not_allowlisted",
+      "owner": "authority.scope",
+      "enforcement_phase": "initial",
+      "reason_code": "authority.escalation.provider_or_model_not_allowlisted.triggered",
+      "positive_test_id": "test_policy_enforcement_matrix_positive[hard_escalation_triggers.provider_or_model_not_allowlisted]",
+      "negative_test_id": "test_policy_enforcement_matrix_negative[hard_escalation_triggers.provider_or_model_not_allowlisted]"
+    },
+    {
+      "policy_path": "hard_escalation_triggers.new_publish_destination",
+      "owner": "authority.scope",
+      "enforcement_phase": "initial",
+      "reason_code": "authority.escalation.new_publish_destination.triggered",
+      "positive_test_id": "test_policy_enforcement_matrix_positive[hard_escalation_triggers.new_publish_destination]",
+      "negative_test_id": "test_policy_enforcement_matrix_negative[hard_escalation_triggers.new_publish_destination]"
+    },
+    {
+      "policy_path": "hard_escalation_triggers.material_blueprint_change_after_authorization",
+      "owner": "authority.guard",
+      "enforcement_phase": "predispatch",
+      "reason_code": "authority.escalation.material_blueprint_change_after_authorization.triggered",
+      "positive_test_id": "test_policy_enforcement_matrix_positive[hard_escalation_triggers.material_blueprint_change_after_authorization]",
+      "negative_test_id": "test_policy_enforcement_matrix_negative[hard_escalation_triggers.material_blueprint_change_after_authorization]"
+    },
+    {
+      "policy_path": "hard_escalation_triggers.factual_or_rights_risk_unknown",
+      "owner": "workflow.gates",
+      "enforcement_phase": "initial",
+      "reason_code": "authority.escalation.factual_or_rights_risk_unknown.triggered",
+      "positive_test_id": "test_policy_enforcement_matrix_positive[hard_escalation_triggers.factual_or_rights_risk_unknown]",
+      "negative_test_id": "test_policy_enforcement_matrix_negative[hard_escalation_triggers.factual_or_rights_risk_unknown]"
+    },
+    {
+      "policy_path": "hard_escalation_triggers.kill_switch_not_clear",
+      "owner": "authority.ledger",
+      "enforcement_phase": "predispatch",
+      "reason_code": "authority.escalation.kill_switch_not_clear.triggered",
+      "positive_test_id": "test_policy_enforcement_matrix_positive[hard_escalation_triggers.kill_switch_not_clear]",
+      "negative_test_id": "test_policy_enforcement_matrix_negative[hard_escalation_triggers.kill_switch_not_clear]"
+    },
+    {
+      "policy_path": "hard_escalation_triggers.ledger_or_signature_invalid",
+      "owner": "authority.ledger",
+      "enforcement_phase": "initial",
+      "reason_code": "authority.escalation.ledger_or_signature_invalid.triggered",
+      "positive_test_id": "test_policy_enforcement_matrix_positive[hard_escalation_triggers.ledger_or_signature_invalid]",
+      "negative_test_id": "test_policy_enforcement_matrix_negative[hard_escalation_triggers.ledger_or_signature_invalid]"
+    },
+    {
+      "policy_path": "hard_escalation_triggers.workspace_trust_state_untrusted",
+      "owner": "authority.guard",
+      "enforcement_phase": "predispatch",
+      "reason_code": "authority.escalation.workspace_trust_state_untrusted.triggered",
+      "positive_test_id": "test_policy_enforcement_matrix_positive[hard_escalation_triggers.workspace_trust_state_untrusted]",
+      "negative_test_id": "test_policy_enforcement_matrix_negative[hard_escalation_triggers.workspace_trust_state_untrusted]"
+    },
+    {
+      "policy_path": "hard_escalation_triggers.out_of_band_file_mutation_detected",
+      "owner": "authority.guard",
+      "enforcement_phase": "predispatch",
+      "reason_code": "authority.escalation.out_of_band_file_mutation_detected.triggered",
+      "positive_test_id": "test_policy_enforcement_matrix_positive[hard_escalation_triggers.out_of_band_file_mutation_detected]",
+      "negative_test_id": "test_policy_enforcement_matrix_negative[hard_escalation_triggers.out_of_band_file_mutation_detected]"
+    },
+    {
+      "policy_path": "hard_escalation_triggers.mutation_plan_precondition_mismatch",
+      "owner": "mutation.guard",
+      "enforcement_phase": "predispatch",
+      "reason_code": "authority.escalation.mutation_plan_precondition_mismatch.triggered",
+      "positive_test_id": "test_policy_enforcement_matrix_positive[hard_escalation_triggers.mutation_plan_precondition_mismatch]",
+      "negative_test_id": "test_policy_enforcement_matrix_negative[hard_escalation_triggers.mutation_plan_precondition_mismatch]"
+    },
+    {
+      "policy_path": "hard_escalation_triggers.direct_human_mutation_requested",
+      "owner": "mutation.guard",
+      "enforcement_phase": "initial",
+      "reason_code": "authority.escalation.direct_human_mutation_requested.triggered",
+      "positive_test_id": "test_policy_enforcement_matrix_positive[hard_escalation_triggers.direct_human_mutation_requested]",
+      "negative_test_id": "test_policy_enforcement_matrix_negative[hard_escalation_triggers.direct_human_mutation_requested]"
     }
   ],
-  "bundle_id": "policy-bundle-1ed31dd671814ff4cef8",
-  "bundle_sha256": "1ed31dd671814ff4cef8e756a41aec7ffe664cf5c214c775490192ffeb6844f4"
+  "bundle_id": "policy-bundle-d5e2169be779695ba467",
+  "bundle_sha256": "d5e2169be779695ba467cabeb8c2738513608d833da1212539c3deb383a4a75f"
 }

@@ -9,6 +9,7 @@ from video_factory.config import canonical_sha256
 from video_factory.domain import HashDigest, OpaqueId
 
 from .contracts import (
+    AuthorityRequirement,
     LegacyNextStepProjection,
     ParityDifference,
     WorkflowContractError,
@@ -32,6 +33,11 @@ ALLOWED_EXPLANATIONS = {
     "EXPLAINED_FRONTIER_EXPANSION",
     "EXPLAINED_BLUEPRINT_CONSOLIDATION",
     "EXPLAINED_AUTHORITY_HARDENING",
+}
+EXPLANATION_DIMENSIONS = {
+    "EXPLAINED_FRONTIER_EXPANSION": frozenset({"blockers"}),
+    "EXPLAINED_BLUEPRINT_CONSOLIDATION": frozenset({"consumed_evidence"}),
+    "EXPLAINED_AUTHORITY_HARDENING": frozenset({"required_authority"}),
 }
 
 
@@ -93,6 +99,59 @@ def default_parity_normalization() -> dict[str, object]:
             "approve_publish": "human_or_campaign",
             "ready_for_human_publish": "human_or_campaign",
         },
+        "known_blocker_reason_codes": [
+            "parity.legacy_blocker_unmapped",
+            "workflow.approval.blocked",
+            "workflow.artifact_graph_valid.blocked",
+            "workflow.brief_present.blocked",
+            "workflow.candidate_ranking_current.blocked",
+            "workflow.continuity_qc.blocked",
+            "workflow.continuity_qc.failed",
+            "workflow.continuity_qc.missing",
+            "workflow.edit_manifest_current.blocked",
+            "workflow.external_publish_complete.pending_human",
+            "workflow.feasibility_pass.blocked",
+            "workflow.final_delivery.missing",
+            "workflow.final_delivery_valid.blocked",
+            "workflow.mode.preview_only",
+            "workflow.packet_contract_valid.blocked",
+            "workflow.packet_present.blocked",
+            "workflow.publish_metadata.missing",
+            "workflow.publish_metadata_bound.blocked",
+            "workflow.qc.blocked",
+            "workflow.review.blocked",
+            "workflow.rough_cut_pass.blocked",
+            "workflow.shot_qc.failed",
+            "workflow.shot_qc.missing",
+            "workflow.storyboard_present.blocked",
+            "workflow.workspace_trusted.blocked",
+        ],
+        "legacy_evidence_labels": [
+            "brief",
+            "candidate-ranking",
+            "edit-manifest",
+            "feasibility pass",
+            "final review pass",
+            "final-delivery",
+            "final-review",
+            "generation readiness",
+            "generation-feasibility-review",
+            "generation-packet",
+            "packet review pass",
+            "packet-approval",
+            "packet-review",
+            "passing storyboard reviews",
+            "publish metadata",
+            "publish-approval",
+            "publish-metadata-draft",
+            "rough-cut-report",
+            "shot-qc",
+            "storyboard",
+            "storyboard approval",
+            "storyboard-approval",
+            "storyboard-review",
+            "trusted workspace observation",
+        ],
         "default_authority": "policy",
         "unmapped_behavior": "MISMATCH",
         "authority_effect": "none",
@@ -153,7 +212,10 @@ def _values(
         "action": legacy.action_type,
         "blockers": list(_legacy_reason_codes(legacy.blockers, normalization)),
         "actor": legacy.actor_role,
-        "required_authority": legacy_authority,
+        "required_authority": {
+            "requirement": str(legacy_authority),
+            "approval_required": legacy.approval_required,
+        },
         "consumed_evidence": list(legacy.consumed_evidence),
         "prohibited_actions": sorted(legacy.prohibited_actions),
     }
@@ -163,7 +225,15 @@ def _values(
             set(value.reason_code for value in item.blockers) if item is not None else ()
         ),
         "actor": item.actor_role if item is not None else None,
-        "required_authority": item.authority_requirement.value if item is not None else None,
+        "required_authority": {
+            "requirement": (
+                item.authority_requirement.value if item is not None else None
+            ),
+            "approval_required": (
+                item is not None
+                and item.authority_requirement != AuthorityRequirement.POLICY
+            ),
+        },
         "consumed_evidence": (
             sorted(str(value) for value in item.consumed_evidence_sha256s)
             if item is not None else []
@@ -215,6 +285,14 @@ def compare_legacy_parity(
     unknown_explanations = set(explanations.values()) - ALLOWED_EXPLANATIONS
     if unknown_explanations or not set(explanations) <= set(PARITY_DIMENSIONS):
         raise WorkflowContractError("workflow.parity.explanation", "parity explanation is not allowlisted")
+    if any(
+        dimension not in EXPLANATION_DIMENSIONS[code]
+        for dimension, code in explanations.items()
+    ):
+        raise WorkflowContractError(
+            "workflow.parity.explanation_scope",
+            "parity explanation is not valid for that semantic dimension",
+        )
     differences: list[ParityDifference] = []
     unexplained: list[str] = []
     for dimension in PARITY_DIMENSIONS:
@@ -223,6 +301,57 @@ def compare_legacy_parity(
         if legacy_digest == declarative_digest:
             continue
         explanation = explanations.get(dimension)
+        if explanation == "EXPLAINED_FRONTIER_EXPANSION":
+            known = set(normalized["known_blocker_reason_codes"])
+            if (
+                not isinstance(legacy_values[dimension], list)
+                or not isinstance(declarative_values[dimension], list)
+                or not set(legacy_values[dimension]) <= known
+                or not set(declarative_values[dimension]) <= known
+            ):
+                raise WorkflowContractError(
+                    "workflow.parity.explanation_values",
+                    "blocker explanation contains an unowned reason code",
+                )
+        elif explanation == "EXPLAINED_BLUEPRINT_CONSOLIDATION":
+            known_labels = set(normalized["legacy_evidence_labels"])
+            legacy_evidence = legacy_values[dimension]
+            declarative_evidence = declarative_values[dimension]
+            if (
+                not isinstance(legacy_evidence, list)
+                or not isinstance(declarative_evidence, list)
+                or not set(legacy_evidence) <= known_labels
+                or not declarative_evidence
+                or any(
+                    not isinstance(value, str)
+                    or len(value) != 64
+                    or value.lower() != value
+                    or any(character not in "0123456789abcdef" for character in value)
+                    for value in declarative_evidence
+                )
+            ):
+                raise WorkflowContractError(
+                    "workflow.parity.explanation_values",
+                    "evidence explanation is not an exact legacy-label to digest upgrade",
+                )
+        elif explanation == "EXPLAINED_AUTHORITY_HARDENING":
+            legacy_authority = legacy_values[dimension]
+            declarative_authority = declarative_values[dimension]
+            expected_keys = {"requirement", "approval_required"}
+            if (
+                not isinstance(legacy_authority, Mapping)
+                or not isinstance(declarative_authority, Mapping)
+                or set(legacy_authority) != expected_keys
+                or set(declarative_authority) != expected_keys
+                or legacy_authority["requirement"]
+                != declarative_authority["requirement"]
+                or legacy_authority["approval_required"] is not False
+                or declarative_authority["approval_required"] is not True
+            ):
+                raise WorkflowContractError(
+                    "workflow.parity.explanation_values",
+                    "authority explanation is not a one-way exact authority hardening",
+                )
         differences.append(
             ParityDifference(dimension, legacy_digest, declarative_digest, explanation)
         )
@@ -295,7 +424,12 @@ def validate_workflow_parity_report(report: WorkflowParityReport) -> WorkflowPar
     if dimensions != tuple(item for item in PARITY_DIMENSIONS if item in dimensions):
         raise WorkflowContractError("workflow.parity.order", "parity differences are not canonical")
     if any(
-        value.explanation_code is not None and value.explanation_code not in ALLOWED_EXPLANATIONS
+        value.explanation_code is not None
+        and (
+            value.explanation_code not in ALLOWED_EXPLANATIONS
+            or value.dimension
+            not in EXPLANATION_DIMENSIONS[value.explanation_code]
+        )
         for value in report.differences
     ):
         raise WorkflowContractError("workflow.parity.explanation", "parity explanation is invalid")

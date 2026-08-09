@@ -28,6 +28,15 @@ _CONTEXT_FIELDS = (
     "current_manifest_sha256",
     "evidence_graph_sha256",
 )
+_APPROVAL_CONTEXT_FIELDS = _CONTEXT_FIELDS
+_CONTEXT_FIELDS_BY_CLAIM = {
+    "artifact_graph_valid": ("rules_bundle_sha256",),
+    "storyboard_approval_current": _APPROVAL_CONTEXT_FIELDS,
+    "generation_approval_current": _APPROVAL_CONTEXT_FIELDS,
+    "generation_mode_permits_execution": ("effective_config_sha256",),
+    "workspace_trusted": ("current_manifest_sha256",),
+    "publish_approval_current": _APPROVAL_CONTEXT_FIELDS,
+}
 _PROHIBITED = (
     "auto_transition_workflow_state",
     "auto_approve",
@@ -192,7 +201,7 @@ def _gate(claim_id: str, owner: str) -> GateDefinition:
         gate_id=OpaqueId(f"gate.{claim_id}"),
         owner=owner,
         stable_reason_prefix=f"workflow.{claim_id}",
-        consumed_context_fields=_CONTEXT_FIELDS,
+        consumed_context_fields=_CONTEXT_FIELDS_BY_CLAIM.get(claim_id, ()),
     )
 
 

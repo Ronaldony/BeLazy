@@ -177,52 +177,26 @@
       "owner": "artifact-owner",
       "stable_reason_prefix": "workflow.artifact_graph_valid",
       "consumed_context_fields": [
-        "workflow_definition_sha256",
-        "policy_bundle_sha256",
-        "rules_bundle_sha256",
-        "effective_config_sha256",
-        "current_manifest_sha256",
-        "evidence_graph_sha256"
+        "rules_bundle_sha256"
       ]
     },
     {
       "gate_id": "gate.brief_present",
       "owner": "creator",
       "stable_reason_prefix": "workflow.brief_present",
-      "consumed_context_fields": [
-        "workflow_definition_sha256",
-        "policy_bundle_sha256",
-        "rules_bundle_sha256",
-        "effective_config_sha256",
-        "current_manifest_sha256",
-        "evidence_graph_sha256"
-      ]
+      "consumed_context_fields": []
     },
     {
       "gate_id": "gate.storyboard_present",
       "owner": "creator",
       "stable_reason_prefix": "workflow.storyboard_present",
-      "consumed_context_fields": [
-        "workflow_definition_sha256",
-        "policy_bundle_sha256",
-        "rules_bundle_sha256",
-        "effective_config_sha256",
-        "current_manifest_sha256",
-        "evidence_graph_sha256"
-      ]
+      "consumed_context_fields": []
     },
     {
       "gate_id": "gate.storyboard_review_pass",
       "owner": "reviewer",
       "stable_reason_prefix": "workflow.storyboard_review_pass",
-      "consumed_context_fields": [
-        "workflow_definition_sha256",
-        "policy_bundle_sha256",
-        "rules_bundle_sha256",
-        "effective_config_sha256",
-        "current_manifest_sha256",
-        "evidence_graph_sha256"
-      ]
+      "consumed_context_fields": []
     },
     {
       "gate_id": "gate.storyboard_approval_current",
@@ -241,53 +215,25 @@
       "gate_id": "gate.packet_present",
       "owner": "creator",
       "stable_reason_prefix": "workflow.packet_present",
-      "consumed_context_fields": [
-        "workflow_definition_sha256",
-        "policy_bundle_sha256",
-        "rules_bundle_sha256",
-        "effective_config_sha256",
-        "current_manifest_sha256",
-        "evidence_graph_sha256"
-      ]
+      "consumed_context_fields": []
     },
     {
       "gate_id": "gate.packet_contract_valid",
       "owner": "creator",
       "stable_reason_prefix": "workflow.packet_contract_valid",
-      "consumed_context_fields": [
-        "workflow_definition_sha256",
-        "policy_bundle_sha256",
-        "rules_bundle_sha256",
-        "effective_config_sha256",
-        "current_manifest_sha256",
-        "evidence_graph_sha256"
-      ]
+      "consumed_context_fields": []
     },
     {
       "gate_id": "gate.packet_review_pass",
       "owner": "reviewer",
       "stable_reason_prefix": "workflow.packet_review_pass",
-      "consumed_context_fields": [
-        "workflow_definition_sha256",
-        "policy_bundle_sha256",
-        "rules_bundle_sha256",
-        "effective_config_sha256",
-        "current_manifest_sha256",
-        "evidence_graph_sha256"
-      ]
+      "consumed_context_fields": []
     },
     {
       "gate_id": "gate.feasibility_pass",
       "owner": "independent-reviewer",
       "stable_reason_prefix": "workflow.feasibility_pass",
-      "consumed_context_fields": [
-        "workflow_definition_sha256",
-        "policy_bundle_sha256",
-        "rules_bundle_sha256",
-        "effective_config_sha256",
-        "current_manifest_sha256",
-        "evidence_graph_sha256"
-      ]
+      "consumed_context_fields": []
     },
     {
       "gate_id": "gate.generation_approval_current",
@@ -307,12 +253,7 @@
       "owner": "human-operator",
       "stable_reason_prefix": "workflow.generation_mode_permits_execution",
       "consumed_context_fields": [
-        "workflow_definition_sha256",
-        "policy_bundle_sha256",
-        "rules_bundle_sha256",
-        "effective_config_sha256",
-        "current_manifest_sha256",
-        "evidence_graph_sha256"
+        "effective_config_sha256"
       ]
     },
     {
@@ -320,143 +261,68 @@
       "owner": "workspace-authority",
       "stable_reason_prefix": "workflow.workspace_trusted",
       "consumed_context_fields": [
-        "workflow_definition_sha256",
-        "policy_bundle_sha256",
-        "rules_bundle_sha256",
-        "effective_config_sha256",
-        "current_manifest_sha256",
-        "evidence_graph_sha256"
+        "current_manifest_sha256"
       ]
     },
     {
       "gate_id": "gate.shot_qc_pass",
       "owner": "human-or-channel-tool",
       "stable_reason_prefix": "workflow.shot_qc_pass",
-      "consumed_context_fields": [
-        "workflow_definition_sha256",
-        "policy_bundle_sha256",
-        "rules_bundle_sha256",
-        "effective_config_sha256",
-        "current_manifest_sha256",
-        "evidence_graph_sha256"
-      ]
+      "consumed_context_fields": []
     },
     {
       "gate_id": "gate.continuity_qc_pass",
       "owner": "qc-tool-or-reviewer",
       "stable_reason_prefix": "workflow.continuity_qc_pass",
-      "consumed_context_fields": [
-        "workflow_definition_sha256",
-        "policy_bundle_sha256",
-        "rules_bundle_sha256",
-        "effective_config_sha256",
-        "current_manifest_sha256",
-        "evidence_graph_sha256"
-      ]
+      "consumed_context_fields": []
     },
     {
       "gate_id": "gate.candidate_ranking_current",
       "owner": "qc-tool",
       "stable_reason_prefix": "workflow.candidate_ranking_current",
-      "consumed_context_fields": [
-        "workflow_definition_sha256",
-        "policy_bundle_sha256",
-        "rules_bundle_sha256",
-        "effective_config_sha256",
-        "current_manifest_sha256",
-        "evidence_graph_sha256"
-      ]
+      "consumed_context_fields": []
     },
     {
       "gate_id": "gate.edit_manifest_current",
       "owner": "human-editor",
       "stable_reason_prefix": "workflow.edit_manifest_current",
-      "consumed_context_fields": [
-        "workflow_definition_sha256",
-        "policy_bundle_sha256",
-        "rules_bundle_sha256",
-        "effective_config_sha256",
-        "current_manifest_sha256",
-        "evidence_graph_sha256"
-      ]
+      "consumed_context_fields": []
     },
     {
       "gate_id": "gate.rough_cut_pass",
       "owner": "editor",
       "stable_reason_prefix": "workflow.rough_cut_pass",
-      "consumed_context_fields": [
-        "workflow_definition_sha256",
-        "policy_bundle_sha256",
-        "rules_bundle_sha256",
-        "effective_config_sha256",
-        "current_manifest_sha256",
-        "evidence_graph_sha256"
-      ]
+      "consumed_context_fields": []
     },
     {
       "gate_id": "gate.final_delivery_present",
       "owner": "editor",
       "stable_reason_prefix": "workflow.final_delivery_present",
-      "consumed_context_fields": [
-        "workflow_definition_sha256",
-        "policy_bundle_sha256",
-        "rules_bundle_sha256",
-        "effective_config_sha256",
-        "current_manifest_sha256",
-        "evidence_graph_sha256"
-      ]
+      "consumed_context_fields": []
     },
     {
       "gate_id": "gate.final_delivery_valid",
       "owner": "editor",
       "stable_reason_prefix": "workflow.final_delivery_valid",
-      "consumed_context_fields": [
-        "workflow_definition_sha256",
-        "policy_bundle_sha256",
-        "rules_bundle_sha256",
-        "effective_config_sha256",
-        "current_manifest_sha256",
-        "evidence_graph_sha256"
-      ]
+      "consumed_context_fields": []
     },
     {
       "gate_id": "gate.final_review_pass",
       "owner": "reviewer",
       "stable_reason_prefix": "workflow.final_review_pass",
-      "consumed_context_fields": [
-        "workflow_definition_sha256",
-        "policy_bundle_sha256",
-        "rules_bundle_sha256",
-        "effective_config_sha256",
-        "current_manifest_sha256",
-        "evidence_graph_sha256"
-      ]
+      "consumed_context_fields": []
     },
     {
       "gate_id": "gate.publish_metadata_present",
       "owner": "creator",
       "stable_reason_prefix": "workflow.publish_metadata_present",
-      "consumed_context_fields": [
-        "workflow_definition_sha256",
-        "policy_bundle_sha256",
-        "rules_bundle_sha256",
-        "effective_config_sha256",
-        "current_manifest_sha256",
-        "evidence_graph_sha256"
-      ]
+      "consumed_context_fields": []
     },
     {
       "gate_id": "gate.publish_metadata_bound",
       "owner": "creator",
       "stable_reason_prefix": "workflow.publish_metadata_bound",
-      "consumed_context_fields": [
-        "workflow_definition_sha256",
-        "policy_bundle_sha256",
-        "rules_bundle_sha256",
-        "effective_config_sha256",
-        "current_manifest_sha256",
-        "evidence_graph_sha256"
-      ]
+      "consumed_context_fields": []
     },
     {
       "gate_id": "gate.publish_approval_current",
@@ -475,14 +341,7 @@
       "gate_id": "gate.external_publish_complete",
       "owner": "human-publisher",
       "stable_reason_prefix": "workflow.external_publish_complete",
-      "consumed_context_fields": [
-        "workflow_definition_sha256",
-        "policy_bundle_sha256",
-        "rules_bundle_sha256",
-        "effective_config_sha256",
-        "current_manifest_sha256",
-        "evidence_graph_sha256"
-      ]
+      "consumed_context_fields": []
     }
   ],
   "actions": [
@@ -1051,6 +910,6 @@
       ]
     }
   ],
-  "workflow_id": "workflow-1a32f0921ee2918fa6d5",
-  "definition_sha256": "1a32f0921ee2918fa6d51b2dfab38b665bb4274402360624624738c758cb732d"
+  "workflow_id": "workflow-ace55cb2304b3d28c5fa",
+  "definition_sha256": "ace55cb2304b3d28c5fa1e3ddac525ba17ce6feff0803748348cb601ec5ce552"
 }

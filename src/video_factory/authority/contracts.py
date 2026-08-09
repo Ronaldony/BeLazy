@@ -21,6 +21,7 @@ from video_factory.workflow import (
     AuthorityRequirement,
     AutonomyProfile,
     ExecutableProductionPlan,
+    WorkflowEvaluation,
 )
 
 
@@ -59,6 +60,14 @@ class LedgerRecordState(StrEnum):
     UNKNOWN = "unknown"
 
 
+class HardEscalationState(StrEnum):
+    """Closed tri-state for one target-owned hard-escalation trigger."""
+
+    CLEAR = "clear"
+    TRIGGERED = "triggered"
+    UNKNOWN = "unknown"
+
+
 @dataclass(frozen=True, slots=True)
 class ProfileSelection:
     assurance: AssuranceProfile
@@ -89,11 +98,33 @@ class AuthorityScope:
 
 
 @dataclass(frozen=True, slots=True)
+class PrincipalSignatureVerification:
+    """One authenticated human principal bound to one signature check."""
+
+    principal_id: OpaqueId
+    signature_verification_ref: ArtifactReference
+
+
+@dataclass(frozen=True, slots=True)
+class HardEscalationFact:
+    """One material policy fact plus exact evidence supplied for verification.
+
+    The shape is structural only.  A trusted ledger/runtime must authenticate
+    the referenced evidence; constructing this value never creates authority.
+    """
+
+    trigger: str
+    state: HardEscalationState
+    evidence_refs: tuple[ArtifactReference, ...]
+
+
+@dataclass(frozen=True, slots=True)
 class ActionAuthorityRequest:
     request_id: OpaqueId
     request_sha256: HashDigest
     request_envelope_sha256: HashDigest
     idempotency_key: IdempotencyKey
+    requester_principal_id: OpaqueId
     action_id: OpaqueId
     capability_id: OpaqueId
     executable_plan_sha256: HashDigest
@@ -101,9 +132,11 @@ class ActionAuthorityRequest:
     authority_requirement: AuthorityRequirement
     side_effect: bool
     plan: ExecutableProductionPlan | None
+    workflow_evaluation: WorkflowEvaluation | None
     gate_context: GateContext
     profiles: ProfileSelection
     scope: AuthorityScope
+    hard_escalation_facts: tuple[HardEscalationFact, ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -123,8 +156,12 @@ class PolicyBundle:
     bundle_sha256: HashDigest
     policy_version: str
     classifier_version: str
+    governance_policy_sha256: HashDigest
     default_decision: AuthorityDecisionStatus
     unknown_state_fail_closed: bool
+    self_approval_forbidden: bool
+    release_campaign_enabled: bool
+    hard_escalation_triggers: tuple[str, ...]
     action_risk_by_action: tuple[tuple[OpaqueId, ActionRisk], ...]
     enforcement_matrix: tuple[PolicyEnforcementRule, ...]
 
@@ -200,12 +237,16 @@ class AuthorityVerificationReceipt:
     authority_decision_sha256: HashDigest | None
     gate_context_sha256: HashDigest
     risk_assessment_sha256: HashDigest
+    workflow_evaluation_sha256: HashDigest | None
+    workflow_evaluation_verification_ref: ArtifactReference | None
     authority_source: AuthoritySource
     ledger_state: LedgerRecordState
     ledger_head_sha256: HashDigest
     ledger_entry: ArtifactReference
+    requester_principal_id: OpaqueId
+    requester_authentication_ref: ArtifactReference
     grant_sha256: HashDigest | None
-    principal_ids: tuple[OpaqueId, ...]
+    principal_verifications: tuple[PrincipalSignatureVerification, ...]
     signature_verification_refs: tuple[ArtifactReference, ...]
     revocation_checked_at: str
     kill_switch_clear: bool
@@ -236,6 +277,7 @@ class AuthorityDecision:
     source: AuthoritySource
     reason_codes: tuple[str, ...]
     matched_limit_sha256: HashDigest | None
+    authority_basis_sha256: HashDigest | None
     verification_receipt_id: OpaqueId | None
     verification_receipt_sha256: HashDigest | None
     evaluated_at: str
@@ -253,7 +295,14 @@ class VerifiedAuthorityDecision:
 
 
 class TrustedAuthorizationLedger(Protocol):
-    """Port implemented by a trusted runtime, never by a raw document."""
+    """Port implemented by a trusted runtime, never by a raw document.
+
+    For workflow requests, implementations independently resolve the current
+    observation/evidence graph and issue the workflow-evaluation verification
+    reference only when its clean evaluation digest exactly matches the
+    request.  Deriving that proof from caller-supplied fields alone violates
+    this port contract.
+    """
 
     def verify_current(
         self,

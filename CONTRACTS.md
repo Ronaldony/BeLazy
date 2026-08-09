@@ -148,8 +148,9 @@ action identities. Evaluation is pure and complete: it returns satisfied
 claims, every blocker, all currently executable actions, the stable recommended
 action, consumed evidence, and the six material context inputs. Packet review
 and feasibility, and final review and metadata preparation, can appear together
-on the frontier. Incremental evaluation fingerprints each gate and invalidates
-the transitive dependent claims; its semantic projection must equal a clean
+on the frontier. Each gate binds only the material-context fields it declares;
+a stale PASS is rejected, while an unrelated context change invalidates only
+the transitive dependent claims. Its semantic projection must equal a clean
 full recomputation.
 
 Each frontier action produces a distinct `executable-production-plan/1.0` and
@@ -165,16 +166,27 @@ covers all 26 action identities and compares action, blockers, actor, required
 authority, consumed evidence, and prohibited actions. Loaded evaluations are
 cleanly recomputed from their gate results under the exact target DAG before
 comparison or plan construction. A parity report cannot cut over or authorize,
-and any unexplained dimension fails.
+and any unexplained dimension fails. The 78 rows feed the same episode
+observation to the legacy planner and an independent declarative gate adapter;
+no expected action is fed into that adapter. Explanation codes are
+dimension-scoped and validate target-owned blocker codes or the committed
+legacy-label-to-SHA evidence shape.
 
 `video_factory.authority` keeps three independent axes: `AssuranceProfile`
 describes evidence rigor, `AutonomyProfile` describes how work may be proposed,
 and `ActionRisk` determines authority. An `ActionAuthorityRequest` binds the
-exact request-envelope/idempotency identity, workflow action and executable
-plan, all seven current-context digests, workspace/channel/concept/episode,
+exact request-envelope/idempotency identity and requester principal, workflow
+action, exact clean workflow evaluation, and executable plan, all seven
+current-context digests, workspace/channel/concept/episode,
 provider/model/destination, canonical artifact and output scopes, cost/currency,
-candidate/retry limits, and requested profiles. The target-owned policy bundle
-recomputes risk; an unknown action is unsupported and fails closed.
+candidate/retry limits, requested profiles, and the closed target
+hard-escalation catalog with exact evidence. The target-owned policy bundle
+recomputes risk; an unknown action is unsupported and fails closed. Its
+resource also binds the exact governance YAML digest, hard-escalation trigger
+catalog, self-approval prohibition, and disabled W04 release-campaign state.
+Triggered or unknown facts deny as R4 escalation; omitted, reordered, or
+evidence-free facts are invalid. Every enforcement-matrix row names its own
+executable positive and negative test node, owner, phase, and observed reason.
 
 `standing-authorization/1.0` is parse-only unverified input. Core exposes no
 grant/sign/issue API, and R4 can never use a standing grant. Standing scope
@@ -186,7 +198,14 @@ or campaign authority source.
 `creates_authority=false`; legacy `ApprovalEvidence` and readiness records do
 not prove signature, ledger inclusion, or current revocation. Only an
 `authority-decision/1.0` produced from a trusted ledger receipt can carry
-`execution_authority`.
+`execution_authority`. Each human is bound to one signature verification whose
+content is distinct from every other authentication proof. The requester is
+authenticated by a separate immutable proof and cannot self-approve. Workflow
+authority additionally requires a trusted-ledger proof for the exact clean
+workflow-evaluation SHA; a structurally self-rehashed gate bundle is
+non-authorizing. The decision seals the exact initial authority basis so fresh
+revalidation cannot swap its source, grant, requester, human, workflow proof,
+or signature evidence.
 
 Initial evaluation verifies the exact request/risk/context and allowed authority
 source. Every actual executor dispatch, reconcile, and managed mutation then
@@ -194,16 +213,22 @@ calls `TrustedAuthorizationLedger.revalidate_and_reserve_current` immediately
 before the side effect. The fresh receipt is bound to the distinct purpose,
 decision, request, context, workspace observation, adapter/service identity,
 ledger head/state, current signature and revocation evidence, kill switch,
-cost/candidate reservation,
+exact risk and workflow-evaluation proof, cost/candidate reservation,
 retry index, and idempotency key. A receipt for dispatch cannot be replayed for
 reconcile or mutation. Missing, unavailable, stale, expired, superseded,
 revoked, over-limit, or rebound state fails before the external call.
+The executor receives an immutable runtime scope containing the actual subject,
+adapter/provider, model, destination, cost/currency, candidates, and retry;
+dispatch compares it exactly with the authority request and stores it for any
+later reconcile.
 
 The W02 bridge remains deliberately conservative: `managed_mutation` is fixed
 at R4 in the target policy, requires a W04 dual-human ledger decision, and then
 also requires the existing exact break-glass evidence and two-human binding.
 W04 does not activate lower mutation tiers merely from a path or requester
-label. Concrete durable ledger storage, signatures, clocks, budget settlement,
+label. The immutable mutation plan preserves the originating requester; the
+W04 request must match it, and that requester cannot appear in either human
+approver set. Concrete durable ledger storage, signatures, clocks, budget settlement,
 executor/journal persistence, and crash/TOCTOU recovery remain W06 runtime
 implementations behind the completed W04 ports.
 

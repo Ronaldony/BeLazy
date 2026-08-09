@@ -17,6 +17,7 @@ from video_factory.workflow import (
     AuthorityRequirement,
     AutonomyProfile,
     ExecutableProductionPlan,
+    WorkflowEvaluation,
     default_workflow_definition,
     validate_executable_production_plan,
 )
@@ -31,8 +32,11 @@ from .contracts import (
     AuthorityScope,
     AuthoritySource,
     AuthorityVerificationReceipt,
+    HardEscalationFact,
+    HardEscalationState,
     LedgerRecordState,
     OutputScope,
+    PrincipalSignatureVerification,
     ProfileSelection,
     TrustedAuthorizationLedger,
     UnverifiedStandingAuthorization,
@@ -111,8 +115,24 @@ def _reference_mapping(reference: ArtifactReference) -> dict[str, str]:
     return {"path": path, "sha256": digest, "artifact_version": version}
 
 
-def _validate_reference_set(references: Sequence[ArtifactReference]) -> tuple[ArtifactReference, ...]:
+def _principal_verification_mapping(
+    verification: PrincipalSignatureVerification,
+) -> dict[str, object]:
+    return {
+        "principal_id": _token(str(verification.principal_id), "principal_id"),
+        "signature_verification_ref": _reference_mapping(
+            verification.signature_verification_ref
+        ),
+    }
+
+
+def _validate_reference_set(
+    references: Sequence[ArtifactReference],
+    *,
+    require_canonical_order: bool = False,
+) -> tuple[ArtifactReference, ...]:
     identities: dict[str, tuple[str, str, str]] = {}
+    ordered: list[tuple[str, str, str, str]] = []
     for reference in references:
         mapping = _reference_mapping(reference)
         key = unicodedata.normalize("NFC", mapping["path"]).casefold()
@@ -121,9 +141,49 @@ def _validate_reference_set(references: Sequence[ArtifactReference]) -> tuple[Ar
         if existing is not None and existing != identity:
             raise AuthorityContractError("authority.scope.path_collision", "artifact path identities collide")
         identities[key] = identity
+        ordered.append((key, *identity))
     if len(references) != len(identities):
         raise AuthorityContractError("authority.scope.reference_duplicate", "artifact references are duplicated")
+    if require_canonical_order and ordered != sorted(ordered):
+        raise AuthorityContractError(
+            "authority.scope.reference_order",
+            "artifact references are not in canonical identity order",
+        )
     return tuple(references)
+
+
+def _hard_escalation_fact_mappings(
+    facts: Sequence[HardEscalationFact],
+) -> list[dict[str, object]]:
+    mappings: list[dict[str, object]] = []
+    all_evidence: list[ArtifactReference] = []
+    for fact in facts:
+        trigger = _token(fact.trigger, "hard escalation trigger")
+        if not isinstance(fact.state, HardEscalationState):
+            raise AuthorityContractError(
+                "authority.escalation.state",
+                "hard escalation state is outside the closed tri-state",
+            )
+        if not fact.evidence_refs:
+            raise AuthorityContractError(
+                "authority.escalation.evidence",
+                "every hard escalation fact requires exact evidence",
+            )
+        _validate_reference_set(
+            fact.evidence_refs, require_canonical_order=True
+        )
+        all_evidence.extend(fact.evidence_refs)
+        mappings.append(
+            {
+                "trigger": trigger,
+                "state": fact.state.value,
+                "evidence_refs": [
+                    _reference_mapping(value) for value in fact.evidence_refs
+                ],
+            }
+        )
+    _validate_reference_set(tuple(all_evidence))
+    return mappings
 
 
 def _token(value: object, label: str) -> str:
@@ -167,6 +227,13 @@ def _output_scope_mappings(
             )
         output_keys.add(key)
         outputs.append({"path_prefix": path, "artifact_versions": list(versions)})
+    if [str(item["path_prefix"]).casefold() for item in outputs] != sorted(
+        str(item["path_prefix"]).casefold() for item in outputs
+    ):
+        raise AuthorityContractError(
+            "authority.scope.output_order",
+            "output scopes are not in canonical path order",
+        )
     return outputs
 
 
@@ -189,7 +256,9 @@ def _scope_mapping(scope: AuthorityScope) -> dict[str, object]:
     ):
         if value is not None:
             _token(str(value), label)
-    _validate_reference_set(scope.input_artifacts)
+    _validate_reference_set(
+        scope.input_artifacts, require_canonical_order=True
+    )
     outputs = _output_scope_mappings(scope.allowed_outputs)
     return {
         "workspace_id": str(scope.workspace_id),
@@ -212,23 +281,28 @@ def _request_identity(
     request_id: str,
     request_envelope_sha256: str,
     idempotency_key: str,
+    requester_principal_id: str,
     action_id: str,
     capability_id: str,
     executable_plan_sha256: str,
+    workflow_evaluation_sha256: str | None,
     action_risk: ActionRisk,
     authority_requirement: AuthorityRequirement,
     side_effect: bool,
     gate_context: GateContext,
     profiles: ProfileSelection,
     scope: AuthorityScope,
+    hard_escalation_facts: Sequence[HardEscalationFact],
 ) -> dict[str, object]:
     return {
         "request_id": request_id,
         "request_envelope_sha256": request_envelope_sha256,
         "idempotency_key": idempotency_key,
+        "requester_principal_id": requester_principal_id,
         "action_id": action_id,
         "capability_id": capability_id,
         "executable_plan_sha256": executable_plan_sha256,
+        "workflow_evaluation_sha256": workflow_evaluation_sha256,
         "action_risk": action_risk.value,
         "authority_requirement": authority_requirement.value,
         "side_effect": side_effect,
@@ -238,6 +312,9 @@ def _request_identity(
             "autonomy": profiles.autonomy.value,
         },
         "scope": _scope_mapping(scope),
+        "hard_escalation_facts": _hard_escalation_fact_mappings(
+            hard_escalation_facts
+        ),
     }
 
 
@@ -248,15 +325,22 @@ def action_authority_request_to_mapping(request: ActionAuthorityRequest) -> dict
             str(request.request_id),
             str(request.request_envelope_sha256),
             str(request.idempotency_key),
+            str(request.requester_principal_id),
             str(request.action_id),
             str(request.capability_id),
             str(request.executable_plan_sha256),
+            (
+                str(request.workflow_evaluation.evaluation_sha256)
+                if request.workflow_evaluation is not None
+                else None
+            ),
             request.action_risk,
             request.authority_requirement,
             request.side_effect,
             request.gate_context,
             request.profiles,
             request.scope,
+            request.hard_escalation_facts,
         ),
         "request_sha256": str(request.request_sha256),
     }
@@ -267,30 +351,39 @@ def build_action_authority_request(
     request_id: str,
     request_envelope_sha256: str,
     idempotency_key: str,
+    requester_principal_id: str,
     plan: ExecutableProductionPlan,
+    workflow_evaluation: WorkflowEvaluation,
     profiles: ProfileSelection,
     scope: AuthorityScope,
+    hard_escalation_facts: Sequence[HardEscalationFact],
 ) -> ActionAuthorityRequest:
-    validate_executable_production_plan(default_workflow_definition(), plan)
+    validate_executable_production_plan(
+        default_workflow_definition(), plan, workflow_evaluation
+    )
     identity = _request_identity(
         request_id,
         request_envelope_sha256,
         idempotency_key,
+        requester_principal_id,
         str(plan.action_id),
         str(plan.capability_id),
         str(plan.plan_sha256),
+        str(workflow_evaluation.evaluation_sha256),
         plan.risk,
         plan.authority_requirement,
         plan.side_effect,
         plan.gate_context,
         profiles,
         scope,
+        hard_escalation_facts,
     )
     request = ActionAuthorityRequest(
         request_id=OpaqueId(request_id),
         request_sha256=canonical_sha256(identity),
         request_envelope_sha256=HashDigest(request_envelope_sha256),
         idempotency_key=IdempotencyKey(idempotency_key),
+        requester_principal_id=OpaqueId(requester_principal_id),
         action_id=plan.action_id,
         capability_id=plan.capability_id,
         executable_plan_sha256=plan.plan_sha256,
@@ -298,9 +391,11 @@ def build_action_authority_request(
         authority_requirement=plan.authority_requirement,
         side_effect=plan.side_effect,
         plan=plan,
+        workflow_evaluation=workflow_evaluation,
         gate_context=plan.gate_context,
         profiles=profiles,
         scope=scope,
+        hard_escalation_facts=tuple(hard_escalation_facts),
     )
     return validate_action_authority_request(request)
 
@@ -310,6 +405,7 @@ def build_bound_action_authority_request(
     request_id: str,
     request_envelope_sha256: str,
     idempotency_key: str,
+    requester_principal_id: str,
     action_id: str,
     capability_id: str,
     executable_plan_sha256: str,
@@ -319,6 +415,7 @@ def build_bound_action_authority_request(
     gate_context: GateContext,
     profiles: ProfileSelection,
     scope: AuthorityScope,
+    hard_escalation_facts: Sequence[HardEscalationFact],
 ) -> ActionAuthorityRequest:
     """Build a non-workflow request; target policy still recomputes its risk.
 
@@ -329,9 +426,11 @@ def build_bound_action_authority_request(
     if str(gate_context.executable_plan_sha256) != executable_plan_sha256:
         raise AuthorityContractError("authority.request.context", "GateContext is bound to another plan")
     identity = _request_identity(
-        request_id, request_envelope_sha256, idempotency_key, action_id,
-        capability_id, executable_plan_sha256, action_risk,
+        request_id, request_envelope_sha256, idempotency_key,
+        requester_principal_id, action_id,
+        capability_id, executable_plan_sha256, None, action_risk,
         authority_requirement, side_effect, gate_context, profiles, scope,
+        hard_escalation_facts,
     )
     return validate_action_authority_request(
         ActionAuthorityRequest(
@@ -339,6 +438,7 @@ def build_bound_action_authority_request(
             request_sha256=canonical_sha256(identity),
             request_envelope_sha256=HashDigest(request_envelope_sha256),
             idempotency_key=IdempotencyKey(idempotency_key),
+            requester_principal_id=OpaqueId(requester_principal_id),
             action_id=OpaqueId(action_id),
             capability_id=OpaqueId(capability_id),
             executable_plan_sha256=HashDigest(executable_plan_sha256),
@@ -346,16 +446,27 @@ def build_bound_action_authority_request(
             authority_requirement=authority_requirement,
             side_effect=side_effect,
             plan=None,
+            workflow_evaluation=None,
             gate_context=gate_context,
             profiles=profiles,
             scope=scope,
+            hard_escalation_facts=tuple(hard_escalation_facts),
         )
     )
 
 
 def validate_action_authority_request(request: ActionAuthorityRequest) -> ActionAuthorityRequest:
     if request.plan is not None:
-        validate_executable_production_plan(default_workflow_definition(), request.plan)
+        if request.workflow_evaluation is None:
+            raise AuthorityContractError(
+                "authority.request.evaluation",
+                "workflow authority requires the exact clean evaluation",
+            )
+        validate_executable_production_plan(
+            default_workflow_definition(),
+            request.plan,
+            request.workflow_evaluation,
+        )
         if (
             request.gate_context != request.plan.gate_context
             or request.action_id != request.plan.action_id
@@ -366,7 +477,7 @@ def validate_action_authority_request(request: ActionAuthorityRequest) -> Action
             or request.side_effect is not request.plan.side_effect
         ):
             raise AuthorityContractError("authority.request.plan_rebound", "request fields differ from the workflow plan")
-    elif (
+    elif request.workflow_evaluation is not None or (
         request.action_id != "managed_mutation"
         or request.capability_id != "managed_mutation"
         or request.action_risk is not ActionRisk.R4
@@ -376,9 +487,46 @@ def validate_action_authority_request(request: ActionAuthorityRequest) -> Action
         raise AuthorityContractError("authority.request.unowned_action", "non-workflow action is not the W02 R4 bridge")
     if request.gate_context.executable_plan_sha256 != request.executable_plan_sha256:
         raise AuthorityContractError("authority.request.context", "request context does not match the plan digest")
+    expected_triggers = target_policy_bundle().hard_escalation_triggers
+    actual_triggers = tuple(
+        value.trigger for value in request.hard_escalation_facts
+    )
+    if actual_triggers != expected_triggers:
+        raise AuthorityContractError(
+            "authority.escalation.coverage",
+            "hard escalation facts must cover the exact target policy order",
+        )
+    _hard_escalation_fact_mappings(request.hard_escalation_facts)
+    _validate_reference_set(
+        (
+            *request.scope.input_artifacts,
+            *(
+                reference
+                for fact in request.hard_escalation_facts
+                for reference in fact.evidence_refs
+            ),
+        )
+    )
+    if (
+        request.plan is not None
+        and request.side_effect
+        and any(
+            value is None
+            for value in (
+                request.scope.provider_id,
+                request.scope.model_id,
+                request.scope.destination,
+            )
+        )
+    ):
+        raise AuthorityContractError(
+            "authority.scope.production_missing",
+            "workflow side effects require provider, model and destination",
+        )
     for label, value in (
         ("request_id", request.request_id),
         ("idempotency_key", request.idempotency_key),
+        ("requester_principal_id", request.requester_principal_id),
         ("action_id", request.action_id),
         ("capability_id", request.capability_id),
     ):
@@ -388,10 +536,18 @@ def validate_action_authority_request(request: ActionAuthorityRequest) -> Action
         raise AuthorityContractError("authority.request.envelope", "request envelope digest is invalid")
     identity = _request_identity(
         str(request.request_id), envelope, str(request.idempotency_key),
+        str(request.requester_principal_id),
         str(request.action_id), str(request.capability_id),
-        str(request.executable_plan_sha256), request.action_risk,
+        str(request.executable_plan_sha256),
+        (
+            str(request.workflow_evaluation.evaluation_sha256)
+            if request.workflow_evaluation is not None
+            else None
+        ),
+        request.action_risk,
         request.authority_requirement, request.side_effect, request.gate_context,
         request.profiles, request.scope,
+        request.hard_escalation_facts,
     )
     if str(canonical_sha256(identity)) != str(request.request_sha256):
         raise AuthorityContractError("authority.request.digest", "authority request digest mismatch")
@@ -482,13 +638,19 @@ def validate_standing_authorization(value: UnverifiedStandingAuthorization) -> U
     expires_at = parse_rfc3339_datetime(value.expires_at)
     if valid_from >= expires_at:
         raise AuthorityContractError("authority.grant.window", "standing authorization window is empty")
-    _validate_reference_set(value.exact_input_artifacts)
+    _validate_reference_set(
+        value.exact_input_artifacts, require_canonical_order=True
+    )
     _output_scope_mappings(value.allowed_outputs)
     if not value.signature_verification_refs:
         raise AuthorityContractError(
             "authority.grant.signature",
             "standing authorization requires signature verification evidence",
         )
+    _validate_reference_set(
+        value.signature_verification_refs,
+        require_canonical_order=True,
+    )
     _validate_reference_set((value.ledger_record, *value.signature_verification_refs))
     digest = standing_authorization_sha256(value)
     if str(digest) != str(value.authorization_sha256):
@@ -526,7 +688,10 @@ def _standing_scope_blockers(
         (scope.destination, grant.destinations, "authority.scope.destination"),
     )
     for actual, allowed, reason in optional_checks:
-        if actual is not None and actual not in allowed:
+        if (
+            actual is None
+            or (actual is not None and actual not in allowed)
+        ):
             blockers.append(reason)
     if scope.cost_minor_units > grant.max_cost_per_run_minor or scope.currency != grant.currency:
         blockers.append("authority.scope.cost_run")
@@ -570,12 +735,31 @@ def _receipt_identity(receipt: AuthorityVerificationReceipt) -> dict[str, object
         ),
         "gate_context_sha256": str(receipt.gate_context_sha256),
         "risk_assessment_sha256": str(receipt.risk_assessment_sha256),
+        "workflow_evaluation_sha256": (
+            str(receipt.workflow_evaluation_sha256)
+            if receipt.workflow_evaluation_sha256 is not None
+            else None
+        ),
+        "workflow_evaluation_verification_ref": (
+            _reference_mapping(
+                receipt.workflow_evaluation_verification_ref
+            )
+            if receipt.workflow_evaluation_verification_ref is not None
+            else None
+        ),
         "authority_source": receipt.authority_source.value,
         "ledger_state": receipt.ledger_state.value,
         "ledger_head_sha256": str(receipt.ledger_head_sha256),
         "ledger_entry": _reference_mapping(receipt.ledger_entry),
+        "requester_principal_id": str(receipt.requester_principal_id),
+        "requester_authentication_ref": _reference_mapping(
+            receipt.requester_authentication_ref
+        ),
         "grant_sha256": str(receipt.grant_sha256) if receipt.grant_sha256 is not None else None,
-        "principal_ids": [str(item) for item in receipt.principal_ids],
+        "principal_verifications": [
+            _principal_verification_mapping(item)
+            for item in receipt.principal_verifications
+        ],
         "signature_verification_refs": [
             _reference_mapping(item) for item in receipt.signature_verification_refs
         ],
@@ -614,29 +798,140 @@ def authority_verification_receipt_to_mapping(receipt: AuthorityVerificationRece
     }
 
 
+def _authority_basis_sha256(
+    source: AuthoritySource,
+    receipt: AuthorityVerificationReceipt | None,
+) -> HashDigest:
+    if source is AuthoritySource.POLICY:
+        if receipt is not None and (
+            receipt.grant_sha256 is not None
+            or receipt.principal_verifications
+            or receipt.signature_verification_refs
+        ):
+            raise AuthorityContractError(
+                "authority.basis.policy",
+                "policy authority cannot acquire human or grant evidence",
+            )
+        return canonical_sha256({"authority_source": source.value})
+    if receipt is None:
+        raise AuthorityContractError(
+            "authority.basis.receipt",
+            "non-policy authority requires a verified authority basis",
+        )
+    return canonical_sha256(
+        {
+            "authority_source": source.value,
+            "grant_sha256": (
+                str(receipt.grant_sha256)
+                if receipt.grant_sha256 is not None
+                else None
+            ),
+            "ledger_entry": _reference_mapping(receipt.ledger_entry),
+            "requester_principal_id": str(receipt.requester_principal_id),
+            "requester_authentication_ref": _reference_mapping(
+                receipt.requester_authentication_ref
+            ),
+            "workflow_evaluation_sha256": (
+                str(receipt.workflow_evaluation_sha256)
+                if receipt.workflow_evaluation_sha256 is not None
+                else None
+            ),
+            "workflow_evaluation_verification_ref": (
+                _reference_mapping(
+                    receipt.workflow_evaluation_verification_ref
+                )
+                if receipt.workflow_evaluation_verification_ref is not None
+                else None
+            ),
+            "principal_verifications": [
+                _principal_verification_mapping(item)
+                for item in receipt.principal_verifications
+            ],
+            "signature_verification_refs": [
+                _reference_mapping(item)
+                for item in receipt.signature_verification_refs
+            ],
+        }
+    )
+
+
 def validate_authority_verification_receipt(
     receipt: AuthorityVerificationReceipt,
 ) -> AuthorityVerificationReceipt:
     if receipt.artifact_version != VERIFICATION_RECEIPT_VERSION:
         raise AuthorityContractError("authority.receipt.version", "unsupported receipt version")
-    if receipt.ledger_state is not LedgerRecordState.ACTIVE or receipt.kill_switch_clear is not True:
-        raise AuthorityContractError("authority.receipt.inactive", "receipt is not current and active")
+    if receipt.ledger_state is not LedgerRecordState.ACTIVE:
+        raise AuthorityContractError(
+            "authority.grant.revoked",
+            "receipt ledger state is not current and active",
+        )
+    if receipt.kill_switch_clear is not True:
+        raise AuthorityContractError(
+            "authority.kill_switch.engaged",
+            "receipt kill switch is engaged",
+        )
     if min(receipt.reserved_cost_minor_units, receipt.reserved_candidates, receipt.retry_index) < 0:
         raise AuthorityContractError("authority.receipt.limit", "receipt reservation is invalid")
-    if tuple(receipt.principal_ids) != tuple(sorted(set(receipt.principal_ids), key=str)):
-        raise AuthorityContractError("authority.receipt.principals", "receipt principals are not sorted and unique")
+    principal_ids = tuple(
+        str(item.principal_id) for item in receipt.principal_verifications
+    )
+    if principal_ids != tuple(sorted(set(principal_ids))):
+        raise AuthorityContractError(
+            "authority.receipt.principals",
+            "receipt principal verifications are not sorted and unique",
+        )
     if receipt.authority_source is AuthoritySource.NONE:
         raise AuthorityContractError(
             "authority.receipt.source",
             "verification receipt must identify its trusted authority source",
         )
+    _token(str(receipt.requester_principal_id), "requester_principal_id")
+    has_workflow_evaluation = receipt.workflow_evaluation_sha256 is not None
+    has_workflow_verification = (
+        receipt.workflow_evaluation_verification_ref is not None
+    )
+    if has_workflow_evaluation != has_workflow_verification:
+        raise AuthorityContractError(
+            "authority.receipt.workflow_evaluation",
+            "workflow evaluation verification binding is partial",
+        )
     if (
-        receipt.authority_source is not AuthoritySource.POLICY
-        and not receipt.signature_verification_refs
+        receipt.workflow_evaluation_verification_ref is not None
+        and str(
+            receipt.workflow_evaluation_verification_ref.artifact_version
+        )
+        != "workflow-evaluation-verification/1.0"
     ):
         raise AuthorityContractError(
+            "authority.receipt.workflow_evaluation",
+            "workflow evaluation verification evidence has another version",
+        )
+    human_counts = {
+        AuthoritySource.ONE_SHOT_HUMAN: 1,
+        AuthoritySource.DUAL_HUMAN: 2,
+    }
+    expected_humans = human_counts.get(receipt.authority_source)
+    if expected_humans is not None:
+        if (
+            len(receipt.principal_verifications) != expected_humans
+            or receipt.signature_verification_refs
+        ):
+            raise AuthorityContractError(
+                "authority.receipt.signature",
+                "human authority requires one distinct signature verification per principal",
+            )
+    elif receipt.principal_verifications:
+        raise AuthorityContractError(
+            "authority.receipt.principals",
+            "non-human authority cannot carry human principal verifications",
+        )
+    if receipt.authority_source in {
+        AuthoritySource.STANDING_GRANT,
+        AuthoritySource.RELEASE_CAMPAIGN,
+    } and not receipt.signature_verification_refs:
+        raise AuthorityContractError(
             "authority.receipt.signature",
-            "non-policy authority requires signature verification evidence",
+            "grant authority requires signature verification evidence",
         )
     if receipt.authority_source is AuthoritySource.STANDING_GRANT:
         if receipt.grant_sha256 is None:
@@ -649,7 +944,46 @@ def validate_authority_verification_receipt(
             "authority.receipt.grant",
             "non-standing authority receipt cannot name a standing grant",
         )
-    _validate_reference_set((receipt.ledger_entry, *receipt.signature_verification_refs))
+    paired_refs = tuple(
+        item.signature_verification_ref
+        for item in receipt.principal_verifications
+    )
+    _validate_reference_set(
+        receipt.signature_verification_refs,
+        require_canonical_order=True,
+    )
+    authentication_refs = (
+        receipt.requester_authentication_ref,
+        *paired_refs,
+        *receipt.signature_verification_refs,
+    )
+    content_distinct_proofs = (
+        *authentication_refs,
+        *(
+            (receipt.workflow_evaluation_verification_ref,)
+            if receipt.workflow_evaluation_verification_ref is not None
+            else ()
+        ),
+    )
+    proof_digests = tuple(
+        str(value.sha256) for value in content_distinct_proofs
+    )
+    if len(proof_digests) != len(set(proof_digests)):
+        raise AuthorityContractError(
+            "authority.receipt.signature_content",
+            "authentication, signature and workflow proofs must have distinct bytes",
+        )
+    _validate_reference_set(
+        (
+            receipt.ledger_entry,
+            *(
+                (receipt.workflow_evaluation_verification_ref,)
+                if receipt.workflow_evaluation_verification_ref is not None
+                else ()
+            ),
+            *authentication_refs,
+        )
+    )
     evaluated = parse_rfc3339_datetime(receipt.evaluated_at)
     checked = parse_rfc3339_datetime(receipt.revocation_checked_at)
     valid_until = parse_rfc3339_datetime(receipt.valid_until)
@@ -676,6 +1010,11 @@ def _decision_identity(decision: AuthorityDecision) -> dict[str, object]:
         "reason_codes": list(decision.reason_codes),
         "matched_limit_sha256": (
             str(decision.matched_limit_sha256) if decision.matched_limit_sha256 else None
+        ),
+        "authority_basis_sha256": (
+            str(decision.authority_basis_sha256)
+            if decision.authority_basis_sha256 is not None
+            else None
         ),
         "verification_receipt_id": (
             str(decision.verification_receipt_id) if decision.verification_receipt_id else None
@@ -719,7 +1058,6 @@ def validate_authority_decision(decision: AuthorityDecision) -> AuthorityDecisio
         },
         AuthorityRequirement.HUMAN_OR_CAMPAIGN: {
             AuthoritySource.ONE_SHOT_HUMAN,
-            AuthoritySource.RELEASE_CAMPAIGN,
         },
         AuthorityRequirement.TWO_INDEPENDENT_HUMANS: {
             AuthoritySource.DUAL_HUMAN,
@@ -748,6 +1086,11 @@ def validate_authority_decision(decision: AuthorityDecision) -> AuthorityDecisio
         raise AuthorityContractError(
             "authority.decision.limit",
             "decision limit binding is inconsistent with its status",
+        )
+    if authorized != (decision.authority_basis_sha256 is not None):
+        raise AuthorityContractError(
+            "authority.decision.basis",
+            "decision authority basis is inconsistent with its status",
         )
     parse_rfc3339_datetime(decision.evaluated_at)
     if decision.valid_until is not None and parse_rfc3339_datetime(decision.evaluated_at) >= parse_rfc3339_datetime(decision.valid_until):
@@ -798,6 +1141,11 @@ def _build_decision(
         source=source,
         reason_codes=tuple(dict.fromkeys(reasons)),
         matched_limit_sha256=matched,
+        authority_basis_sha256=(
+            _authority_basis_sha256(source, receipt)
+            if status is AuthorityDecisionStatus.AUTHORIZED
+            else None
+        ),
         verification_receipt_id=receipt.receipt_id if receipt is not None else None,
         verification_receipt_sha256=receipt.receipt_sha256 if receipt is not None else None,
         evaluated_at=evaluated_at.isoformat(),
@@ -822,12 +1170,28 @@ def _validate_initial_receipt(
     evaluated_at: datetime,
 ) -> None:
     validate_authority_verification_receipt(receipt)
+    expected_workflow_evaluation_sha256 = (
+        request.workflow_evaluation.evaluation_sha256
+        if request.workflow_evaluation is not None
+        else None
+    )
     if (
         receipt.purpose is not VerificationPurpose.INITIAL_DECISION
         or receipt.authority_decision_sha256 is not None
         or receipt.action_request_sha256 != request.request_sha256
         or receipt.gate_context_sha256 != gate_context_sha256(request.gate_context)
         or receipt.risk_assessment_sha256 != risk.assessment_sha256
+        or receipt.workflow_evaluation_sha256
+        != expected_workflow_evaluation_sha256
+        or (
+            request.workflow_evaluation is not None
+            and receipt.workflow_evaluation_verification_ref is None
+        )
+        or (
+            request.workflow_evaluation is None
+            and receipt.workflow_evaluation_verification_ref is not None
+        )
+        or receipt.requester_principal_id != request.requester_principal_id
         or parse_rfc3339_datetime(receipt.evaluated_at) != evaluated_at
         or receipt.idempotency_key != request.idempotency_key
         or receipt.workspace_id != request.scope.workspace_id
@@ -846,8 +1210,12 @@ def _source_allowed(
     requirement: AuthorityRequirement,
     risk: ActionRisk,
     source: AuthoritySource,
-    principals: tuple[OpaqueId, ...],
+    principal_verifications: tuple[PrincipalSignatureVerification, ...],
+    requester_principal_id: OpaqueId,
 ) -> bool:
+    principals = tuple(item.principal_id for item in principal_verifications)
+    if requester_principal_id in principals:
+        return False
     if requirement is AuthorityRequirement.POLICY:
         return risk in {ActionRisk.R0, ActionRisk.R1} and source is AuthoritySource.POLICY
     if requirement is AuthorityRequirement.STANDING_OR_ONE_HUMAN:
@@ -855,9 +1223,11 @@ def _source_allowed(
             source is AuthoritySource.ONE_SHOT_HUMAN and len(principals) == 1
         )
     if requirement is AuthorityRequirement.HUMAN_OR_CAMPAIGN:
-        return source is AuthoritySource.RELEASE_CAMPAIGN or (
-            source is AuthoritySource.ONE_SHOT_HUMAN and len(principals) == 1
-        )
+        # W05 has not yet supplied a trusted campaign-quality classifier or
+        # immutable incident/content-risk facts.  Campaign authority therefore
+        # remains fail-closed; one current independent human is the only W04
+        # source for this requirement.
+        return source is AuthoritySource.ONE_SHOT_HUMAN and len(principals) == 1
     if requirement is AuthorityRequirement.TWO_INDEPENDENT_HUMANS:
         return (
             risk is ActionRisk.R4
@@ -885,17 +1255,17 @@ def evaluate_authority(
     if str(request.gate_context.policy_bundle_sha256) != str(policy.bundle_sha256):
         raise AuthorityContractError("authority.context.policy", "request context uses another policy bundle")
     risk = classify_action_risk(request, policy)
+    if not risk.supported:
+        return risk, _build_decision(
+            request, risk, status=AuthorityDecisionStatus.DENIED, source=AuthoritySource.NONE,
+            reasons=risk.reason_codes, evaluated_at=evaluated_at,
+            required_authority=AuthorityRequirement.PROHIBITED_UNTIL_IMPLEMENTED,
+            receipt=None,
+        )
     if risk.effective_risk is not request.action_risk:
         return risk, _build_decision(
             request, risk, status=AuthorityDecisionStatus.DENIED, source=AuthoritySource.NONE,
             reasons=("authority.risk.plan_mismatch",), evaluated_at=evaluated_at,
-            required_authority=AuthorityRequirement.PROHIBITED_UNTIL_IMPLEMENTED,
-            receipt=None,
-        )
-    if not risk.supported:
-        return risk, _build_decision(
-            request, risk, status=AuthorityDecisionStatus.DENIED, source=AuthoritySource.NONE,
-            reasons=("authority.risk.unknown_action",), evaluated_at=evaluated_at,
             required_authority=AuthorityRequirement.PROHIBITED_UNTIL_IMPLEMENTED,
             receipt=None,
         )
@@ -943,11 +1313,26 @@ def evaluate_authority(
             required_authority=required, receipt=None,
         )
     _validate_initial_receipt(receipt, request, risk, evaluated_at)
+    verified_principals = tuple(
+        item.principal_id for item in receipt.principal_verifications
+    )
+    if request.requester_principal_id in verified_principals:
+        return risk, _build_decision(
+            request,
+            risk,
+            status=AuthorityDecisionStatus.DENIED,
+            source=AuthoritySource.NONE,
+            reasons=("authority.self_approval_forbidden",),
+            evaluated_at=evaluated_at,
+            required_authority=required,
+            receipt=None,
+        )
     if not _source_allowed(
         required,
         risk.effective_risk,
         receipt.authority_source,
-        receipt.principal_ids,
+        receipt.principal_verifications,
+        request.requester_principal_id,
     ):
         return risk, _build_decision(
             request, risk, status=AuthorityDecisionStatus.DENIED, source=AuthoritySource.NONE,
@@ -1145,7 +1530,26 @@ def revalidate_authority_for_side_effect(
     if (
         receipt.purpose is not purpose
         or receipt.authority_decision_sha256 != decision.decision_sha256
+        or receipt.authority_source is not decision.source
+        or _authority_basis_sha256(receipt.authority_source, receipt)
+        != decision.authority_basis_sha256
         or receipt.action_request_sha256 != request.request_sha256
+        or receipt.risk_assessment_sha256 != risk.assessment_sha256
+        or receipt.workflow_evaluation_sha256
+        != (
+            request.workflow_evaluation.evaluation_sha256
+            if request.workflow_evaluation is not None
+            else None
+        )
+        or (
+            request.workflow_evaluation is not None
+            and receipt.workflow_evaluation_verification_ref is None
+        )
+        or (
+            request.workflow_evaluation is None
+            and receipt.workflow_evaluation_verification_ref is not None
+        )
+        or receipt.requester_principal_id != request.requester_principal_id
         or receipt.gate_context_sha256 != gate_context_sha256(current_context)
         or receipt.idempotency_key != request.idempotency_key
         or receipt.workspace_id != request.scope.workspace_id
@@ -1159,6 +1563,17 @@ def revalidate_authority_for_side_effect(
         or receipt.retry_index != request.scope.retry_index
     ):
         raise AuthorityContractError("authority.predispatch.rebound", "predispatch receipt is bound to another action")
+    if not _source_allowed(
+        request.authority_requirement,
+        risk.effective_risk,
+        receipt.authority_source,
+        receipt.principal_verifications,
+        request.requester_principal_id,
+    ):
+        raise AuthorityContractError(
+            "authority.predispatch.source",
+            "predispatch authority source or principals no longer satisfy policy",
+        )
     return VerifiedAuthorityDecision(
         decision=decision,
         receipt=receipt,

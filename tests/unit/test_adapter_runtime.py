@@ -23,8 +23,11 @@ from video_factory.authority import (
     AuthoritySource,
     AuthorityVerificationReceipt,
     AutonomyProfile,
+    HardEscalationFact,
+    HardEscalationState,
     LedgerRecordState,
     OutputScope,
+    PrincipalSignatureVerification,
     ProfileSelection,
     VerificationPurpose,
     authority_verification_receipt_sha256,
@@ -71,6 +74,7 @@ from video_factory.providers import (
     CapabilityDescriptor,
     CostMeasurement,
     ExecutorAdapter,
+    ExecutorAuthorityScope,
     ExecutorDispatchContext,
     ExternalReference,
     ExternalStateUncertain,
@@ -105,6 +109,7 @@ from video_factory.workflow import (
     build_gate_result,
     default_workflow_definition,
     evaluate_workflow,
+    gate_consumed_context_sha256,
 )
 
 
@@ -114,7 +119,7 @@ MEDIA_CAPABILITY = CapabilityId("media.video.generate")
 TASK_CAPABILITY = CapabilityId("paid_external_generation")
 
 
-def _workflow_plan():
+def _workflow_bundle():
     definition = default_workflow_definition()
     policy = target_policy_bundle()
     action = next(
@@ -126,16 +131,35 @@ def _workflow_plan():
         if item.priority < action.priority
         and item.satisfies_claim_id != action.satisfies_claim_id
     }
+    seed = MaterialContextSeed(
+        workflow_definition_sha256=definition.definition_sha256,
+        policy_bundle_sha256=policy.bundle_sha256,
+        rules_bundle_sha256=HashDigest("3" * 64),
+        effective_config_sha256=HashDigest("b" * 64),
+        current_manifest_sha256=HashDigest("4" * 64),
+        evidence_graph_sha256=HashDigest("5" * 64),
+    )
+    gates = {str(item.gate_id): item for item in definition.gates}
     results = tuple(
         build_gate_result(
             str(claim.gate_id),
             GateStatus.PASS,
+            consumed_context_sha256=str(
+                gate_consumed_context_sha256(
+                    gates[str(claim.gate_id)], seed
+                )
+            ),
             evidence_sha256s=("a" * 64,),
         )
         if claim.claim_id in earlier_claims
         else build_gate_result(
             str(claim.gate_id),
             GateStatus.BLOCKED,
+            consumed_context_sha256=str(
+                gate_consumed_context_sha256(
+                    gates[str(claim.gate_id)], seed
+                )
+            ),
             reason_codes=(
                 action.trigger_reason_codes[0]
                 if claim.claim_id == action.satisfies_claim_id
@@ -145,21 +169,20 @@ def _workflow_plan():
         )
         for claim in definition.claims
     )
-    seed = MaterialContextSeed(
-        workflow_definition_sha256=definition.definition_sha256,
-        policy_bundle_sha256=policy.bundle_sha256,
-        rules_bundle_sha256=HashDigest("3" * 64),
-        effective_config_sha256=HashDigest("b" * 64),
-        current_manifest_sha256=HashDigest("4" * 64),
-        evidence_graph_sha256=HashDigest("5" * 64),
-    )
     evaluation = evaluate_workflow(definition, results, seed)
     assert evaluation.recommended_action_id == action.action_id
-    return build_executable_production_plan(
-        definition,
+    return (
+        build_executable_production_plan(
+            definition,
+            evaluation,
+            str(action.action_id),
+        ),
         evaluation,
-        str(action.action_id),
     )
+
+
+def _workflow_plan():
+    return _workflow_bundle()[0]
 
 
 def _gate_context() -> GateContext:
@@ -391,12 +414,29 @@ class SyntheticExecutor(ExecutorAdapter):
         )
 
 
+def _executor_scope() -> ExecutorAuthorityScope:
+    return ExecutorAuthorityScope(
+        workspace_id=OpaqueId("workspace-a"),
+        channel_id=OpaqueId("channel-a"),
+        concept_id=OpaqueId("concept-a"),
+        episode_id=OpaqueId("episode-a"),
+        provider_id=OpaqueId("adapter-b"),
+        model_id=OpaqueId("executor-model-a"),
+        destination="executor:adapter-b",
+        cost_minor_units=1,
+        currency="USD",
+        candidate_count=1,
+        retry_index=0,
+    )
+
+
 def _executor_context(request: RequestEnvelope) -> ExecutorDispatchContext:
     return ExecutorDispatchContext(
         staging=ReadOnlyStaging(request.input_artifacts, request.allowed_outputs, True),
         requested_tools=frozenset({OpaqueId("tool-a")}),
         allowed_tools=frozenset({OpaqueId("tool-a")}),
         capability_allowlist=frozenset({request.capability_id}),
+        authority_scope=_executor_scope(),
     )
 
 
@@ -412,6 +452,25 @@ def _authority_reference(
         RelativeArtifactPath(path),
         HashDigest(digest * 64),
         ArtifactVersion(version),
+    )
+
+
+def _hard_escalation_facts() -> tuple[HardEscalationFact, ...]:
+    return tuple(
+        HardEscalationFact(
+            trigger,
+            HardEscalationState.CLEAR,
+            (
+                _authority_reference(
+                    f"authority/facts/{index:02d}-{trigger}.json",
+                    format(index, "x"),
+                    "policy-fact-observation/1.0",
+                ),
+            ),
+        )
+        for index, trigger in enumerate(
+            target_policy_bundle().hard_escalation_triggers, start=1
+        )
     )
 
 
@@ -437,6 +496,20 @@ class _TrustedAuthorityLedger:
             authority_decision_sha256=decision_sha256,
             gate_context_sha256=gate_context_sha256(request.gate_context),
             risk_assessment_sha256=risk_sha256,
+            workflow_evaluation_sha256=(
+                request.workflow_evaluation.evaluation_sha256
+                if request.workflow_evaluation is not None
+                else None
+            ),
+            workflow_evaluation_verification_ref=(
+                _authority_reference(
+                    "authority/workflow-evaluation-verification.json",
+                    "b",
+                    "workflow-evaluation-verification/1.0",
+                )
+                if request.workflow_evaluation is not None
+                else None
+            ),
             authority_source=AuthoritySource.ONE_SHOT_HUMAN,
             ledger_state=LedgerRecordState.ACTIVE,
             ledger_head_sha256=HashDigest("7" * 64),
@@ -445,15 +518,24 @@ class _TrustedAuthorityLedger:
                 "8",
                 "authority-ledger-entry/1.0",
             ),
+            requester_principal_id=request.requester_principal_id,
+            requester_authentication_ref=_authority_reference(
+                "authority/requester-authentication.json",
+                "a",
+                "principal-authentication/1.0",
+            ),
             grant_sha256=None,
-            principal_ids=(OpaqueId("human-a"),),
-            signature_verification_refs=(
-                _authority_reference(
-                    "authority/signature.json",
-                    "9",
-                    "signature-verification/1.0",
+            principal_verifications=(
+                PrincipalSignatureVerification(
+                    OpaqueId("human-a"),
+                    _authority_reference(
+                        "authority/signature.json",
+                        "9",
+                        "signature-verification/1.0",
+                    ),
                 ),
             ),
+            signature_verification_refs=(),
             revocation_checked_at=evaluated_at.isoformat(),
             kill_switch_clear=True,
             reserved_cost_minor_units=request.scope.cost_minor_units,
@@ -524,8 +606,13 @@ class _TrustedAuthorityLedger:
         )
 
 
-def _w04_authority_kwargs(request: RequestEnvelope) -> dict[str, object]:
-    plan = _workflow_plan()
+def _w04_authority_kwargs(
+    request: RequestEnvelope,
+    *,
+    authority_request_id: str | None = None,
+    authority_idempotency_key: str | None = None,
+) -> dict[str, object]:
+    plan, evaluation = _workflow_bundle()
     assert plan.capability_id == request.capability_id
     scope = AuthorityScope(
         workspace_id=OpaqueId("workspace-a"),
@@ -549,15 +636,20 @@ def _w04_authority_kwargs(request: RequestEnvelope) -> dict[str, object]:
         ),
     )
     authority_request = build_action_authority_request(
-        request_id=str(request.request_id),
+        request_id=authority_request_id or str(request.request_id),
         request_envelope_sha256=request_envelope_sha256(request),
-        idempotency_key=str(request.idempotency_key),
+        idempotency_key=(
+            authority_idempotency_key or str(request.idempotency_key)
+        ),
+        requester_principal_id="requester-a",
         plan=plan,
+        workflow_evaluation=evaluation,
         profiles=ProfileSelection(
             AssuranceProfile.PRODUCTION,
             AutonomyProfile.ASSISTED,
         ),
         scope=scope,
+        hard_escalation_facts=_hard_escalation_facts(),
     )
     ledger = _TrustedAuthorityLedger()
     _, decision = evaluate_authority(
@@ -1092,6 +1184,97 @@ def test_executor_authorization_binds_the_full_request_envelope(mutate) -> None:
             current_context=_gate_context(),
             evaluated_at=_DISPATCH_TIME,
             **_w04_authority_kwargs(changed),
+            **_workspace_authority_kwargs(),
+        )
+    assert executor.external_calls == 0
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    (
+        {"authority_request_id": "authority-request-other"},
+        {"authority_idempotency_key": "authority-idempotency-other"},
+    ),
+    ids=("request-id", "idempotency-key"),
+)
+def test_executor_rejects_internal_w04_request_identity_rebound(
+    overrides: dict[str, str],
+) -> None:
+    executor = SyntheticExecutor()
+    request = _request(
+        TASK_CAPABILITY, ExecutionMode.AUTOMATED, key="internal-w04-identity"
+    )
+    with pytest.raises(ModeEnforcementError, match="W04 authority request"):
+        executor.dispatch(
+            request,
+            _executor_context(request),
+            authorization=_executor_authorization(request),
+            current_context=_gate_context(),
+            evaluated_at=_DISPATCH_TIME,
+            **_w04_authority_kwargs(request, **overrides),
+            **_workspace_authority_kwargs(),
+        )
+    assert executor.external_calls == 0
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    (
+        ("workspace_id", OpaqueId("workspace-other")),
+        ("channel_id", OpaqueId("channel-other")),
+        ("concept_id", OpaqueId("concept-other")),
+        ("episode_id", OpaqueId("episode-other")),
+        ("provider_id", OpaqueId("adapter-other")),
+        ("model_id", OpaqueId("executor-model-other")),
+        ("destination", "executor:other"),
+        ("cost_minor_units", 2),
+        ("currency", "KRW"),
+        ("candidate_count", 2),
+        ("retry_index", 1),
+    ),
+)
+def test_executor_rejects_runtime_scope_rebound_before_external_call(
+    field: str,
+    value: object,
+) -> None:
+    executor = SyntheticExecutor()
+    request = _request(
+        TASK_CAPABILITY,
+        ExecutionMode.AUTOMATED,
+        key=f"runtime-scope-{field}",
+    )
+    context = replace(
+        _executor_context(request),
+        authority_scope=replace(_executor_scope(), **{field: value}),
+    )
+    with pytest.raises(ModeEnforcementError, match="runtime"):
+        executor.dispatch(
+            request,
+            context,
+            authorization=_executor_authorization(request),
+            current_context=_gate_context(),
+            evaluated_at=_DISPATCH_TIME,
+            **_w04_authority_kwargs(request),
+            **_workspace_authority_kwargs(),
+        )
+    assert executor.external_calls == 0
+
+
+def test_executor_rejects_missing_runtime_authority_scope() -> None:
+    executor = SyntheticExecutor()
+    request = _request(
+        TASK_CAPABILITY,
+        ExecutionMode.AUTOMATED,
+        key="runtime-scope-missing",
+    )
+    with pytest.raises(AdapterContractError, match="scope is missing"):
+        executor.dispatch(
+            request,
+            replace(_executor_context(request), authority_scope=None),
+            authorization=_executor_authorization(request),
+            current_context=_gate_context(),
+            evaluated_at=_DISPATCH_TIME,
+            **_w04_authority_kwargs(request),
             **_workspace_authority_kwargs(),
         )
     assert executor.external_calls == 0

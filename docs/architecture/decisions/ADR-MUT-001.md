@@ -49,6 +49,9 @@ responsibilities.
   R1/R2/R3 activation remains disabled until a later trusted semantic
   classifier is explicitly adopted. W04 authority remains required and R4
   break-glass is additive;
+- the immutable mutation plan preserves the originating change-request
+  requester. The W04 action requester must match it exactly, and that requester
+  is forbidden from either W04 or break-glass human approver set;
 - create/replace content is re-resolved by a trusted port and exact object ID,
   digest, and byte length are bound into the execution authorization; identical
   objects reused across operations are resolved once and conflicting reuse of

@@ -11,6 +11,7 @@ from .contracts import (
     ActionRiskAssessment,
     AuthorityContractError,
     AuthorityDecisionStatus,
+    HardEscalationState,
     PolicyBundle,
     PolicyEnforcementRule,
 )
@@ -20,27 +21,72 @@ POLICY_ARTIFACT_VERSION = "policy-bundle/1.0"
 RISK_ASSESSMENT_VERSION = "action-risk-assessment/1.0"
 POLICY_VERSION = "authority-policy/2.1"
 CLASSIFIER_VERSION = "authority-risk-classifier/1.0"
+GOVERNANCE_POLICY_SHA256 = HashDigest(
+    "624e4bc552e39c1e962593bd4d59e393425db7352c43f2067280ca96eda368b2"
+)
+
+
+_HARD_ESCALATION_TRIGGERS = (
+    "unresolved_director_hard_blocker",
+    "low_or_conflicting_confidence",
+    "cost_over_grant",
+    "provider_or_model_not_allowlisted",
+    "new_publish_destination",
+    "material_blueprint_change_after_authorization",
+    "factual_or_rights_risk_unknown",
+    "kill_switch_not_clear",
+    "ledger_or_signature_invalid",
+    "workspace_trust_state_untrusted",
+    "out_of_band_file_mutation_detected",
+    "mutation_plan_precondition_mismatch",
+    "direct_human_mutation_requested",
+)
 
 
 _ENFORCEMENT_ROWS = (
-    ("default_decision", "authority.policy", "initial", "authority.policy.default_deny"),
-    ("unknown_state_behavior", "authority.policy", "initial", "authority.policy.unknown"),
-    ("ai_human_approval_creation_forbidden", "authority.requests", "serialization", "authority.ai_cannot_grant"),
-    ("executor_revalidation_required", "authority.guard", "predispatch", "authority.predispatch.required"),
-    ("material_change_invalidates_authority", "authority.guard", "initial", "authority.context.mismatch"),
+    ("default_decision", "authority.policy", "initial", "authority.evidence.missing"),
+    ("unknown_state_behavior", "authority.policy", "initial", "authority.risk.escalated_r4"),
+    ("ai_human_approval_creation_forbidden", "authority.requests", "serialization", "authority.approval_request.contract"),
+    ("self_approval_forbidden", "authority.ledger", "initial", "authority.self_approval_forbidden"),
+    ("release_campaign.activation", "authority.policy", "initial", "authority.source.insufficient"),
+    ("executor_revalidation_required", "authority.guard", "predispatch", "authority.predispatch.ledger"),
+    ("material_change_invalidates_authority", "authority.guard", "initial", "authority.predispatch.context"),
     ("scope.capability", "authority.scope", "initial", "authority.scope.capability"),
-    ("scope.channel_concept_episode", "authority.scope", "initial", "authority.scope.subject"),
+    ("scope.channel_concept_episode", "authority.scope", "initial", "authority.scope.channel"),
     ("scope.provider_model", "authority.scope", "initial", "authority.scope.provider"),
     ("scope.destination", "authority.scope", "initial", "authority.scope.destination"),
     ("scope.cost_per_run", "authority.scope", "initial", "authority.scope.cost_run"),
-    ("scope.cost_per_day", "authority.ledger", "predispatch", "authority.scope.cost_day"),
+    ("scope.cost_per_day", "authority.ledger", "predispatch", "authority.predispatch.denied"),
     ("scope.candidates", "authority.scope", "initial", "authority.scope.candidates"),
     ("scope.retries", "authority.scope", "initial", "authority.scope.retries"),
     ("validity", "authority.ledger", "initial", "authority.grant.expired"),
     ("revocation", "authority.ledger", "predispatch", "authority.grant.revoked"),
     ("kill_switch", "authority.ledger", "predispatch", "authority.kill_switch.engaged"),
-    ("R4.independent_approvers", "authority.ledger", "initial", "authority.r4.principals"),
+    ("R4.independent_approvers", "authority.ledger", "initial", "authority.source.insufficient"),
     ("R4.standing_grant_forbidden", "authority.policy", "initial", "authority.r4.standing_forbidden"),
+    *(
+        (
+            f"hard_escalation_triggers.{trigger}",
+            owner,
+            phase,
+            f"authority.escalation.{trigger}.triggered",
+        )
+        for trigger, owner, phase in (
+            ("unresolved_director_hard_blocker", "workflow.gates", "initial"),
+            ("low_or_conflicting_confidence", "workflow.gates", "initial"),
+            ("cost_over_grant", "authority.ledger", "predispatch"),
+            ("provider_or_model_not_allowlisted", "authority.scope", "initial"),
+            ("new_publish_destination", "authority.scope", "initial"),
+            ("material_blueprint_change_after_authorization", "authority.guard", "predispatch"),
+            ("factual_or_rights_risk_unknown", "workflow.gates", "initial"),
+            ("kill_switch_not_clear", "authority.ledger", "predispatch"),
+            ("ledger_or_signature_invalid", "authority.ledger", "initial"),
+            ("workspace_trust_state_untrusted", "authority.guard", "predispatch"),
+            ("out_of_band_file_mutation_detected", "authority.guard", "predispatch"),
+            ("mutation_plan_precondition_mismatch", "mutation.guard", "predispatch"),
+            ("direct_human_mutation_requested", "mutation.guard", "initial"),
+        )
+    ),
 )
 
 
@@ -51,10 +97,14 @@ def _enforcement_matrix() -> tuple[PolicyEnforcementRule, ...]:
             owner=owner,
             enforcement_phase=phase,
             reason_code=reason,
-            positive_test_id=f"test_policy_{index:02d}_positive",
-            negative_test_id=f"test_policy_{index:02d}_negative",
+            positive_test_id=(
+                f"test_policy_enforcement_matrix_positive[{path}]"
+            ),
+            negative_test_id=(
+                f"test_policy_enforcement_matrix_negative[{path}]"
+            ),
         )
-        for index, (path, owner, phase, reason) in enumerate(_ENFORCEMENT_ROWS, 1)
+        for path, owner, phase, reason in _ENFORCEMENT_ROWS
     )
 
 
@@ -63,8 +113,12 @@ def _bundle_identity(bundle: PolicyBundle) -> dict[str, object]:
         "artifact_version": bundle.artifact_version,
         "policy_version": bundle.policy_version,
         "classifier_version": bundle.classifier_version,
+        "governance_policy_sha256": str(bundle.governance_policy_sha256),
         "default_decision": bundle.default_decision.value,
         "unknown_state_fail_closed": bundle.unknown_state_fail_closed,
+        "self_approval_forbidden": bundle.self_approval_forbidden,
+        "release_campaign_enabled": bundle.release_campaign_enabled,
+        "hard_escalation_triggers": list(bundle.hard_escalation_triggers),
         "action_risk_by_action": [
             {"action_id": str(action_id), "risk": risk.value}
             for action_id, risk in bundle.action_risk_by_action
@@ -103,8 +157,12 @@ def target_policy_bundle() -> PolicyBundle:
         bundle_sha256=HashDigest("0" * 64),
         policy_version=POLICY_VERSION,
         classifier_version=CLASSIFIER_VERSION,
+        governance_policy_sha256=GOVERNANCE_POLICY_SHA256,
         default_decision=AuthorityDecisionStatus.DENIED,
         unknown_state_fail_closed=True,
+        self_approval_forbidden=True,
+        release_campaign_enabled=False,
+        hard_escalation_triggers=_HARD_ESCALATION_TRIGGERS,
         action_risk_by_action=risk_map,
         enforcement_matrix=_enforcement_matrix(),
     )
@@ -116,8 +174,12 @@ def target_policy_bundle() -> PolicyBundle:
             bundle_sha256=digest,
             policy_version=provisional.policy_version,
             classifier_version=provisional.classifier_version,
+            governance_policy_sha256=provisional.governance_policy_sha256,
             default_decision=provisional.default_decision,
             unknown_state_fail_closed=provisional.unknown_state_fail_closed,
+            self_approval_forbidden=provisional.self_approval_forbidden,
+            release_campaign_enabled=provisional.release_campaign_enabled,
+            hard_escalation_triggers=provisional.hard_escalation_triggers,
             action_risk_by_action=provisional.action_risk_by_action,
             enforcement_matrix=provisional.enforcement_matrix,
         )
@@ -129,16 +191,27 @@ def validate_policy_bundle(bundle: PolicyBundle) -> PolicyBundle:
         bundle.artifact_version != POLICY_ARTIFACT_VERSION
         or bundle.policy_version != POLICY_VERSION
         or bundle.classifier_version != CLASSIFIER_VERSION
+        or bundle.governance_policy_sha256 != GOVERNANCE_POLICY_SHA256
         or bundle.default_decision is not AuthorityDecisionStatus.DENIED
         or bundle.unknown_state_fail_closed is not True
+        or bundle.self_approval_forbidden is not True
+        or bundle.release_campaign_enabled is not False
+        or bundle.hard_escalation_triggers != _HARD_ESCALATION_TRIGGERS
     ):
         raise AuthorityContractError("authority.policy.contract", "policy bundle is not fail closed")
     action_ids = tuple(str(value) for value, _ in bundle.action_risk_by_action)
     if action_ids != tuple(dict.fromkeys(action_ids)):
         raise AuthorityContractError("authority.policy.action_duplicate", "policy action ids are duplicated")
     matrix_paths = tuple(row.policy_path for row in bundle.enforcement_matrix)
-    if set(matrix_paths) != {row[0] for row in _ENFORCEMENT_ROWS} or len(matrix_paths) != len(set(matrix_paths)):
-        raise AuthorityContractError("authority.policy.matrix", "policy enforcement matrix is incomplete")
+    if (
+        set(matrix_paths) != {row[0] for row in _ENFORCEMENT_ROWS}
+        or len(matrix_paths) != len(set(matrix_paths))
+        or bundle.enforcement_matrix != _enforcement_matrix()
+    ):
+        raise AuthorityContractError(
+            "authority.policy.matrix",
+            "policy enforcement matrix is not the exact tested target matrix",
+        )
     for row in bundle.enforcement_matrix:
         if not all(
             value and value.strip() == value
@@ -195,13 +268,33 @@ def classify_action_risk(
     require_target_policy_bundle(policy)
     risk_by_action = {str(key): value for key, value in policy.action_risk_by_action}
     action_id = str(request.action_id)
-    supported = action_id in risk_by_action
-    effective = risk_by_action.get(action_id, ActionRisk.R4)
-    reasons = (
-        (f"authority.risk.target_action.{effective.value.lower()}",)
-        if supported
-        else ("authority.risk.unknown_action", "authority.risk.escalated_r4")
+    nonclear_facts = tuple(
+        value
+        for value in request.hard_escalation_facts
+        if value.state is not HardEscalationState.CLEAR
     )
+    action_supported = action_id in risk_by_action
+    supported = action_supported and not nonclear_facts
+    effective = (
+        risk_by_action[action_id]
+        if supported
+        else ActionRisk.R4
+    )
+    if nonclear_facts:
+        reasons = (
+            *(
+                f"authority.escalation.{value.trigger}.{value.state.value}"
+                for value in nonclear_facts
+            ),
+            "authority.risk.escalated_r4",
+        )
+    elif not action_supported:
+        reasons = (
+            "authority.risk.unknown_action",
+            "authority.risk.escalated_r4",
+        )
+    else:
+        reasons = (f"authority.risk.target_action.{effective.value.lower()}",)
     provisional = ActionRiskAssessment(
         artifact_version=RISK_ASSESSMENT_VERSION,
         assessment_id=OpaqueId("pending"),

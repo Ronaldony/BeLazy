@@ -365,6 +365,7 @@ def _change_request_mapping(request: ChangeRequest) -> dict[str, object]:
 def _plan_projection(
     *,
     request_id: OpaqueId,
+    requester_id: OpaqueId | None,
     change_request_sha256: HashDigest,
     workspace_id: OpaqueId,
     before_revision_id: OpaqueId,
@@ -377,7 +378,7 @@ def _plan_projection(
     operations: Sequence[PlannedMutationOperation],
     semantic_diff: Sequence[SemanticDiffEntry],
 ) -> dict[str, object]:
-    return {
+    projection: dict[str, object] = {
         "request_id": str(request_id),
         "change_request_sha256": str(change_request_sha256),
         "workspace_id": str(workspace_id),
@@ -391,6 +392,9 @@ def _plan_projection(
         "operations": [_planned_mapping(operation) for operation in operations],
         "semantic_diff": [_semantic_diff_mapping(item) for item in semantic_diff],
     }
+    if requester_id is not None:
+        projection["requester_id"] = str(requester_id)
+    return projection
 
 
 def build_mutation_plan(
@@ -408,7 +412,7 @@ def build_mutation_plan(
         )
     request_id = _opaque(str(request.request_id), "request_id")
     workspace_id = _opaque(str(request.workspace_id), "workspace_id")
-    _opaque(str(request.requester_id), "requester_id")
+    requester_id = _opaque(str(request.requester_id), "requester_id")
     _timestamp(request.requested_at, "requested_at")
     before_revision = _opaque(str(request.before_revision_id), "before_revision_id")
     before_manifest = _sha256(
@@ -493,6 +497,7 @@ def build_mutation_plan(
     request_digest = canonical_sha256(_change_request_mapping(request))
     projection = _plan_projection(
         request_id=request_id,
+        requester_id=requester_id,
         change_request_sha256=request_digest,
         workspace_id=workspace_id,
         before_revision_id=before_revision,
@@ -521,6 +526,7 @@ def build_mutation_plan(
         risk_tier=risk_tier,
         operations=tuple(planned),
         semantic_diff=semantic_diff,
+        requester_id=requester_id,
     )
 
 
@@ -737,6 +743,11 @@ def validate_mutation_plan(plan: MutationPlan) -> MutationPlan:
             "mutation plan operations are not in canonical order",
         )
     request_id = _opaque(str(plan.request_id), "request_id")
+    requester_id = (
+        _opaque(str(plan.requester_id), "requester_id")
+        if plan.requester_id is not None
+        else None
+    )
     change_request_digest = _sha256(
         str(plan.change_request_sha256), "change_request_sha256"
     )
@@ -819,6 +830,7 @@ def validate_mutation_plan(plan: MutationPlan) -> MutationPlan:
         )
     projection = _plan_projection(
         request_id=request_id,
+        requester_id=requester_id,
         change_request_sha256=change_request_digest,
         workspace_id=workspace_id,
         before_revision_id=before_revision,
@@ -858,6 +870,7 @@ def mutation_plan_to_mapping(plan: MutationPlan) -> dict[str, object]:
         "plan_sha256": str(plan.plan_sha256),
         **_plan_projection(
             request_id=plan.request_id,
+            requester_id=plan.requester_id,
             change_request_sha256=plan.change_request_sha256,
             workspace_id=plan.workspace_id,
             before_revision_id=plan.before_revision_id,

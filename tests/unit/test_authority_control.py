@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
+from hashlib import sha256
+from pathlib import Path
 
 import pytest
 
@@ -19,8 +21,11 @@ from video_factory.authority import (
     AuthoritySource,
     AuthorityVerificationReceipt,
     AutonomyProfile,
+    HardEscalationFact,
+    HardEscalationState,
     LedgerRecordState,
     OutputScope,
+    PrincipalSignatureVerification,
     ProfileSelection,
     UnverifiedStandingAuthorization,
     VerificationPurpose,
@@ -37,6 +42,7 @@ from video_factory.authority import (
     revalidate_authority_for_side_effect,
     standing_authorization_sha256,
     target_policy_bundle,
+    validate_approval_request,
     validate_standing_authorization,
 )
 from video_factory.domain import (
@@ -55,6 +61,7 @@ from video_factory.workflow import (
     build_gate_result,
     default_workflow_definition,
     evaluate_workflow,
+    gate_consumed_context_sha256,
 )
 
 
@@ -69,6 +76,28 @@ def _ref(path: str, digest: str = "a", version: str = "brief/1.0") -> ArtifactRe
     )
 
 
+def _hard_escalation_facts(
+    overrides: dict[str, HardEscalationState] | None = None,
+) -> tuple[HardEscalationFact, ...]:
+    states = overrides or {}
+    return tuple(
+        HardEscalationFact(
+            trigger=trigger,
+            state=states.get(trigger, HardEscalationState.CLEAR),
+            evidence_refs=(
+                _ref(
+                    f"authority/facts/{index:02d}-{trigger}.json",
+                    format(index, "x"),
+                    "policy-fact-observation/1.0",
+                ),
+            ),
+        )
+        for index, trigger in enumerate(
+            target_policy_bundle().hard_escalation_triggers, start=1
+        )
+    )
+
+
 def _plan(action_id: str):
     definition = default_workflow_definition()
     policy = target_policy_bundle()
@@ -78,26 +107,6 @@ def _plan(action_id: str):
         for item in definition.actions
         if item.priority < action.priority and item.satisfies_claim_id != action.satisfies_claim_id
     }
-    results = []
-    for claim in definition.claims:
-        target = claim.claim_id == action.satisfies_claim_id
-        if str(claim.claim_id) in earlier_claims:
-            results.append(build_gate_result(str(claim.gate_id), GateStatus.PASS, evidence_sha256s=("b" * 64,)))
-        elif target:
-            reason = action.trigger_reason_codes[0] if action.trigger_reason_codes else f"workflow.{claim.claim_id}.blocked"
-            results.append(
-                build_gate_result(
-                    str(claim.gate_id), GateStatus.BLOCKED,
-                    reason_codes=(reason,), messages=("blocked",),
-                )
-            )
-        else:
-            results.append(
-                build_gate_result(
-                    str(claim.gate_id), GateStatus.UNKNOWN,
-                    reason_codes=("workflow.gate.missing",), messages=("missing",),
-                )
-            )
     context = MaterialContextSeed(
         workflow_definition_sha256=definition.definition_sha256,
         policy_bundle_sha256=policy.bundle_sha256,
@@ -106,9 +115,39 @@ def _plan(action_id: str):
         current_manifest_sha256=HashDigest("e" * 64),
         evidence_graph_sha256=HashDigest("f" * 64),
     )
+    gates = {str(item.gate_id): item for item in definition.gates}
+    results = []
+    for claim in definition.claims:
+        target = claim.claim_id == action.satisfies_claim_id
+        if str(claim.claim_id) in earlier_claims:
+            results.append(build_gate_result(
+                str(claim.gate_id), GateStatus.PASS,
+                consumed_context_sha256=str(gate_consumed_context_sha256(gates[str(claim.gate_id)], context)),
+                evidence_sha256s=("b" * 64,),
+            ))
+        elif target:
+            reason = action.trigger_reason_codes[0] if action.trigger_reason_codes else f"workflow.{claim.claim_id}.blocked"
+            results.append(
+                build_gate_result(
+                    str(claim.gate_id), GateStatus.BLOCKED,
+                    consumed_context_sha256=str(gate_consumed_context_sha256(gates[str(claim.gate_id)], context)),
+                    reason_codes=(reason,), messages=("blocked",),
+                )
+            )
+        else:
+            results.append(
+                build_gate_result(
+                    str(claim.gate_id), GateStatus.UNKNOWN,
+                    consumed_context_sha256=str(gate_consumed_context_sha256(gates[str(claim.gate_id)], context)),
+                    reason_codes=("workflow.gate.missing",), messages=("missing",),
+                )
+            )
     evaluation = evaluate_workflow(definition, results, context)
     assert str(evaluation.recommended_action_id) == action_id
-    return build_executable_production_plan(definition, evaluation, action_id)
+    return (
+        build_executable_production_plan(definition, evaluation, action_id),
+        evaluation,
+    )
 
 
 def _scope(*, inputs: tuple[ArtifactReference, ...] = ()) -> AuthorityScope:
@@ -129,15 +168,29 @@ def _scope(*, inputs: tuple[ArtifactReference, ...] = ()) -> AuthorityScope:
     )
 
 
-def _request(action_id: str = "run_external_generation", *, profiles=None, scope=None):
-    plan = _plan(action_id)
+def _request(
+    action_id: str = "run_external_generation",
+    *,
+    profiles=None,
+    scope=None,
+    requester_principal_id: str = "requester-a",
+    hard_escalation_facts=None,
+):
+    plan, evaluation = _plan(action_id)
     return build_action_authority_request(
         request_id="request-a",
         request_envelope_sha256="1" * 64,
         idempotency_key="idempotency-a",
+        requester_principal_id=requester_principal_id,
         plan=plan,
+        workflow_evaluation=evaluation,
         profiles=profiles or ProfileSelection(AssuranceProfile.PRODUCTION, AutonomyProfile.ASSISTED),
         scope=scope or _scope(inputs=(_ref("inputs/packet.json"),)),
+        hard_escalation_facts=(
+            hard_escalation_facts
+            if hard_escalation_facts is not None
+            else _hard_escalation_facts()
+        ),
     )
 
 
@@ -146,10 +199,21 @@ class FakeLedger:
         self.source = source
         self.principals = principals
         self.deny = False
+        self.ledger_state = LedgerRecordState.ACTIVE
         self.kill_switch_clear = True
         self.purpose_override: VerificationPurpose | None = None
         self.workspace_observation_override: str | None = None
         self.omit_signature_verification = False
+        self.shared_human_signature = False
+        self.shared_human_signature_bytes = False
+        self.requester_principal_override: str | None = None
+        self.requester_authentication_digest = "9"
+        self.risk_assessment_override: str | None = None
+        self.workflow_evaluation_override: str | None = None
+        self.workflow_verification_digest = "a"
+        self.omit_workflow_verification = False
+        self.trusted_workflow_evaluation_sha256: str | None = None
+        self.remaining_daily_budget_minor: int | None = None
 
     def _receipt(
         self,
@@ -172,23 +236,79 @@ class FakeLedger:
             action_request_sha256=request.request_sha256,
             authority_decision_sha256=decision_sha256,
             gate_context_sha256=gate_context_sha256(request.gate_context),
-            risk_assessment_sha256=risk,
+            risk_assessment_sha256=HashDigest(
+                self.risk_assessment_override or str(risk)
+            ),
+            workflow_evaluation_sha256=(
+                HashDigest(
+                    self.workflow_evaluation_override
+                    or str(request.workflow_evaluation.evaluation_sha256)
+                )
+                if request.workflow_evaluation is not None
+                else None
+            ),
+            workflow_evaluation_verification_ref=(
+                None
+                if request.workflow_evaluation is None
+                or self.omit_workflow_verification
+                else _ref(
+                    "ledger/workflow-evaluation-verification.json",
+                    self.workflow_verification_digest,
+                    "workflow-evaluation-verification/1.0",
+                )
+            ),
             authority_source=self.source,
-            ledger_state=LedgerRecordState.ACTIVE,
+            ledger_state=self.ledger_state,
             ledger_head_sha256=HashDigest("2" * 64),
             ledger_entry=_ref("ledger/entry.json", "3", "authority-ledger-entry/1.0"),
+            requester_principal_id=OpaqueId(
+                self.requester_principal_override
+                or str(request.requester_principal_id)
+            ),
+            requester_authentication_ref=_ref(
+                "ledger/requester-authentication.json",
+                self.requester_authentication_digest,
+                "principal-authentication/1.0",
+            ),
             grant_sha256=grant_sha256,
-            principal_ids=tuple(OpaqueId(item) for item in self.principals),
-            signature_verification_refs=(
+            principal_verifications=(
                 ()
                 if self.omit_signature_verification
-                else (
+                else tuple(
+                    PrincipalSignatureVerification(
+                        OpaqueId(principal),
+                        _ref(
+                            (
+                                "ledger/signature-shared.json"
+                                if self.shared_human_signature
+                                else f"ledger/signature-{index}.json"
+                            ),
+                            (
+                                "4"
+                                if self.shared_human_signature
+                                or self.shared_human_signature_bytes
+                                else str(index + 4)
+                            ),
+                            "signature-verification/1.0",
+                        ),
+                    )
+                    for index, principal in enumerate(self.principals)
+                )
+            ),
+            signature_verification_refs=(
+                (
                     _ref(
-                        "ledger/signature.json",
-                        "4",
+                        "ledger/grant-signature.json",
+                        "7",
                         "signature-verification/1.0",
                     ),
                 )
+                if self.source in {
+                    AuthoritySource.STANDING_GRANT,
+                    AuthoritySource.RELEASE_CAMPAIGN,
+                }
+                and not self.omit_signature_verification
+                else ()
             ),
             revocation_checked_at=evaluated_at.isoformat(),
             kill_switch_clear=self.kill_switch_clear,
@@ -218,7 +338,14 @@ class FakeLedger:
     def verify_current(
         self, request, risk, presented_grant, authority_references, *, current_context, evaluated_at
     ):
-        if self.deny:
+        if self.deny or (
+            self.trusted_workflow_evaluation_sha256 is not None
+            and (
+                request.workflow_evaluation is None
+                or str(request.workflow_evaluation.evaluation_sha256)
+                != self.trusted_workflow_evaluation_sha256
+            )
+        ):
             return None
         return self._receipt(
             request,
@@ -232,7 +359,11 @@ class FakeLedger:
         self, decision, request, *, current_context, workspace_observation_sha256,
         adapter_id, service_identity, evaluated_at, purpose
     ):
-        if self.deny:
+        if self.deny or (
+            self.remaining_daily_budget_minor is not None
+            and request.scope.cost_minor_units
+            > self.remaining_daily_budget_minor
+        ):
             return None
         return self._receipt(
             request,
@@ -293,6 +424,597 @@ def _standing_grant(request) -> UnverifiedStandingAuthorization:
         authorization_id=OpaqueId(f"standing-authorization-{str(digest)[:20]}"),
         authorization_sha256=digest,
     )
+
+
+def _rehash_standing_grant(
+    grant: UnverifiedStandingAuthorization,
+    **changes: object,
+) -> UnverifiedStandingAuthorization:
+    provisional = replace(
+        grant,
+        authorization_id=OpaqueId("pending"),
+        authorization_sha256=HashDigest("0" * 64),
+        **changes,
+    )
+    digest = standing_authorization_sha256(provisional)
+    return replace(
+        provisional,
+        authorization_id=OpaqueId(
+            f"standing-authorization-{str(digest)[:20]}"
+        ),
+        authorization_sha256=digest,
+    )
+
+
+def _r4_request():
+    policy = target_policy_bundle()
+    context = GateContext(
+        workflow_definition_sha256=(
+            default_workflow_definition().definition_sha256
+        ),
+        policy_bundle_sha256=policy.bundle_sha256,
+        rules_bundle_sha256=HashDigest("1" * 64),
+        effective_config_sha256=HashDigest("2" * 64),
+        current_manifest_sha256=HashDigest("3" * 64),
+        evidence_graph_sha256=HashDigest("4" * 64),
+        executable_plan_sha256=HashDigest("5" * 64),
+    )
+    return build_bound_action_authority_request(
+        request_id="matrix-mutation-request",
+        request_envelope_sha256="6" * 64,
+        idempotency_key="matrix-mutation-key",
+        requester_principal_id="mutation-requester",
+        action_id="managed_mutation",
+        capability_id="managed_mutation",
+        executable_plan_sha256="5" * 64,
+        action_risk=ActionRisk.R4,
+        authority_requirement=AuthorityRequirement.TWO_INDEPENDENT_HUMANS,
+        side_effect=True,
+        gate_context=context,
+        profiles=ProfileSelection(
+            AssuranceProfile.HIGH_ASSURANCE,
+            AutonomyProfile.ASSISTED,
+        ),
+        scope=_scope(),
+        hard_escalation_facts=_hard_escalation_facts(),
+    )
+
+
+def _authorize_r2():
+    request = _request()
+    ledger = FakeLedger(AuthoritySource.ONE_SHOT_HUMAN, ("human-a",))
+    _, decision = evaluate_authority(
+        request,
+        target_policy_bundle(),
+        ledger=ledger,
+        authority_references=(
+            _ref("ledger/human-a.json", "5", "human-approval/1.0"),
+        ),
+        evaluated_at=NOW,
+    )
+    assert decision.status is AuthorityDecisionStatus.AUTHORIZED
+    return request, ledger, decision
+
+
+def _authorize_standing():
+    request = _request()
+    grant = _standing_grant(request)
+    ledger = FakeLedger(AuthoritySource.STANDING_GRANT, ())
+    _, decision = evaluate_authority(
+        request,
+        target_policy_bundle(),
+        ledger=ledger,
+        presented_grant=grant,
+        evaluated_at=NOW,
+    )
+    assert decision.status is AuthorityDecisionStatus.AUTHORIZED
+    return request, grant, ledger, decision
+
+
+def _revalidate_r2(request, ledger, decision) -> None:
+    verified = revalidate_authority_for_side_effect(
+        decision,
+        request,
+        ledger=ledger,
+        current_context=request.gate_context,
+        workspace_observation_sha256="6" * 64,
+        adapter_id="executor-a",
+        service_identity="service-a",
+        evaluated_at=NOW + timedelta(seconds=1),
+        purpose=VerificationPurpose.DISPATCH,
+    )
+    assert verified.request_sha256 == request.request_sha256
+
+
+def _assert_authority_error(expected_reason: str, operation) -> None:
+    with pytest.raises(AuthorityContractError) as caught:
+        operation()
+    assert caught.value.reason_code == expected_reason
+
+
+def _assert_matrix_positive(policy_path: str) -> None:
+    if policy_path == "ai_human_approval_creation_forbidden":
+        request = _request()
+        risk, decision = evaluate_authority(
+            request,
+            target_policy_bundle(),
+            ledger=None,
+            evaluated_at=NOW,
+        )
+        approval = build_approval_request(request, risk, decision)
+        assert validate_approval_request(approval).creates_authority is False
+        assert approval.authority_effect == "none"
+        return
+    if policy_path.startswith("scope.") and policy_path != "scope.cost_per_day":
+        _authorize_standing()
+        return
+    if policy_path in {
+        "executor_revalidation_required",
+        "material_change_invalidates_authority",
+        "scope.cost_per_day",
+        "revocation",
+        "kill_switch",
+    }:
+        request, ledger, decision = _authorize_r2()
+        _revalidate_r2(request, ledger, decision)
+        return
+    if policy_path == "validity":
+        _authorize_standing()
+        return
+    if policy_path.startswith("R4."):
+        request = _r4_request()
+        ledger = FakeLedger(
+            AuthoritySource.DUAL_HUMAN,
+            ("human-a", "human-b"),
+        )
+        _, decision = evaluate_authority(
+            request,
+            target_policy_bundle(),
+            ledger=ledger,
+            authority_references=(
+                _ref("ledger/human-a.json", "7", "human-approval/1.0"),
+                _ref("ledger/human-b.json", "8", "human-approval/1.0"),
+            ),
+            evaluated_at=NOW,
+        )
+        assert decision.status is AuthorityDecisionStatus.AUTHORIZED
+        return
+    _authorize_r2()
+
+
+def _assert_standing_scope_denied(
+    grant: UnverifiedStandingAuthorization,
+    request,
+    expected_reason: str,
+) -> None:
+    _, denied = evaluate_authority(
+        request,
+        target_policy_bundle(),
+        ledger=FakeLedger(AuthoritySource.STANDING_GRANT, ()),
+        presented_grant=grant,
+        evaluated_at=NOW,
+    )
+    assert denied.status is AuthorityDecisionStatus.DENIED
+    assert expected_reason in denied.reason_codes
+
+
+def _assert_matrix_negative(policy_path: str, expected_reason: str) -> None:
+    if policy_path.startswith("hard_escalation_triggers."):
+        trigger = policy_path.split(".", 1)[1]
+        request = _request(
+            hard_escalation_facts=_hard_escalation_facts(
+                {trigger: HardEscalationState.TRIGGERED}
+            )
+        )
+        _, decision = evaluate_authority(
+            request,
+            target_policy_bundle(),
+            ledger=FakeLedger(
+                AuthoritySource.ONE_SHOT_HUMAN,
+                ("human-a",),
+            ),
+            authority_references=(
+                _ref("ledger/human-a.json", "5", "human-approval/1.0"),
+            ),
+            evaluated_at=NOW,
+        )
+        assert decision.status is AuthorityDecisionStatus.DENIED
+        assert expected_reason in decision.reason_codes
+        return
+    if policy_path == "default_decision":
+        request = _request()
+        risk, decision = evaluate_authority(
+            request,
+            target_policy_bundle(),
+            ledger=None,
+            evaluated_at=NOW,
+        )
+        approval = build_approval_request(request, risk, decision)
+        assert decision.status is AuthorityDecisionStatus.HUMAN_APPROVAL_REQUIRED
+        assert expected_reason in decision.reason_codes
+        assert approval.safe_default is AuthorityDecisionStatus.DENIED
+        return
+    if policy_path == "unknown_state_behavior":
+        trigger = target_policy_bundle().hard_escalation_triggers[0]
+        request = _request(
+            hard_escalation_facts=_hard_escalation_facts(
+                {trigger: HardEscalationState.UNKNOWN}
+            )
+        )
+        risk, decision = evaluate_authority(
+            request,
+            target_policy_bundle(),
+            ledger=None,
+            evaluated_at=NOW,
+        )
+        assert risk.supported is False
+        assert decision.status is AuthorityDecisionStatus.DENIED
+        assert expected_reason in decision.reason_codes
+        return
+    if policy_path == "ai_human_approval_creation_forbidden":
+        request = _request()
+        risk, decision = evaluate_authority(
+            request,
+            target_policy_bundle(),
+            ledger=None,
+            evaluated_at=NOW,
+        )
+        approval = build_approval_request(request, risk, decision)
+        _assert_authority_error(
+            expected_reason,
+            lambda: validate_approval_request(
+                replace(approval, creates_authority=True)
+            ),
+        )
+        return
+    if policy_path == "self_approval_forbidden":
+        request = _request(requester_principal_id="human-a")
+        _, decision = evaluate_authority(
+            request,
+            target_policy_bundle(),
+            ledger=FakeLedger(
+                AuthoritySource.ONE_SHOT_HUMAN,
+                ("human-a",),
+            ),
+            authority_references=(
+                _ref("ledger/human-a.json", "5", "human-approval/1.0"),
+            ),
+            evaluated_at=NOW,
+        )
+        assert decision.status is AuthorityDecisionStatus.DENIED
+        assert expected_reason in decision.reason_codes
+        return
+    if policy_path == "release_campaign.activation":
+        request = _request()
+        _, decision = evaluate_authority(
+            request,
+            target_policy_bundle(),
+            ledger=FakeLedger(AuthoritySource.RELEASE_CAMPAIGN, ()),
+            authority_references=(
+                _ref("ledger/campaign.json", "5", "release-campaign/1.0"),
+            ),
+            evaluated_at=NOW,
+        )
+        assert decision.status is AuthorityDecisionStatus.DENIED
+        assert expected_reason in decision.reason_codes
+        return
+    if policy_path in {
+        "executor_revalidation_required",
+        "material_change_invalidates_authority",
+        "scope.cost_per_day",
+        "revocation",
+        "kill_switch",
+    }:
+        request, ledger, decision = _authorize_r2()
+        current_context = request.gate_context
+        if policy_path == "executor_revalidation_required":
+            ledger = None
+        elif policy_path == "material_change_invalidates_authority":
+            current_context = replace(
+                current_context,
+                effective_config_sha256=HashDigest("9" * 64),
+            )
+        elif policy_path == "scope.cost_per_day":
+            ledger.remaining_daily_budget_minor = (
+                request.scope.cost_minor_units - 1
+            )
+        elif policy_path == "revocation":
+            ledger.ledger_state = LedgerRecordState.REVOKED
+        else:
+            ledger.kill_switch_clear = False
+        _assert_authority_error(
+            expected_reason,
+            lambda: revalidate_authority_for_side_effect(
+                decision,
+                request,
+                ledger=ledger,
+                current_context=current_context,
+                workspace_observation_sha256="6" * 64,
+                adapter_id="executor-a",
+                service_identity="service-a",
+                evaluated_at=NOW + timedelta(seconds=1),
+                purpose=VerificationPurpose.DISPATCH,
+            ),
+        )
+        return
+    if policy_path.startswith("scope."):
+        base = _request()
+        grant = _standing_grant(base)
+        if policy_path == "scope.capability":
+            changed = base
+            grant = _rehash_standing_grant(
+                grant,
+                capability_ids=(OpaqueId("other-capability"),),
+            )
+            reasons = ("authority.scope.capability",)
+        elif policy_path == "scope.channel_concept_episode":
+            reasons = (
+                "authority.scope.channel",
+                "authority.scope.concept",
+                "authority.scope.episode",
+            )
+            for field, value, reason in (
+                ("channel_id", OpaqueId("channel-b"), reasons[0]),
+                ("concept_id", OpaqueId("concept-b"), reasons[1]),
+                ("episode_id", OpaqueId("episode-b"), reasons[2]),
+            ):
+                changed = _request(
+                    scope=replace(base.scope, **{field: value})
+                )
+                _assert_standing_scope_denied(grant, changed, reason)
+            assert expected_reason == reasons[0]
+            return
+        elif policy_path == "scope.provider_model":
+            reasons = ("authority.scope.provider", "authority.scope.model")
+            for field, value, reason in (
+                ("provider_id", OpaqueId("provider-b"), reasons[0]),
+                ("model_id", OpaqueId("model-b"), reasons[1]),
+            ):
+                changed = _request(
+                    scope=replace(base.scope, **{field: value})
+                )
+                _assert_standing_scope_denied(grant, changed, reason)
+            assert expected_reason == reasons[0]
+            return
+        elif policy_path == "scope.destination":
+            changed = _request(
+                scope=replace(base.scope, destination="destination-b")
+            )
+            reasons = ("authority.scope.destination",)
+        elif policy_path == "scope.cost_per_run":
+            reasons = ("authority.scope.cost_run",)
+            for field, value in (
+                ("cost_minor_units", 101),
+                ("currency", "EUR"),
+            ):
+                changed = _request(
+                    scope=replace(base.scope, **{field: value})
+                )
+                _assert_standing_scope_denied(grant, changed, reasons[0])
+            assert expected_reason == reasons[0]
+            return
+        elif policy_path == "scope.candidates":
+            changed = _request(
+                scope=replace(base.scope, candidate_count=3)
+            )
+            reasons = ("authority.scope.candidates",)
+        elif policy_path == "scope.retries":
+            changed = _request(scope=replace(base.scope, retry_index=1))
+            reasons = ("authority.scope.retries",)
+        else:
+            raise AssertionError(f"unhandled policy row: {policy_path}")
+        assert expected_reason == reasons[0]
+        _assert_standing_scope_denied(grant, changed, expected_reason)
+        return
+    if policy_path == "validity":
+        request = _request()
+        grant = _rehash_standing_grant(
+            _standing_grant(request),
+            expires_at=NOW.isoformat(),
+        )
+        _, denied = evaluate_authority(
+            request,
+            target_policy_bundle(),
+            ledger=FakeLedger(AuthoritySource.STANDING_GRANT, ()),
+            presented_grant=grant,
+            evaluated_at=NOW,
+        )
+        assert denied.status is AuthorityDecisionStatus.DENIED
+        assert expected_reason in denied.reason_codes
+        return
+    if policy_path == "R4.independent_approvers":
+        request = _r4_request()
+        _, denied = evaluate_authority(
+            request,
+            target_policy_bundle(),
+            ledger=FakeLedger(
+                AuthoritySource.ONE_SHOT_HUMAN,
+                ("human-a",),
+            ),
+            authority_references=(
+                _ref("ledger/human-a.json", "7", "human-approval/1.0"),
+            ),
+            evaluated_at=NOW,
+        )
+        assert denied.status is AuthorityDecisionStatus.DENIED
+        assert expected_reason in denied.reason_codes
+        return
+    if policy_path == "R4.standing_grant_forbidden":
+        request = _r4_request()
+        _assert_authority_error(
+            expected_reason,
+            lambda: validate_standing_authorization(
+                _standing_grant(request)
+            ),
+        )
+        return
+    raise AssertionError(f"unhandled policy row: {policy_path}")
+
+
+def test_policy_bundle_has_complete_exact_matrix() -> None:
+    policy = target_policy_bundle()
+    expected_paths = {
+        "default_decision",
+        "unknown_state_behavior",
+        "ai_human_approval_creation_forbidden",
+        "self_approval_forbidden",
+        "release_campaign.activation",
+        "executor_revalidation_required",
+        "material_change_invalidates_authority",
+        "scope.capability",
+        "scope.channel_concept_episode",
+        "scope.provider_model",
+        "scope.destination",
+        "scope.cost_per_run",
+        "scope.cost_per_day",
+        "scope.candidates",
+        "scope.retries",
+        "validity",
+        "revocation",
+        "kill_switch",
+        "R4.independent_approvers",
+        "R4.standing_grant_forbidden",
+        *{
+            f"hard_escalation_triggers.{trigger}"
+            for trigger in policy.hard_escalation_triggers
+        },
+    }
+    assert {item.policy_path for item in policy.enforcement_matrix} == expected_paths
+    assert all(
+        item.positive_test_id
+        == f"test_policy_enforcement_matrix_positive[{item.policy_path}]"
+        and item.negative_test_id
+        == f"test_policy_enforcement_matrix_negative[{item.policy_path}]"
+        and item.owner.split(".", 1)[0]
+        in {"authority", "workflow", "mutation"}
+        and item.enforcement_phase in {"initial", "serialization", "predispatch"}
+        for item in policy.enforcement_matrix
+    )
+    assert policy.self_approval_forbidden is True
+    assert policy.release_campaign_enabled is False
+    root = Path(__file__).resolve().parents[2]
+    assert str(policy.governance_policy_sha256) == sha256(
+        (root / "docs/governance/authority-policy-v2.1.yaml").read_bytes()
+    ).hexdigest()
+
+
+@pytest.mark.parametrize(
+    "row",
+    target_policy_bundle().enforcement_matrix,
+    ids=lambda row: row.policy_path,
+)
+def test_policy_enforcement_matrix_positive(row) -> None:
+    assert row.positive_test_id == (
+        f"test_policy_enforcement_matrix_positive[{row.policy_path}]"
+    )
+    _assert_matrix_positive(row.policy_path)
+
+
+@pytest.mark.parametrize(
+    "row",
+    target_policy_bundle().enforcement_matrix,
+    ids=lambda row: row.policy_path,
+)
+def test_policy_enforcement_matrix_negative(row) -> None:
+    assert row.negative_test_id == (
+        f"test_policy_enforcement_matrix_negative[{row.policy_path}]"
+    )
+    _assert_matrix_negative(row.policy_path, row.reason_code)
+
+
+def test_requester_cannot_approve_own_action() -> None:
+    request = _request(requester_principal_id="human-a")
+    ledger = FakeLedger(AuthoritySource.ONE_SHOT_HUMAN, ("human-a",))
+    _, decision = evaluate_authority(
+        request,
+        target_policy_bundle(),
+        ledger=ledger,
+        authority_references=(
+            _ref("ledger/human-a.json", "5", "human-approval/1.0"),
+        ),
+        evaluated_at=NOW,
+    )
+    assert decision.status is AuthorityDecisionStatus.DENIED
+    assert decision.reason_codes == ("authority.self_approval_forbidden",)
+
+
+def test_release_campaign_remains_fail_closed_until_w05_facts_exist() -> None:
+    request = _request(
+        "ready_for_human_publish",
+        profiles=ProfileSelection(
+            AssuranceProfile.DRAFT,
+            AutonomyProfile.OBSERVE_ONLY,
+        ),
+    )
+    _, decision = evaluate_authority(
+        request,
+        target_policy_bundle(),
+        ledger=FakeLedger(AuthoritySource.RELEASE_CAMPAIGN, ()),
+        authority_references=(
+            _ref("ledger/campaign.json", "5", "release-campaign/1.0"),
+        ),
+        evaluated_at=NOW,
+    )
+    assert decision.status is AuthorityDecisionStatus.DENIED
+    assert decision.reason_codes == ("authority.source.insufficient",)
+
+
+def test_standing_allowlist_cannot_be_bypassed_with_absent_scope_value() -> None:
+    exact = _request()
+    with pytest.raises(AuthorityContractError, match="provider, model and destination"):
+        _request(
+            scope=replace(
+                exact.scope,
+                provider_id=None,
+                model_id=None,
+                destination=None,
+            )
+        )
+
+
+@pytest.mark.parametrize(
+    "state",
+    (HardEscalationState.TRIGGERED, HardEscalationState.UNKNOWN),
+)
+@pytest.mark.parametrize(
+    "trigger", target_policy_bundle().hard_escalation_triggers
+)
+def test_each_hard_escalation_fact_fails_closed(
+    trigger: str,
+    state: HardEscalationState,
+) -> None:
+    request = _request(
+        hard_escalation_facts=_hard_escalation_facts({trigger: state})
+    )
+    risk, decision = evaluate_authority(
+        request,
+        target_policy_bundle(),
+        ledger=FakeLedger(AuthoritySource.ONE_SHOT_HUMAN, ("human-a",)),
+        authority_references=(
+            _ref("ledger/human-a.json", "5", "human-approval/1.0"),
+        ),
+        evaluated_at=NOW,
+    )
+    reason = f"authority.escalation.{trigger}.{state.value}"
+    assert risk.effective_risk is ActionRisk.R4
+    assert risk.supported is False
+    assert reason in risk.reason_codes
+    assert decision.status is AuthorityDecisionStatus.DENIED
+    assert reason in decision.reason_codes
+    assert decision.authority_effect == "none"
+
+
+def test_hard_escalation_fact_coverage_order_and_evidence_are_closed() -> None:
+    facts = _hard_escalation_facts()
+    with pytest.raises(AuthorityContractError, match="exact target policy order"):
+        _request(hard_escalation_facts=tuple(reversed(facts)))
+    with pytest.raises(AuthorityContractError, match="requires exact evidence"):
+        _request(
+            hard_escalation_facts=(
+                replace(facts[0], evidence_refs=()),
+                *facts[1:],
+            )
+        )
 
 
 def test_missing_ledger_or_human_evidence_never_authorizes_r2() -> None:
@@ -368,6 +1090,209 @@ def test_current_one_human_ledger_authorizes_r2_but_dispatch_revalidates_fresh()
             evaluated_at=NOW + timedelta(seconds=2),
             purpose=VerificationPurpose.DISPATCH,
         )
+
+
+@pytest.mark.parametrize(
+    ("source", "principals"),
+    (
+        (AuthoritySource.POLICY, ()),
+        (AuthoritySource.ONE_SHOT_HUMAN, ("human-b",)),
+    ),
+)
+def test_predispatch_cannot_rebind_the_initial_authority_basis(
+    source: AuthoritySource,
+    principals: tuple[str, ...],
+) -> None:
+    request = _request()
+    ledger = FakeLedger(AuthoritySource.ONE_SHOT_HUMAN, ("human-a",))
+    _, decision = evaluate_authority(
+        request,
+        target_policy_bundle(),
+        ledger=ledger,
+        authority_references=(
+            _ref("ledger/human-a.json", "5", "human-approval/1.0"),
+        ),
+        evaluated_at=NOW,
+    )
+    ledger.source = source
+    ledger.principals = principals
+    with pytest.raises(AuthorityContractError, match="another action"):
+        revalidate_authority_for_side_effect(
+            decision,
+            request,
+            ledger=ledger,
+            current_context=request.gate_context,
+            workspace_observation_sha256="6" * 64,
+            adapter_id="executor-a",
+            service_identity="service-a",
+            evaluated_at=NOW + timedelta(seconds=1),
+            purpose=VerificationPurpose.DISPATCH,
+        )
+
+
+@pytest.mark.parametrize(
+    "shared_flag",
+    ("shared_human_signature", "shared_human_signature_bytes"),
+)
+def test_two_humans_cannot_share_one_signature_verification(
+    shared_flag: str,
+) -> None:
+    policy = target_policy_bundle()
+    context = GateContext(
+        workflow_definition_sha256=default_workflow_definition().definition_sha256,
+        policy_bundle_sha256=policy.bundle_sha256,
+        rules_bundle_sha256=HashDigest("1" * 64),
+        effective_config_sha256=HashDigest("2" * 64),
+        current_manifest_sha256=HashDigest("3" * 64),
+        evidence_graph_sha256=HashDigest("4" * 64),
+        executable_plan_sha256=HashDigest("5" * 64),
+    )
+    request = build_bound_action_authority_request(
+        request_id="mutation-shared-signature",
+        request_envelope_sha256="6" * 64,
+        idempotency_key="mutation-shared-signature",
+        requester_principal_id="mutation-requester",
+        action_id="managed_mutation",
+        capability_id="managed_mutation",
+        executable_plan_sha256="5" * 64,
+        action_risk=ActionRisk.R4,
+        authority_requirement=AuthorityRequirement.TWO_INDEPENDENT_HUMANS,
+        side_effect=True,
+        gate_context=context,
+        profiles=ProfileSelection(
+            AssuranceProfile.HIGH_ASSURANCE,
+            AutonomyProfile.ASSISTED,
+        ),
+        scope=_scope(),
+        hard_escalation_facts=_hard_escalation_facts(),
+    )
+    ledger = FakeLedger(AuthoritySource.DUAL_HUMAN, ("human-a", "human-b"))
+    setattr(ledger, shared_flag, True)
+    with pytest.raises(AuthorityContractError, match="distinct bytes"):
+        evaluate_authority(
+            request,
+            policy,
+            ledger=ledger,
+            authority_references=(
+                _ref("ledger/human-a.json", "7", "human-approval/1.0"),
+                _ref("ledger/human-b.json", "8", "human-approval/1.0"),
+            ),
+            evaluated_at=NOW,
+        )
+
+
+def test_initial_receipt_cannot_rebind_authenticated_requester() -> None:
+    request = _request()
+    ledger = FakeLedger(AuthoritySource.ONE_SHOT_HUMAN, ("human-a",))
+    ledger.requester_principal_override = "requester-other"
+    with pytest.raises(AuthorityContractError, match="another request"):
+        evaluate_authority(
+            request,
+            target_policy_bundle(),
+            ledger=ledger,
+            authority_references=(
+                _ref("ledger/human-a.json", "5", "human-approval/1.0"),
+            ),
+            evaluated_at=NOW,
+        )
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    (
+        ("risk_assessment_override", "8" * 64),
+        ("requester_authentication_digest", "8"),
+        ("workflow_evaluation_override", "8" * 64),
+        ("workflow_verification_digest", "8"),
+    ),
+)
+def test_predispatch_cannot_rebind_risk_requester_or_workflow_proof(
+    field: str,
+    value: str,
+) -> None:
+    request = _request()
+    ledger = FakeLedger(AuthoritySource.ONE_SHOT_HUMAN, ("human-a",))
+    _, decision = evaluate_authority(
+        request,
+        target_policy_bundle(),
+        ledger=ledger,
+        authority_references=(
+            _ref("ledger/human-a.json", "5", "human-approval/1.0"),
+        ),
+        evaluated_at=NOW,
+    )
+    setattr(ledger, field, value)
+    with pytest.raises(AuthorityContractError, match="another action"):
+        revalidate_authority_for_side_effect(
+            decision,
+            request,
+            ledger=ledger,
+            current_context=request.gate_context,
+            workspace_observation_sha256="6" * 64,
+            adapter_id="executor-a",
+            service_identity="service-a",
+            evaluated_at=NOW + timedelta(seconds=1),
+            purpose=VerificationPurpose.DISPATCH,
+        )
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "expected_reason"),
+    (
+        (
+            "workflow_evaluation_override",
+            "8" * 64,
+            "authority.receipt.rebound",
+        ),
+        (
+            "omit_workflow_verification",
+            True,
+            "authority.receipt.workflow_evaluation",
+        ),
+        (
+            "workflow_verification_digest",
+            "9",
+            "authority.receipt.signature_content",
+        ),
+    ),
+)
+def test_initial_receipt_requires_exact_trusted_workflow_evaluation_proof(
+    field: str,
+    value: object,
+    expected_reason: str,
+) -> None:
+    request = _request()
+    ledger = FakeLedger(AuthoritySource.ONE_SHOT_HUMAN, ("human-a",))
+    setattr(ledger, field, value)
+    _assert_authority_error(
+        expected_reason,
+        lambda: evaluate_authority(
+            request,
+            target_policy_bundle(),
+            ledger=ledger,
+            authority_references=(
+                _ref("ledger/human-a.json", "5", "human-approval/1.0"),
+            ),
+            evaluated_at=NOW,
+        ),
+    )
+
+
+def test_trusted_ledger_rejects_unrecognized_workflow_evaluation() -> None:
+    request = _request()
+    ledger = FakeLedger(AuthoritySource.ONE_SHOT_HUMAN, ("human-a",))
+    ledger.trusted_workflow_evaluation_sha256 = "8" * 64
+    _, decision = evaluate_authority(
+        request,
+        target_policy_bundle(),
+        ledger=ledger,
+        authority_references=(
+            _ref("ledger/human-a.json", "5", "human-approval/1.0"),
+        ),
+        evaluated_at=NOW,
+    )
+    assert decision.status is AuthorityDecisionStatus.DENIED
+    assert decision.reason_codes == ("authority.ledger.denied",)
 
 
 def test_dispatch_receipt_cannot_be_replayed_for_reconcile() -> None:
@@ -447,6 +1372,28 @@ def test_output_scope_rejects_ancestor_overlap() -> None:
                 allowed_outputs=(
                     OutputScope("outputs", ("media-output/1.0",)),
                     OutputScope("outputs/sub", ("media-output/1.0",)),
+                ),
+            )
+        )
+
+
+def test_authority_scope_requires_canonical_input_and_output_order() -> None:
+    with pytest.raises(AuthorityContractError, match="identity order"):
+        _request(
+            scope=_scope(
+                inputs=(
+                    _ref("inputs/z.json", "b"),
+                    _ref("inputs/a.json", "a"),
+                )
+            )
+        )
+    with pytest.raises(AuthorityContractError, match="path order"):
+        _request(
+            scope=replace(
+                _scope(),
+                allowed_outputs=(
+                    OutputScope("outputs/z", ("media-output/1.0",)),
+                    OutputScope("outputs/a", ("media-output/1.0",)),
                 ),
             )
         )
@@ -588,6 +1535,7 @@ def test_w02_bridge_is_fixed_r4_and_needs_dual_human_ledger() -> None:
         request_id="mutation-request",
         request_envelope_sha256="6" * 64,
         idempotency_key="mutation-key",
+        requester_principal_id="mutation-requester",
         action_id="managed_mutation",
         capability_id="managed_mutation",
         executable_plan_sha256="5" * 64,
@@ -597,6 +1545,7 @@ def test_w02_bridge_is_fixed_r4_and_needs_dual_human_ledger() -> None:
         gate_context=context,
         profiles=ProfileSelection(AssuranceProfile.HIGH_ASSURANCE, AutonomyProfile.ASSISTED),
         scope=_scope(),
+        hard_escalation_facts=_hard_escalation_facts(),
     )
     risk, missing = evaluate_authority(request, policy, ledger=None, evaluated_at=NOW)
     assert risk.effective_risk is ActionRisk.R4

@@ -25,21 +25,36 @@ request and decision digests, seven-digest context, risk assessment, workspace
 observation, adapter and service identity, active ledger head/entry, verified
 signatures and principals, revocation check time, kill-switch state, cost and
 candidate reservation, retry index, currency, idempotency key, and validity
-window. A receipt from one purpose cannot be replayed for another.
+window. Workflow receipts also bind the exact clean workflow-evaluation digest
+and one immutable trusted verification reference; mutation receipts require
+both fields to be null. A receipt from one purpose cannot be replayed for
+another.
 
 Initial receipts deliberately have no workspace-observation or adapter/service
 binding. Dispatch, reconcile, and mutation receipts must carry the exact
 current workspace-observation SHA-256 plus adapter and service identity.
 Non-policy receipts require signature-verification references, and a
 standing-source receipt must bind the exact standing-grant digest. The core
-rechecks those fields after the trusted ledger returns and before handing
+rechecks those fields, the authenticated requester, and the exact current risk
+assessment after the trusted ledger returns and before handing
 authority to a side-effect boundary.
+
+An authorized decision seals an `authority_basis_sha256`: the exact authority
+source, grant identity when applicable, ledger entry, each
+principal-to-signature pair, authenticated requester, and workflow-evaluation
+verification proof. Fresh revalidation may advance the ledger head, but it
+cannot silently replace the initial human, grant, requester, workflow proof,
+signature evidence, or authority source.
 
 Executor dispatch and reconcile require both the legacy structural
 `OrchestrationAuthorization` and the exact W04 request/decision, but the legacy
 object has `authority_effect=none`. The adapter calls the trusted ledger after
 all exact request/context/workspace checks and before entering its external
-method. Missing/unavailable ledger, stale or denied decision, expired window,
+method. The immutable `ExecutorAuthorityScope` received by that method binds
+the actual workspace/channel/concept/episode, selected adapter/provider,
+model, destination, cost/currency, candidate count, and retry index to the W04
+request. Reconcile reuses the scope stored with the unresolved dispatch.
+Missing/unavailable ledger, stale or denied decision, expired window,
 rebound receipt, revocation, kill switch, or reservation mismatch yields zero
 external calls.
 

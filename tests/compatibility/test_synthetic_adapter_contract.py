@@ -19,8 +19,11 @@ from video_factory.authority import (
     AuthoritySource,
     AuthorityVerificationReceipt,
     AutonomyProfile,
+    HardEscalationFact,
+    HardEscalationState,
     LedgerRecordState,
     OutputScope,
+    PrincipalSignatureVerification,
     ProfileSelection,
     VerificationPurpose,
     authority_verification_receipt_sha256,
@@ -54,6 +57,7 @@ from video_factory.providers import (
     AllowedOutput,
     CapabilityDescriptor,
     ExecutorAdapter,
+    ExecutorAuthorityScope,
     ExecutorDispatchContext,
     ExternalReference,
     HumanHandoff,
@@ -82,6 +86,7 @@ from video_factory.workflow import (
     build_gate_result,
     default_workflow_definition,
     evaluate_workflow,
+    gate_consumed_context_sha256,
 )
 
 INPUT_VERSION = ArtifactVersion("input/1.0")
@@ -90,7 +95,7 @@ MEDIA_CAPABILITY = CapabilityId("media.video.generate")
 TASK_CAPABILITY = CapabilityId("paid_external_generation")
 
 
-def _workflow_plan():
+def _workflow_bundle():
     definition = default_workflow_definition()
     policy = target_policy_bundle()
     action = next(
@@ -102,6 +107,15 @@ def _workflow_plan():
         if item.priority < action.priority
         and item.satisfies_claim_id != action.satisfies_claim_id
     }
+    seed = MaterialContextSeed(
+        workflow_definition_sha256=definition.definition_sha256,
+        policy_bundle_sha256=policy.bundle_sha256,
+        rules_bundle_sha256=HashDigest("3" * 64),
+        effective_config_sha256=HashDigest("b" * 64),
+        current_manifest_sha256=HashDigest("4" * 64),
+        evidence_graph_sha256=HashDigest("5" * 64),
+    )
+    gates = {str(item.gate_id): item for item in definition.gates}
     results = []
     for claim in definition.claims:
         if claim.claim_id in earlier_claims:
@@ -109,6 +123,11 @@ def _workflow_plan():
                 build_gate_result(
                     str(claim.gate_id),
                     GateStatus.PASS,
+                    consumed_context_sha256=str(
+                        gate_consumed_context_sha256(
+                            gates[str(claim.gate_id)], seed
+                        )
+                    ),
                     evidence_sha256s=("a" * 64,),
                 )
             )
@@ -117,6 +136,11 @@ def _workflow_plan():
                 build_gate_result(
                     str(claim.gate_id),
                     GateStatus.BLOCKED,
+                    consumed_context_sha256=str(
+                        gate_consumed_context_sha256(
+                            gates[str(claim.gate_id)], seed
+                        )
+                    ),
                     reason_codes=(action.trigger_reason_codes[0],),
                     messages=("blocked",),
                 )
@@ -126,6 +150,11 @@ def _workflow_plan():
                 build_gate_result(
                     str(claim.gate_id),
                     GateStatus.UNKNOWN,
+                    consumed_context_sha256=str(
+                        gate_consumed_context_sha256(
+                            gates[str(claim.gate_id)], seed
+                        )
+                    ),
                     reason_codes=("workflow.gate.missing",),
                     messages=("missing",),
                 )
@@ -133,21 +162,21 @@ def _workflow_plan():
     evaluation = evaluate_workflow(
         definition,
         results,
-        MaterialContextSeed(
-            workflow_definition_sha256=definition.definition_sha256,
-            policy_bundle_sha256=policy.bundle_sha256,
-            rules_bundle_sha256=HashDigest("3" * 64),
-            effective_config_sha256=HashDigest("b" * 64),
-            current_manifest_sha256=HashDigest("4" * 64),
-            evidence_graph_sha256=HashDigest("5" * 64),
-        ),
+        seed,
     )
     assert evaluation.recommended_action_id == action.action_id
-    return build_executable_production_plan(
-        definition,
+    return (
+        build_executable_production_plan(
+            definition,
+            evaluation,
+            str(action.action_id),
+        ),
         evaluation,
-        str(action.action_id),
     )
+
+
+def _workflow_plan():
+    return _workflow_bundle()[0]
 
 
 class AdapterA(ProviderAdapter):
@@ -296,6 +325,25 @@ def _authority_reference(path: str, marker: str, version: str) -> ArtifactRefere
     )
 
 
+def _hard_escalation_facts() -> tuple[HardEscalationFact, ...]:
+    return tuple(
+        HardEscalationFact(
+            trigger,
+            HardEscalationState.CLEAR,
+            (
+                _authority_reference(
+                    f"authority/facts/{index:02d}-{trigger}.json",
+                    format(index, "x"),
+                    "policy-fact-observation/1.0",
+                ),
+            ),
+        )
+        for index, trigger in enumerate(
+            target_policy_bundle().hard_escalation_triggers, start=1
+        )
+    )
+
+
 class _TrustedAuthorityLedger:
     def _receipt(
         self,
@@ -318,6 +366,20 @@ class _TrustedAuthorityLedger:
             authority_decision_sha256=decision_sha256,
             gate_context_sha256=gate_context_sha256(request.gate_context),
             risk_assessment_sha256=risk_sha256,
+            workflow_evaluation_sha256=(
+                request.workflow_evaluation.evaluation_sha256
+                if request.workflow_evaluation is not None
+                else None
+            ),
+            workflow_evaluation_verification_ref=(
+                _authority_reference(
+                    "authority/workflow-evaluation-verification.json",
+                    "b",
+                    "workflow-evaluation-verification/1.0",
+                )
+                if request.workflow_evaluation is not None
+                else None
+            ),
             authority_source=AuthoritySource.ONE_SHOT_HUMAN,
             ledger_state=LedgerRecordState.ACTIVE,
             ledger_head_sha256=HashDigest("7" * 64),
@@ -326,15 +388,24 @@ class _TrustedAuthorityLedger:
                 "8",
                 "authority-ledger-entry/1.0",
             ),
+            requester_principal_id=request.requester_principal_id,
+            requester_authentication_ref=_authority_reference(
+                "authority/requester-authentication.json",
+                "a",
+                "principal-authentication/1.0",
+            ),
             grant_sha256=None,
-            principal_ids=(OpaqueId("human-a"),),
-            signature_verification_refs=(
-                _authority_reference(
-                    "authority/signature.json",
-                    "9",
-                    "signature-verification/1.0",
+            principal_verifications=(
+                PrincipalSignatureVerification(
+                    OpaqueId("human-a"),
+                    _authority_reference(
+                        "authority/signature.json",
+                        "9",
+                        "signature-verification/1.0",
+                    ),
                 ),
             ),
+            signature_verification_refs=(),
             revocation_checked_at=evaluated_at.isoformat(),
             kill_switch_clear=True,
             reserved_cost_minor_units=request.scope.cost_minor_units,
@@ -406,13 +477,15 @@ class _TrustedAuthorityLedger:
 
 
 def _w04_authority(request: RequestEnvelope, evaluated_at: datetime):
-    plan = _workflow_plan()
+    plan, evaluation = _workflow_bundle()
     assert plan.capability_id == request.capability_id
     authority_request = build_action_authority_request(
         request_id=str(request.request_id),
         request_envelope_sha256=request_envelope_sha256(request),
         idempotency_key=str(request.idempotency_key),
+        requester_principal_id="requester-compat",
         plan=plan,
+        workflow_evaluation=evaluation,
         profiles=ProfileSelection(
             AssuranceProfile.PRODUCTION,
             AutonomyProfile.ASSISTED,
@@ -438,6 +511,7 @@ def _w04_authority(request: RequestEnvelope, evaluated_at: datetime):
                 for item in request.allowed_outputs
             ),
         ),
+        hard_escalation_facts=_hard_escalation_facts(),
     )
     ledger = _TrustedAuthorityLedger()
     _, decision = evaluate_authority(
@@ -500,6 +574,19 @@ def test_registry_resolves_synthetic_adapters_by_capability_and_kind() -> None:
         requested_tools=frozenset({OpaqueId("tool-a")}),
         allowed_tools=frozenset({OpaqueId("tool-a")}),
         capability_allowlist=frozenset({request.capability_id}),
+        authority_scope=ExecutorAuthorityScope(
+            workspace_id=OpaqueId("workspace-compat"),
+            channel_id=OpaqueId("channel-compat"),
+            concept_id=OpaqueId("concept-compat"),
+            episode_id=OpaqueId("episode-compat"),
+            provider_id=OpaqueId("adapter-b"),
+            model_id=OpaqueId("model-b"),
+            destination="destination-b",
+            cost_minor_units=1,
+            currency="USD",
+            candidate_count=1,
+            retry_index=0,
+        ),
     )
     gate_context = _workflow_plan().gate_context
     evaluated_at = datetime(2026, 7, 21, 1, 0, tzinfo=timezone.utc)

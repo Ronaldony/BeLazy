@@ -721,11 +721,14 @@ class MutationPreSideEffectGuard:
                 "managed mutation requires the trusted W04 authority ledger",
             )
         if (
-            w04_authority_request.action_id != "managed_mutation"
+            plan.requester_id is None
+            or w04_authority_request.action_id != "managed_mutation"
             or w04_authority_request.capability_id != "managed_mutation"
             or w04_authority_request.executable_plan_sha256 != plan.plan_sha256
             or w04_authority_request.gate_context != normalized_context
             or w04_authority_request.scope.workspace_id != plan.workspace_id
+            or w04_authority_request.requester_principal_id
+            != plan.requester_id
         ):
             _reject(
                 "mutation.authority.w04_request_mismatch",
@@ -757,6 +760,13 @@ class MutationPreSideEffectGuard:
                 _reject(
                     "mutation.break_glass.missing",
                     "R4 mutation requires evidence, policy, and human authentication",
+                )
+            if plan.requester_id in {
+                approval.principal_id for approval in break_glass.approvals
+            }:
+                _reject(
+                    "mutation.break_glass.self_approval",
+                    "the mutation requester cannot approve the break-glass action",
                 )
             (
                 break_glass_authorization_sha256,

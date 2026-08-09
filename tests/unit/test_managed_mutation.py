@@ -19,8 +19,11 @@ from video_factory.authority import (
     AuthoritySource,
     AuthorityVerificationReceipt,
     AutonomyProfile,
+    HardEscalationFact,
+    HardEscalationState,
     LedgerRecordState,
     OutputScope,
+    PrincipalSignatureVerification,
     ProfileSelection,
     VerificationPurpose,
     authority_verification_receipt_sha256,
@@ -115,6 +118,25 @@ def _reference(path: str, digest: HashDigest, version: str) -> ArtifactReference
         path=RelativeArtifactPath(path),
         sha256=digest,
         artifact_version=ArtifactVersion(version),
+    )
+
+
+def _hard_escalation_facts() -> tuple[HardEscalationFact, ...]:
+    return tuple(
+        HardEscalationFact(
+            trigger,
+            HardEscalationState.CLEAR,
+            (
+                _reference(
+                    f"authority/facts/{index:02d}-{trigger}.json",
+                    HashDigest(format(index, "x") * 64),
+                    "policy-fact-observation/1.0",
+                ),
+            ),
+        )
+        for index, trigger in enumerate(
+            target_policy_bundle().hard_escalation_triggers, start=1
+        )
     )
 
 
@@ -1266,6 +1288,8 @@ class _TrustedW04Ledger:
             authority_decision_sha256=decision_sha256,
             gate_context_sha256=gate_context_sha256(request.gate_context),
             risk_assessment_sha256=risk_sha256,
+            workflow_evaluation_sha256=None,
+            workflow_evaluation_verification_ref=None,
             authority_source=AuthoritySource.DUAL_HUMAN,
             ledger_state=LedgerRecordState.ACTIVE,
             ledger_head_sha256=HashDigest("8" * 64),
@@ -1274,15 +1298,32 @@ class _TrustedW04Ledger:
                 HashDigest("9" * 64),
                 "authority-ledger-entry/1.0",
             ),
+            requester_principal_id=request.requester_principal_id,
+            requester_authentication_ref=_reference(
+                "authority/requester-authentication.json",
+                HashDigest("c" * 64),
+                "principal-authentication/1.0",
+            ),
             grant_sha256=None,
-            principal_ids=(OpaqueId("human-1"), OpaqueId("human-2")),
-            signature_verification_refs=(
-                _reference(
-                    "authority/signature.json",
-                    HashDigest("d" * 64),
-                    "signature-verification/1.0",
+            principal_verifications=(
+                PrincipalSignatureVerification(
+                    OpaqueId("human-1"),
+                    _reference(
+                        "authority/signature-1.json",
+                        HashDigest("d" * 64),
+                        "signature-verification/1.0",
+                    ),
+                ),
+                PrincipalSignatureVerification(
+                    OpaqueId("human-2"),
+                    _reference(
+                        "authority/signature-2.json",
+                        HashDigest("e" * 64),
+                        "signature-verification/1.0",
+                    ),
                 ),
             ),
+            signature_verification_refs=(),
             revocation_checked_at=evaluated_at.isoformat(),
             kill_switch_clear=True,
             reserved_cost_minor_units=request.scope.cost_minor_units,
@@ -1353,8 +1394,18 @@ class _TrustedW04Ledger:
         )
 
 
-def _w04_authority_bundle(plan):
+def _w04_authority_bundle(
+    plan,
+    *,
+    requester_principal_id: str | None = None,
+):
     context = _gate_context(plan)
+    assert plan.requester_id is not None
+    effective_requester = (
+        requester_principal_id
+        if requester_principal_id is not None
+        else str(plan.requester_id)
+    )
     request = build_bound_action_authority_request(
         request_id=f"authority-{plan.plan_id}",
         request_envelope_sha256=str(
@@ -1367,6 +1418,7 @@ def _w04_authority_bundle(plan):
             )
         ),
         idempotency_key=str(plan.idempotency_key),
+        requester_principal_id=effective_requester,
         action_id="managed_mutation",
         capability_id="managed_mutation",
         executable_plan_sha256=str(plan.plan_sha256),
@@ -1395,6 +1447,7 @@ def _w04_authority_bundle(plan):
                 OutputScope("workspace", ("managed-workspace/1.0",)),
             ),
         ),
+        hard_escalation_facts=_hard_escalation_facts(),
     )
     ledger = _TrustedW04Ledger()
     _, decision = evaluate_authority(
@@ -1808,6 +1861,34 @@ def test_pre_side_effect_guard_rechecks_workspace_authority_and_idempotency() ->
             **_runtime_dependencies(resolver=_TrustedContent(digest=SHA_C)),
         )
     assert content_changed.value.reason_code == "mutation.content.mismatch"
+
+
+def test_w04_requester_must_match_the_hash_bound_change_request() -> None:
+    plan = _plan()
+    assert plan.requester_id == "requester-a"
+    mismatched_request, mismatched_decision, mismatched_ledger = (
+        _w04_authority_bundle(
+            plan, requester_principal_id="different-requester"
+        )
+    )
+    dependencies = _authorization_dependencies(plan)
+    dependencies.update(
+        {
+            "w04_authority_request": mismatched_request,
+            "w04_authority_decision": mismatched_decision,
+            "w04_authority_ledger": mismatched_ledger,
+        }
+    )
+    with pytest.raises(MutationRuntimeError) as mismatch:
+        MutationPreSideEffectGuard().authorize(
+            plan,
+            _observation(),
+            service_identity=OpaqueId("mutation-service"),
+            current_context=_gate_context(plan),
+            evaluated_at=EVALUATED_AT,
+            **dependencies,
+        )
+    assert mismatch.value.reason_code == "mutation.authority.w04_request_mismatch"
 
 
 def test_guard_deduplicates_reused_content_before_idempotency_reservation() -> None:

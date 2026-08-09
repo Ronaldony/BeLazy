@@ -13,6 +13,7 @@ from .contracts import (
     ActionDefinition,
     ActionFrontierItem,
     ExecutableProductionPlan,
+    GateDefinition,
     GateResult,
     GateStatus,
     MaterialContextSeed,
@@ -61,11 +62,22 @@ def material_context_sha256(context: MaterialContextSeed) -> HashDigest:
     return canonical_sha256(material_context_to_mapping(context))
 
 
+def gate_consumed_context_sha256(
+    gate: GateDefinition,
+    context: MaterialContextSeed,
+) -> HashDigest:
+    values = material_context_to_mapping(context)
+    return canonical_sha256(
+        {field: values[field] for field in gate.consumed_context_fields}
+    )
+
+
 def gate_result_to_mapping(result: GateResult) -> dict[str, object]:
     validate_gate_result(result)
     return {
         "artifact_version": result.artifact_version,
         "gate_id": str(result.gate_id),
+        "consumed_context_sha256": str(result.consumed_context_sha256),
         "status": result.status.value,
         "reason_codes": list(result.reason_codes),
         "messages": list(result.messages),
@@ -77,6 +89,7 @@ def gate_result_to_mapping(result: GateResult) -> dict[str, object]:
 def _gate_result_identity(
     artifact_version: str,
     gate_id: str,
+    consumed_context_sha256: str,
     status: GateStatus,
     reason_codes: Sequence[str],
     messages: Sequence[str],
@@ -85,6 +98,7 @@ def _gate_result_identity(
     return {
         "artifact_version": artifact_version,
         "gate_id": gate_id,
+        "consumed_context_sha256": consumed_context_sha256,
         "status": status.value,
         "reason_codes": list(reason_codes),
         "messages": list(messages),
@@ -96,6 +110,7 @@ def build_gate_result(
     gate_id: str,
     status: GateStatus,
     *,
+    consumed_context_sha256: str,
     reason_codes: Sequence[str] = (),
     messages: Sequence[str] = (),
     evidence_sha256s: Sequence[str] = (),
@@ -108,11 +123,13 @@ def build_gate_result(
     normalized_messages = tuple(messages)
     normalized_evidence = tuple(sorted(set(evidence_sha256s)))
     identity = _gate_result_identity(
-        GATE_RESULT_VERSION, gate_id, status, normalized_reasons, normalized_messages, normalized_evidence
+        GATE_RESULT_VERSION, gate_id, consumed_context_sha256, status,
+        normalized_reasons, normalized_messages, normalized_evidence
     )
     result = GateResult(
         artifact_version=GATE_RESULT_VERSION,
         gate_id=OpaqueId(gate_id),
+        consumed_context_sha256=HashDigest(consumed_context_sha256),
         status=status,
         reason_codes=normalized_reasons,
         messages=normalized_messages,
@@ -138,10 +155,12 @@ def validate_gate_result(result: GateResult) -> GateResult:
         raise WorkflowContractError("workflow.gate.evidence_order", "gate evidence is not sorted and unique")
     for value in evidence:
         _digest(value, "gate evidence")
+    _digest(str(result.consumed_context_sha256), "gate consumed context")
     expected = canonical_sha256(
         _gate_result_identity(
             result.artifact_version,
             str(result.gate_id),
+            str(result.consumed_context_sha256),
             result.status,
             result.reason_codes,
             result.messages,
@@ -218,11 +237,16 @@ def _evaluation_identity(evaluation: WorkflowEvaluation) -> dict[str, object]:
         "material_context": material_context_to_mapping(evaluation.material_context),
         "material_context_sha256": str(evaluation.material_context_sha256),
         "gate_results": [
-            {
-                **_gate_result_identity(
-                    value.artifact_version, str(value.gate_id), value.status, value.reason_codes, value.messages,
-                    tuple(str(item) for item in value.evidence_sha256s),
-                ),
+                {
+                    **_gate_result_identity(
+                        value.artifact_version,
+                        str(value.gate_id),
+                        str(value.consumed_context_sha256),
+                        value.status,
+                        value.reason_codes,
+                        value.messages,
+                        tuple(str(item) for item in value.evidence_sha256s),
+                    ),
                 "result_sha256": str(value.result_sha256),
             }
             for value in evaluation.gate_results
@@ -250,8 +274,10 @@ def _plan_identity(
     context: MaterialContextSeed,
     action: ActionDefinition,
     consumed_evidence: Sequence[str],
+    *,
+    workflow_evaluation_sha256: str | None = None,
 ) -> dict[str, object]:
-    return {
+    identity: dict[str, object] = {
         "artifact_version": EXECUTABLE_PLAN_VERSION,
         "workflow_definition_sha256": str(definition.definition_sha256),
         "material_context": material_context_to_mapping(context),
@@ -266,6 +292,9 @@ def _plan_identity(
         "prohibited_actions": list(action.prohibited_actions),
         "authority_effect": "none",
     }
+    if workflow_evaluation_sha256 is not None:
+        identity["workflow_evaluation_sha256"] = workflow_evaluation_sha256
+    return identity
 
 
 def _matching_action_reason(action: ActionDefinition, reasons: set[str]) -> bool:
@@ -323,11 +352,26 @@ def evaluate_workflow(
     known_gate_ids = {str(value.gate_id) for value in definition.gates}
     if not set(supplied) <= known_gate_ids:
         raise WorkflowContractError("workflow.gate.unknown", "result references an unknown gate")
+    gate_by_id = {str(value.gate_id): value for value in definition.gates}
+    for gate_id, result in supplied.items():
+        expected_context = gate_consumed_context_sha256(
+            gate_by_id[gate_id], material_context
+        )
+        if result.consumed_context_sha256 != expected_context:
+            raise WorkflowContractError(
+                "workflow.gate.context_rebound",
+                "gate result was evaluated under another material context",
+            )
     complete: dict[str, GateResult] = dict(supplied)
     for gate_id in sorted(known_gate_ids - set(supplied)):
         complete[gate_id] = build_gate_result(
             gate_id,
             GateStatus.UNKNOWN,
+            consumed_context_sha256=str(
+                gate_consumed_context_sha256(
+                    gate_by_id[gate_id], material_context
+                )
+            ),
             reason_codes=("workflow.gate.missing",),
             messages=("required gate result is missing",),
         )
@@ -434,8 +478,6 @@ def evaluate_workflow(
         changed_gates = {
             gate_id for gate_id in known_gate_ids if previous_inputs.get(gate_id) != current_inputs.get(gate_id)
         }
-        if previous.material_context != material_context:
-            changed_gates = set(known_gate_ids)
         invalidated = _transitive_invalidated_claims(definition, changed_gates)
         reused = all_claim_ids - invalidated
 
@@ -602,6 +644,15 @@ def build_executable_production_plan(
     if item is None:
         raise WorkflowContractError("workflow.plan.not_frontier", "action is not in the evaluated frontier")
     action = next(value for value in definition.actions if str(value.action_id) == action_id)
+    final_plan_sha256 = canonical_sha256(
+        _plan_identity(
+            definition,
+            evaluation.material_context,
+            action,
+            tuple(str(value) for value in item.consumed_evidence_sha256s),
+            workflow_evaluation_sha256=str(evaluation.evaluation_sha256),
+        )
+    )
     context = GateContext(
         workflow_definition_sha256=evaluation.material_context.workflow_definition_sha256,
         policy_bundle_sha256=evaluation.material_context.policy_bundle_sha256,
@@ -609,14 +660,14 @@ def build_executable_production_plan(
         effective_config_sha256=evaluation.material_context.effective_config_sha256,
         current_manifest_sha256=evaluation.material_context.current_manifest_sha256,
         evidence_graph_sha256=evaluation.material_context.evidence_graph_sha256,
-        executable_plan_sha256=item.plan_sha256,
+        executable_plan_sha256=final_plan_sha256,
     )
-    if str(gate_context_sha256(context)) == str(item.plan_sha256):
+    if str(gate_context_sha256(context)) == str(final_plan_sha256):
         raise WorkflowContractError("workflow.plan.digest_cycle", "plan and context digest domains collided")
     plan = ExecutableProductionPlan(
         artifact_version=EXECUTABLE_PLAN_VERSION,
-        plan_id=OpaqueId(f"production-plan-{str(item.plan_sha256)[:20]}"),
-        plan_sha256=item.plan_sha256,
+        plan_id=OpaqueId(f"production-plan-{str(final_plan_sha256)[:20]}"),
+        plan_sha256=final_plan_sha256,
         workflow_evaluation_sha256=evaluation.evaluation_sha256,
         workflow_definition_sha256=definition.definition_sha256,
         action_id=item.action_id,
@@ -631,10 +682,10 @@ def build_executable_production_plan(
         prohibited_actions=item.prohibited_actions,
         authority_effect="none",
     )
-    return validate_executable_production_plan(definition, plan)
+    return validate_executable_production_plan(definition, plan, evaluation)
 
 
-def validate_executable_production_plan(
+def validate_executable_production_plan_structure(
     definition: WorkflowDefinition,
     plan: ExecutableProductionPlan,
 ) -> ExecutableProductionPlan:
@@ -658,6 +709,7 @@ def validate_executable_production_plan(
             material,
             action,
             tuple(str(value) for value in plan.consumed_evidence_sha256s),
+            workflow_evaluation_sha256=str(plan.workflow_evaluation_sha256),
         )
     )
     if str(expected) != str(plan.plan_sha256):
@@ -676,4 +728,46 @@ def validate_executable_production_plan(
         or plan.prohibited_actions != action.prohibited_actions
     ):
         raise WorkflowContractError("workflow.plan.rebound", "plan fields were rebound from the target action")
+    return plan
+
+
+def validate_executable_production_plan(
+    definition: WorkflowDefinition,
+    plan: ExecutableProductionPlan,
+    evaluation: WorkflowEvaluation,
+) -> ExecutableProductionPlan:
+    """Verify a plan against the exact clean evaluation and frontier item."""
+
+    validate_executable_production_plan_structure(definition, plan)
+    require_target_workflow_evaluation(evaluation)
+    if (
+        plan.workflow_evaluation_sha256 != evaluation.evaluation_sha256
+        or plan.workflow_definition_sha256 != definition.definition_sha256
+    ):
+        raise WorkflowContractError(
+            "workflow.plan.evaluation",
+            "plan is bound to another workflow evaluation or definition",
+        )
+    item = next(
+        (
+            value
+            for value in evaluation.action_frontier
+            if value.action_id == plan.action_id
+        ),
+        None,
+    )
+    if item is None:
+        raise WorkflowContractError(
+            "workflow.plan.frontier",
+            "plan action is absent from the exact evaluated frontier",
+        )
+    if (
+        plan.consumed_claim_ids != item.consumed_claim_ids
+        or plan.consumed_evidence_sha256s != item.consumed_evidence_sha256s
+        or plan.prohibited_actions != item.prohibited_actions
+    ):
+        raise WorkflowContractError(
+            "workflow.plan.frontier",
+            "plan contents differ from the exact evaluated frontier item",
+        )
     return plan

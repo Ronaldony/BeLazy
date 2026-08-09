@@ -19,18 +19,26 @@ Assurance describes evidence rigor, autonomy describes how work may be
 proposed, and risk determines required authority. No mode, profile name, AI
 review, Director result, or consensus creates authority.
 
-An `ActionAuthorityRequest` binds the exact request-envelope digest and
-idempotency key; workflow action, capability, and executable plan; all seven
+An `ActionAuthorityRequest` binds the exact request-envelope digest,
+idempotency key, and requester principal; workflow action, capability,
+executable plan, and exact clean workflow evaluation; all seven
 `GateContext` digests; workspace/channel/concept/episode; provider, model, and
 destination; canonical collision-free input and output references;
-cost/currency, candidate and retry limits; and requested profiles. Workflow
+cost/currency, candidate and retry limits; requested profiles; and the closed
+target hard-escalation catalog with exact evidence for every fact. Workflow
 requests must match a validated target-owned executable plan. The only
 non-workflow bridge is exact R4 `managed_mutation`.
 
-The target-owned `authority-policy/2.1` bundle recomputes the effective risk and
+The target-owned `authority-policy/2.1` bundle binds the exact governance YAML
+digest, self-approval prohibition, disabled release-campaign activation, and
+complete hard-escalation trigger catalog. It recomputes the effective risk and
 contains an enforcement matrix with an owner, phase, reason code, and positive
-and negative test identifier for every policy field. Unknown actions are
+and negative test identifier for every policy field. Each row identifies a
+distinct executable parameterized test node that exercises the real positive
+and negative boundary and checks the observed reason code. Unknown actions are
 unsupported and denied as R4 escalation; caller risk can never lower policy.
+Triggered or unknown hard-escalation facts are unsupported R4 escalation;
+missing, reordered, or evidence-free facts are invalid requests.
 
 `standing-authorization/1.0` is explicitly unverified parse-only input. Core has
 no grant builder, issuer, signer, or authentication API. R4 standing grants are
@@ -39,10 +47,15 @@ human-facing request for missing evidence.
 
 Only an `authority-decision/1.0` produced after a trusted ledger verifies the
 exact request, context, risk, scope, ledger state, signatures, revocation,
-limits, validity, and permitted authority source can carry
-`execution_authority`. R2 accepts a scoped standing grant or one current human;
-R3 accepts one-shot human or release-campaign authority; R4 requires two
-distinct humans and forbids standing authority. Structural IDs and hashes prove
+limits, validity, permitted authority source, authenticated requester, and (for
+workflow actions) exact clean evaluation plus immutable verification proof can carry
+`execution_authority`. R2 accepts a scoped standing grant or one current human.
+R3 accepts one current human in W04; release-campaign authority remains
+fail-closed until later trusted campaign/content-risk facts exist. R4 requires
+two distinct humans and forbids standing authority. Every human principal is
+bound one-to-one to a signature-verification reference whose content digest is
+distinct from every other authentication proof. The requester has a separate
+authentication reference and cannot be an approver. Structural IDs and hashes prove
 integrity, not authenticity.
 
 Standing scope binds exact input path/hash/version identities and exact output
@@ -52,6 +65,8 @@ digest alone cannot transfer authority to a different artifact path or
 version. Human-required actions are evaluated from their explicit
 `AuthorityRequirement`, even when action risk is R0; risk does not erase an
 approval checkpoint.
+Input identities, output prefixes, grant signature references, and principal
+verification pairs have one canonical order.
 
 ## Consequences
 

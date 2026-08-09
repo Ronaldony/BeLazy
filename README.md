@@ -29,7 +29,11 @@ Blueprints all have `authority_effect=none`.
 Execution authority is an exact `ActionAuthorityRequest` plus a current
 ledger-verified `AuthorityDecision`. Dispatch, reconcile, and managed mutation
 obtain a fresh purpose-bound verification/reservation receipt immediately
-before a side effect. Assurance level, autonomy level, and action risk are
+before a side effect. The runtime scope passed to the executor must exactly
+match the authorized subject, adapter/provider, model, destination, limits,
+and retry facts. The requester cannot self-approve; each human is bound to a
+distinct signature verification, and fresh revalidation cannot replace the
+initial authority basis. Assurance level, autonomy level, and action risk are
 independent; mode names or AI consensus never replace authority. Raw standing
 grants are unverified inputs, approval requests cannot create authority, and R4
 forbids standing grants. Managed mutation remains fixed R4 and requires both

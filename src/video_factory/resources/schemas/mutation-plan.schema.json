@@ -25,6 +25,7 @@
     "plan_id": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" },
     "plan_sha256": { "$ref": "artifact-common.schema.json#/$defs/sha256" },
     "request_id": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" },
+    "requester_id": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" },
     "change_request_sha256": { "$ref": "artifact-common.schema.json#/$defs/sha256" },
     "workspace_id": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" },
     "before_revision_id": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" },

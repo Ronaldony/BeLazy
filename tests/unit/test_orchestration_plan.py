@@ -22,6 +22,7 @@ from video_factory.engine import (
     ArtifactSnapshot,
     OrchestrationPlanError,
     artifact_reference_to_mapping,
+    build_declarative_gate_results,
     build_generation_readiness as _build_generation_readiness,
     make_artifact_snapshot,
     next_step_to_mapping,
@@ -41,11 +42,13 @@ from video_factory.authority import target_policy_bundle
 from video_factory.workflow import (
     GateStatus,
     MaterialContextSeed,
+    WorkflowContractError,
     build_gate_result,
     compare_legacy_parity,
     default_workflow_definition,
     evaluate_workflow,
     legacy_projection_from_plan,
+    workflow_semantic_projection,
 )
 
 
@@ -54,8 +57,8 @@ EPISODE = "ep-synth"
 HASH_A = "a" * 64
 HASH_B = "b" * 64
 GATE_CONTEXT = GateContext(
-    workflow_definition_sha256=HashDigest("1" * 64),
-    policy_bundle_sha256=HashDigest("2" * 64),
+    workflow_definition_sha256=default_workflow_definition().definition_sha256,
+    policy_bundle_sha256=target_policy_bundle().bundle_sha256,
     rules_bundle_sha256=HashDigest("3" * 64),
     effective_config_sha256=HashDigest(HASH_B),
     current_manifest_sha256=HashDigest("4" * 64),
@@ -1188,77 +1191,51 @@ def _legacy_characterization_snapshots(
     raise AssertionError(f"unknown characterization seed: {seed}")
 
 
-def _legacy_characterization_plan(seed: str, mode: str):
+def _characterization_inputs(seed: str, mode: str):
     observation = observe_episode_state(_legacy_characterization_snapshots(seed, mode))
-    if seed != "reconcile_workspace":
-        return _strict_plan_next_step(observation, mode)
+    kwargs = {
+        "current_context": GATE_CONTEXT,
+        "evaluated_at": EVALUATED_AT,
+        "workspace_observation": (
+            None if seed == "reconcile_workspace" else _workspace_observation()
+        ),
+        "expected_workspace_id": "workspace-a",
+        "expected_workspace_revision_id": "revision-a",
+        "expected_workspace_revision": _workspace_revision(),
+        "expected_workspace_revision_sha256": _workspace_revision_sha256(),
+    }
+    return observation, kwargs
+
+
+def _legacy_characterization_plan(seed: str, mode: str):
+    observation, kwargs = _characterization_inputs(seed, mode)
     return _plan_next_step(
         observation,
         mode,
-        current_context=GATE_CONTEXT,
-        evaluated_at=EVALUATED_AT,
-        workspace_observation=None,
-        expected_workspace_id="workspace-a",
-        expected_workspace_revision_id="revision-a",
-        expected_workspace_revision=_workspace_revision(),
-        expected_workspace_revision_sha256=_workspace_revision_sha256(),
+        **kwargs,
     )
 
 
-def _declarative_characterization(action_id: str, mode: str):
+def _declarative_characterization(seed: str, mode: str):
     definition = default_workflow_definition()
-    action = next(item for item in definition.actions if str(item.action_id) == action_id)
-    earlier_claims = {
-        str(item.satisfies_claim_id)
-        for item in definition.actions
-        if item.priority < action.priority
-        and item.satisfies_claim_id != action.satisfies_claim_id
-    }
-    results = {}
-    for claim in definition.claims:
-        claim_id = str(claim.claim_id)
-        if claim_id in earlier_claims:
-            results[str(claim.gate_id)] = build_gate_result(
-                str(claim.gate_id),
-                GateStatus.PASS,
-                evidence_sha256s=("a" * 64,),
-            )
-        else:
-            results[str(claim.gate_id)] = build_gate_result(
-                str(claim.gate_id),
-                GateStatus.UNKNOWN,
-                reason_codes=("workflow.gate.missing",),
-                messages=("not observed",),
-            )
-    target_gate = next(
-        claim.gate_id
-        for claim in definition.claims
-        if claim.claim_id == action.satisfies_claim_id
-    )
-    reason = (
-        action.trigger_reason_codes[0]
-        if action.trigger_reason_codes
-        else f"workflow.{action.satisfies_claim_id}.blocked"
-    )
-    results[str(target_gate)] = build_gate_result(
-        str(target_gate),
-        GateStatus.BLOCKED,
-        reason_codes=(reason,),
-        messages=("characterized legacy blocker",),
-        evidence_sha256s=("b" * 64,),
-    )
-    marker = {"rapid": "1", "standard": "2", "controlled": "3"}[mode]
     context = MaterialContextSeed(
-        workflow_definition_sha256=definition.definition_sha256,
-        policy_bundle_sha256=target_policy_bundle().bundle_sha256,
-        rules_bundle_sha256=HashDigest("3" * 64),
-        effective_config_sha256=HashDigest(marker * 64),
-        current_manifest_sha256=HashDigest("4" * 64),
-        evidence_graph_sha256=HashDigest("5" * 64),
+        workflow_definition_sha256=GATE_CONTEXT.workflow_definition_sha256,
+        policy_bundle_sha256=GATE_CONTEXT.policy_bundle_sha256,
+        rules_bundle_sha256=GATE_CONTEXT.rules_bundle_sha256,
+        effective_config_sha256=GATE_CONTEXT.effective_config_sha256,
+        current_manifest_sha256=GATE_CONTEXT.current_manifest_sha256,
+        evidence_graph_sha256=GATE_CONTEXT.evidence_graph_sha256,
+    )
+    observation, kwargs = _characterization_inputs(seed, mode)
+    results = build_declarative_gate_results(
+        observation,
+        mode,
+        context,
+        **kwargs,
     )
     return evaluate_workflow(
         definition,
-        tuple(results[str(gate.gate_id)] for gate in definition.gates),
+        results,
         context,
     )
 
@@ -1273,13 +1250,15 @@ def test_legacy_and_declarative_evaluators_dual_run_over_78_rows(
     mode_index = ("rapid", "standard", "controlled").index(mode)
     expected_action = EXPECTED_CHARACTERIZATION_ACTIONS[seed][mode_index]
     assert legacy_plan.action_type == expected_action
-    declarative = _declarative_characterization(expected_action, mode)
+    declarative = _declarative_characterization(seed, mode)
+    assert str(declarative.recommended_action_id) == expected_action
     report = compare_legacy_parity(
         legacy_projection_from_plan(legacy_plan),
         declarative,
         explained_dimensions={
-            "blockers": "EXPLAINED_AUTHORITY_HARDENING",
+            "blockers": "EXPLAINED_FRONTIER_EXPANSION",
             "consumed_evidence": "EXPLAINED_BLUEPRINT_CONSOLIDATION",
+            "required_authority": "EXPLAINED_AUTHORITY_HARDENING",
         },
     )
     assert report.parity_pass, (seed, mode, report.unexplained_dimensions)
@@ -1295,6 +1274,125 @@ def test_characterization_matrix_covers_every_target_action_identity() -> None:
         for action in actions
     }
     assert observed == set(CHARACTERIZATION_SEEDS)
+
+
+def test_actual_adapter_late_evidence_change_reuses_unaffected_claims() -> None:
+    definition = default_workflow_definition()
+    context = MaterialContextSeed(
+        workflow_definition_sha256=GATE_CONTEXT.workflow_definition_sha256,
+        policy_bundle_sha256=GATE_CONTEXT.policy_bundle_sha256,
+        rules_bundle_sha256=GATE_CONTEXT.rules_bundle_sha256,
+        effective_config_sha256=GATE_CONTEXT.effective_config_sha256,
+        current_manifest_sha256=GATE_CONTEXT.current_manifest_sha256,
+        evidence_graph_sha256=GATE_CONTEXT.evidence_graph_sha256,
+    )
+    snapshots = _legacy_characterization_snapshots(
+        "ready_for_human_publish", "standard"
+    )
+    observation = observe_episode_state(snapshots)
+    kwargs = _characterization_inputs(
+        "ready_for_human_publish", "standard"
+    )[1]
+    baseline_results = build_declarative_gate_results(
+        observation, "standard", context, **kwargs
+    )
+    baseline = evaluate_workflow(definition, baseline_results, context)
+
+    without_publish_approval = observe_episode_state(
+        tuple(
+            snapshot
+            for snapshot in snapshots
+            if snapshot.family != "publish-approval"
+        )
+    )
+    changed_results = build_declarative_gate_results(
+        without_publish_approval, "standard", context, **kwargs
+    )
+    incremental = evaluate_workflow(
+        definition, changed_results, context, previous=baseline
+    )
+    clean = evaluate_workflow(definition, changed_results, context)
+
+    assert workflow_semantic_projection(
+        incremental
+    ) == workflow_semantic_projection(clean)
+    assert "artifact_graph_valid" in incremental.reused_claim_ids
+    assert "brief_present" in incremental.reused_claim_ids
+    assert "publish_approval_current" in incremental.invalidated_claim_ids
+    assert "external_publish_complete" in incremental.invalidated_claim_ids
+    assert len(incremental.invalidated_claim_ids) < len(definition.claims)
+
+
+@pytest.mark.parametrize(
+    "field",
+    (
+        "workflow_definition_sha256",
+        "policy_bundle_sha256",
+        "rules_bundle_sha256",
+        "effective_config_sha256",
+        "current_manifest_sha256",
+        "evidence_graph_sha256",
+    ),
+)
+def test_declarative_adapter_rejects_split_material_context(field: str) -> None:
+    definition = default_workflow_definition()
+    context = MaterialContextSeed(
+        workflow_definition_sha256=GATE_CONTEXT.workflow_definition_sha256,
+        policy_bundle_sha256=GATE_CONTEXT.policy_bundle_sha256,
+        rules_bundle_sha256=GATE_CONTEXT.rules_bundle_sha256,
+        effective_config_sha256=GATE_CONTEXT.effective_config_sha256,
+        current_manifest_sha256=GATE_CONTEXT.current_manifest_sha256,
+        evidence_graph_sha256=GATE_CONTEXT.evidence_graph_sha256,
+    )
+    observation, kwargs = _characterization_inputs(
+        "ready_for_human_publish", "standard"
+    )
+    mismatched = replace(GATE_CONTEXT, **{field: HashDigest("f" * 64)})
+    kwargs = {**kwargs, "current_context": mismatched}
+    with pytest.raises(WorkflowContractError, match="differs from the evaluation"):
+        build_declarative_gate_results(
+            observation, "standard", context, **kwargs
+        )
+
+
+@pytest.mark.parametrize(
+    ("current_context", "evaluated_at"),
+    ((None, EVALUATED_AT), (GATE_CONTEXT, None)),
+)
+def test_declarative_adapter_missing_approval_context_never_reaches_effect(
+    current_context,
+    evaluated_at,
+) -> None:
+    definition = default_workflow_definition()
+    context = MaterialContextSeed(
+        workflow_definition_sha256=GATE_CONTEXT.workflow_definition_sha256,
+        policy_bundle_sha256=GATE_CONTEXT.policy_bundle_sha256,
+        rules_bundle_sha256=GATE_CONTEXT.rules_bundle_sha256,
+        effective_config_sha256=GATE_CONTEXT.effective_config_sha256,
+        current_manifest_sha256=GATE_CONTEXT.current_manifest_sha256,
+        evidence_graph_sha256=GATE_CONTEXT.evidence_graph_sha256,
+    )
+    observation, kwargs = _characterization_inputs(
+        "ready_for_human_publish", "standard"
+    )
+    kwargs = {
+        **kwargs,
+        "current_context": current_context,
+        "evaluated_at": evaluated_at,
+    }
+    results = build_declarative_gate_results(
+        observation, "standard", context, **kwargs
+    )
+    approval_results = tuple(
+        value for value in results if "approval" in str(value.gate_id)
+    )
+    assert approval_results
+    assert all(value.status is GateStatus.BLOCKED for value in approval_results)
+    evaluation = evaluate_workflow(definition, results, context)
+    assert str(evaluation.recommended_action_id) not in {
+        "run_external_generation",
+        "ready_for_human_publish",
+    }
 
 
 def test_brief_only_requires_storyboard() -> None:

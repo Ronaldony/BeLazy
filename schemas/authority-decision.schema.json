@@ -7,6 +7,7 @@
     "artifact_version", "decision_id", "decision_sha256", "action_request_sha256",
     "gate_context_sha256", "risk_assessment_sha256", "effective_risk",
     "required_authority", "status", "source", "reason_codes", "matched_limit_sha256",
+    "authority_basis_sha256",
     "verification_receipt_id", "verification_receipt_sha256", "evaluated_at",
     "valid_until", "predispatch_required", "authority_effect"
   ],
@@ -23,6 +24,7 @@
     "source": { "$ref": "workflow-authority-common.schema.json#/$defs/authoritySource" },
     "reason_codes": { "$ref": "workflow-authority-common.schema.json#/$defs/reasonCodes" },
     "matched_limit_sha256": { "oneOf": [{ "type": "null" }, { "$ref": "artifact-common.schema.json#/$defs/sha256" }] },
+    "authority_basis_sha256": { "oneOf": [{ "type": "null" }, { "$ref": "artifact-common.schema.json#/$defs/sha256" }] },
     "verification_receipt_id": { "oneOf": [{ "type": "null" }, { "$ref": "artifact-common.schema.json#/$defs/opaqueId" }] },
     "verification_receipt_sha256": { "oneOf": [{ "type": "null" }, { "$ref": "artifact-common.schema.json#/$defs/sha256" }] },
     "evaluated_at": { "type": "string", "format": "date-time" },

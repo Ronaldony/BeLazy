@@ -155,6 +155,9 @@ class MutationPlan:
     risk_tier: MutationRiskTier
     operations: tuple[PlannedMutationOperation, ...]
     semantic_diff: tuple[SemanticDiffEntry, ...]
+    # Added additively after mutation-plan/1.0 was introduced.  Legacy plans
+    # remain parseable, but an unbound requester can never cross the W04 guard.
+    requester_id: OpaqueId | None = None
 
 
 @dataclass(frozen=True, slots=True)

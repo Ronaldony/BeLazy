@@ -43,10 +43,11 @@
     },
     "gateResult": {
       "type": "object",
-      "required": ["artifact_version", "gate_id", "status", "reason_codes", "messages", "evidence_sha256s", "result_sha256"],
+      "required": ["artifact_version", "gate_id", "consumed_context_sha256", "status", "reason_codes", "messages", "evidence_sha256s", "result_sha256"],
       "properties": {
         "artifact_version": { "const": "gate-result/1.0" },
         "gate_id": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" },
+        "consumed_context_sha256": { "$ref": "artifact-common.schema.json#/$defs/sha256" },
         "status": { "$ref": "#/$defs/gateStatus" },
         "reason_codes": { "$ref": "#/$defs/reasonCodes" },
         "messages": { "type": "array", "items": { "type": "string", "minLength": 1 } },

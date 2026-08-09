@@ -38,7 +38,7 @@ from .definition import validate_workflow_definition, workflow_definition_to_map
 from .evaluator import (
     executable_plan_to_mapping,
     gate_result_to_mapping,
-    validate_executable_production_plan,
+    validate_executable_production_plan_structure,
     validate_gate_result,
     validate_workflow_evaluation,
     workflow_evaluation_to_mapping,
@@ -81,6 +81,9 @@ def _gate(value: Mapping[str, object]) -> GateResult:
     result = GateResult(
         artifact_version=str(value["artifact_version"]),
         gate_id=OpaqueId(str(value["gate_id"])),
+        consumed_context_sha256=HashDigest(
+            str(value["consumed_context_sha256"])
+        ),
         status=GateStatus(str(value["status"])),
         reason_codes=tuple(cast(list[str], value["reason_codes"])),
         messages=tuple(cast(list[str], value["messages"])),
@@ -228,7 +231,9 @@ def executable_production_plan_from_mapping(document: Mapping[str, object]) -> E
         prohibited_actions=tuple(cast(list[str], value["prohibited_actions"])),
         authority_effect=str(value["authority_effect"]),
     )
-    validate_executable_production_plan(default_workflow_definition(), result)
+    validate_executable_production_plan_structure(
+        default_workflow_definition(), result
+    )
     _exact(value, executable_plan_to_mapping(result))
     return result
 

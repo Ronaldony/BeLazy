@@ -28,6 +28,7 @@ from .contracts import (
     CapabilityConstraintProfile,
     CostMeasurement,
     ExternalReference,
+    ExecutorAuthorityScope,
     ExecutorDispatchContext,
     FirstFrameAspectBehavior,
     HumanHandoff,
@@ -69,6 +70,7 @@ class ExternalStateUncertain(RuntimeError):
 class _UnresolvedDispatch:
     request: RequestEnvelope
     external_reference: ExternalReference | None
+    authority_scope: ExecutorAuthorityScope
 
 
 def unknown_cost() -> CostMeasurement:
@@ -372,6 +374,20 @@ class ExecutorAdapter(ABC):
             raise AdapterContractError("executor capability is not allowlisted")
         if not context.requested_tools <= context.allowed_tools:
             raise AdapterContractError("executor requested a tool outside the allowlist")
+        scope = context.authority_scope
+        if scope is None:
+            raise AdapterContractError("executor authority scope is missing")
+        if (
+            min(
+                scope.cost_minor_units,
+                scope.candidate_count,
+                scope.retry_index,
+            )
+            < 0
+            or not scope.currency
+            or not scope.destination
+        ):
+            raise AdapterContractError("executor authority scope is invalid")
 
     @final
     def dispatch(
@@ -412,6 +428,7 @@ class ExecutorAdapter(ABC):
             authority_decision=authority_decision,
             authority_ledger=authority_ledger,
             service_identity=service_identity,
+            executor_authority_scope=context.authority_scope,
             verification_purpose=VerificationPurpose.DISPATCH,
         )
 
@@ -421,7 +438,7 @@ class ExecutorAdapter(ABC):
             )
         except ExternalStateUncertain as error:
             self._unresolved[request.idempotency_key] = _UnresolvedDispatch(
-                request, error.external_reference
+                request, error.external_reference, context.authority_scope
             )
             return _result(
                 request,
@@ -431,7 +448,7 @@ class ExecutorAdapter(ABC):
             )
         except (TimeoutError, ConnectionError) as error:
             self._unresolved[request.idempotency_key] = _UnresolvedDispatch(
-                request, None
+                request, None, context.authority_scope
             )
             return _result(
                 request,
@@ -444,7 +461,7 @@ class ExecutorAdapter(ABC):
             raise AdapterContractError("executor result is bound to another request")
         if result.outcome is Outcome.EXTERNAL_UNCERTAIN:
             self._unresolved[request.idempotency_key] = _UnresolvedDispatch(
-                request, result.external_reference
+                request, result.external_reference, context.authority_scope
             )
         return result
 
@@ -516,6 +533,7 @@ class ExecutorAdapter(ABC):
             authority_decision=authority_decision,
             authority_ledger=authority_ledger,
             service_identity=service_identity,
+            executor_authority_scope=unresolved.authority_scope,
             verification_purpose=VerificationPurpose.RECONCILE,
         )
         result = self._reconcile_external(request, reference)
@@ -525,7 +543,9 @@ class ExecutorAdapter(ABC):
             del self._unresolved[request.idempotency_key]
         else:
             self._unresolved[request.idempotency_key] = _UnresolvedDispatch(
-                request, result.external_reference or reference
+                request,
+                result.external_reference or reference,
+                unresolved.authority_scope,
             )
         return result
 

@@ -21,10 +21,15 @@ definition; a caller cannot replace it with a self-consistent reduced or
 re-versioned graph.
 
 Every gate produces `gate-result/1.0` with a stable status, reason codes,
-messages, and exact evidence digests. The evaluator returns all satisfied
+messages, exact evidence digests, and a digest of only the material-context
+fields declared by that gate. A stale PASS cannot be rebound to a changed
+context; unrelated context changes invalidate only dependent claims. The evaluator returns all satisfied
 claims, every blocker, the complete executable action frontier, the stable
 recommended action, and the material context. It evaluates independent packet
 review/feasibility and final-review/metadata branches in parallel.
+The approval-verification context must equal the same six material digests;
+missing evaluation time or any mismatch blocks approval-derived gates instead
+of laundering an approval from another context.
 
 Incremental evaluation fingerprints each gate plus the six context inputs and
 invalidates the transitive dependent claims. Its semantic result must equal a
@@ -42,15 +47,26 @@ corpus runs 26 fixed legacy seed states through Rapid, Standard, and Controlled.
 Rapid intentionally collapses production-ready seeds to `preview_complete`; the
 committed expected-action matrix records that policy difference, while the
 union of the corpus covers all 26 action identities. Every row invokes the
-actual legacy planner and declarative evaluator. Parity compares action,
+actual legacy planner and a target adapter that derives every declarative gate
+from the same `EpisodeStateObservation`; the adapter neither accepts an
+expected action nor calls the legacy planner. Parity compares action,
 blockers, actor, required authority, consumed evidence, and prohibited actions.
-Only explicitly allowlisted explanations can account for a difference;
-unexplained dimensions fail. A parity report never applies cutover.
+Explanation codes are dimension-scoped: blocker explanations accept only the
+target reason-code catalog, and evidence-identity explanations accept only the
+committed legacy-label catalog mapped to lowercase SHA-256 evidence. A code
+cannot blanket-explain another dimension or an unowned value. Unexplained
+dimensions fail. A parity report never applies cutover.
 
 A canonical `WorkflowEvaluation` is not trusted merely because its self-hash
 matches. Before parity comparison or executable-plan construction, the target
 DAG is evaluated cleanly from the bundled gate results and material context;
 the complete semantic projection and gate-input identities must match.
+Every executable plan additionally binds that exact clean evaluation digest
+and exact frontier item. Structural clean recomputation proves deterministic
+consistency, not truth of an external observation. Before a workflow action can
+carry execution authority, ADR-AUTH-002 therefore requires the trusted ledger
+to return an immutable verification reference bound to that exact evaluation
+digest. Directly built or self-rehashed gate results remain non-authorizing.
 
 ## Consequences
 

@@ -6,6 +6,12 @@
   and gates, 26 legacy action identities, complete blocker/frontier evaluation,
   parallel review opportunities, action-specific material-context plans, and
   transitive incremental invalidation with full-recompute equivalence.
+- Hardened W04 review findings: real same-observation dual-run adapters,
+  gate-local context binding, exact evaluation/frontier plan binding,
+  dimension-scoped parity explanations, requester/self-approval separation,
+  one content-distinct signature verification per human, authenticated
+  requester binding, trusted workflow-evaluation verification evidence,
+  immutable authority-basis sealing, and exact runtime executor scope checks.
 - Added non-authorizing dual-run parity over all 26 actions and three workflow
   modes. Reports compare action, blockers, actor, required authority, consumed
   evidence, and prohibited actions; unexplained differences fail and no report
@@ -15,6 +21,12 @@
   parse-only standing grants; non-authorizing approval requests; ledger-backed
   decisions; and fresh purpose-bound dispatch, reconcile, and mutation
   revalidation/reservation receipts.
+- Bound every target policy field to a distinct executable positive and
+  negative conformance-test node. Closed hard-escalation facts now cover the
+  exact target catalog with immutable evidence; triggered or unknown facts
+  fail closed at R4. Workflow approval context must exactly equal the six
+  shared declarative material digests, while incremental invalidation remains
+  gate-local and full-recompute equivalent.
 - Legacy approvals, readiness, sheets, modes, AI reviews, Director results, and
   Blueprints can no longer self-assert execution authority. Generation sheets
   are always previews. Managed mutation remains fixed R4 and now requires the

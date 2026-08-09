@@ -184,11 +184,34 @@ class ReadOnlyStaging:
 
 
 @dataclass(frozen=True, slots=True)
+class ExecutorAuthorityScope:
+    """Runtime facts that the executor must use for one external action.
+
+    These values are deliberately separate from the caller's authority
+    document.  The immediate dispatch guard compares them with the exact W04
+    request, and the executor receives the same immutable object.
+    """
+
+    workspace_id: OpaqueId
+    channel_id: OpaqueId
+    concept_id: OpaqueId
+    episode_id: OpaqueId
+    provider_id: OpaqueId
+    model_id: OpaqueId
+    destination: str
+    cost_minor_units: int
+    currency: str
+    candidate_count: int
+    retry_index: int
+
+
+@dataclass(frozen=True, slots=True)
 class ExecutorDispatchContext:
     staging: ReadOnlyStaging
     requested_tools: frozenset[OpaqueId]
     allowed_tools: frozenset[OpaqueId]
     capability_allowlist: frozenset[CapabilityId]
+    authority_scope: ExecutorAuthorityScope | None = None
 
 
 @dataclass(frozen=True, slots=True)

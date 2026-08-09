@@ -1,0 +1,90 @@
+{
+  "protocol_version": "be-lazy-wave-recovery-anchor/1.0",
+  "wave": "W04-WORKFLOW-AUTHORITY",
+  "created_at": "2026-08-09T09:47:34.146Z",
+  "checkpoint": {
+    "commit": "5bc36f63d51e0a78c42603fa13946b691ed67585",
+    "tree": "405c153ed8e96027c1231e9a3a719cf310facd66",
+    "parent": "193592e0eab137964ef48529ee055f6474e686b6",
+    "subject": "autopilot(W04): add declarative workflow authority control and parity"
+  },
+  "implementation": {
+    "commit": "9ff1465c88ce48be70bbb185d8495d860f68cb61",
+    "tree": "88929617fc1e563cd28f50a5938b8339f8b1a758"
+  },
+  "evidence": {
+    "commit": "193592e0eab137964ef48529ee055f6474e686b6",
+    "tree": "3ca4bb876ae53090dae2f00a9cfe55d1806d1e37",
+    "provenance_path": "docs/provenance/w04-workflow-authority.json",
+    "provenance_sha256": "1a40a0672f1783b11fbf3a9453e337e493713f5181790f740fa885f023b6eaff",
+    "receipt_path": "reports/autopilot/waves/W04/test-receipt.json",
+    "receipt_sha256": "98b960037a5ffafab3dceab4c3c1efcd653cb62fc01fdda5247281d7690ead27",
+    "review_path": "reports/autopilot/waves/W04/review-round-5.md",
+    "review_sha256": "d9478cf30da770829ccd0b7626dc5dd0c4f9cbb07476ef7f4f042734752ed21f",
+    "execplan_path": ".agent/execplans/be-lazy-autopilot.md",
+    "execplan_sha256": "55dd4e2094123340b5517e8f17682ff88aa71ccf7026932ef2faa6c883301137"
+  },
+  "inputs": {
+    "source_archive_sha256": "954325b77028bcf7d36a88136d8e1ed0ec2348ad15014623710614cced94034a",
+    "handoff_manifest_sha256": "1bd3aa1687299c15f81539641afcd1563097b0ff8cebc9c24a793e132386244a"
+  },
+  "state": {
+    "location": ".be-lazy/autopilot/state.json",
+    "tracking": "REPOSITORY_LOCAL_IGNORED",
+    "schema_path": ".be-lazy/autopilot/schemas/autopilot-state.schema.json",
+    "schema_sha256": "bf102391da9c2797bbf37067efa8520fcae05ba2b115b33dfe9b15ba0f7155aa",
+    "semantic_canonicalization": "sha256-utf8-json-sort-keys-compact-ensure-ascii-false-v1",
+    "semantic_projection": {
+      "protocol_version": "be-lazy-prompt-autopilot-state/1.0",
+      "program_id": "be-lazy-successor-redesign",
+      "source": {
+        "expected_sha256": "954325b77028bcf7d36a88136d8e1ed0ec2348ad15014623710614cced94034a",
+        "observed_sha256": "954325b77028bcf7d36a88136d8e1ed0ec2348ad15014623710614cced94034a",
+        "unchanged": true
+      },
+      "handoff": {
+        "manifest_sha256": "1bd3aa1687299c15f81539641afcd1563097b0ff8cebc9c24a793e132386244a",
+        "verified": true
+      },
+      "target": {
+        "branch": "agent/autopilot-v4",
+        "initial_commit": "b7aaaf2ac43ca99970c317a7d505316a07d320e9"
+      },
+      "passed_wave": {
+        "id": "W04-WORKFLOW-AUTHORITY",
+        "status": "passed",
+        "attempts": 5,
+        "task_ids": ["WF-001", "AUTH-001", "AUTH-002", "WF-002"],
+        "checkpoint_commit": "5bc36f63d51e0a78c42603fa13946b691ed67585",
+        "tests": [
+          {"id": "w04-final-delta", "status": "passed", "result": "6 passed on exact implementation commit 9ff1465c88ce48be70bbb185d8495d860f68cb61"},
+          {"id": "w04-focused", "status": "passed", "result": "379 passed on exact implementation commit"},
+          {"id": "w04-core-integration", "status": "passed", "result": "495 passed across workflow, authority, orchestration, adapter and managed mutation paths"},
+          {"id": "w04-dual-run", "status": "passed", "result": "78 passed; 26 legacy seeds x 3 modes; exact two-row target process consolidation"},
+          {"id": "w04-compat-schema-resource-cli", "status": "passed", "result": "138 passed; public compatibility, 73/68 schemas, three workflow-authority resources, CLI 17"},
+          {"id": "w04-full", "status": "passed", "result": "947 passed in 200.34s on exact implementation tree"},
+          {"id": "w04-boundaries", "status": "passed", "result": "core_purity 362, side_effect_free 117, repo_isolation 255, target_boundary 438 files/67 directories"},
+          {"id": "w04-prior-recovery", "status": "passed", "result": "W00/W01 provenance, W01/W02/W03 recovery and recovery anchor all PASS"},
+          {"id": "w04-deterministic-wheel", "status": "passed", "result": "two identical 203-member wheels 25d9f865aefd49670af0f1f73c6e53830a97675dee5166748e20b70df63a6d66"},
+          {"id": "w04-isolated-wheel-probe", "status": "passed", "result": "RECORD, metadata, 73 schemas, 68 versions and three workflow-authority resources loaded in isolation"},
+          {"id": "w04-standard-backend", "status": "environment_blocked", "result": "build/setuptools/wheel absent; stdlib PEP 427 verification is not claimed as backend verification"},
+          {"id": "w04-input-postcheck", "status": "passed", "result": "clean handoff manifest projection verified 49 files; source archive verified 211 members unchanged"}
+        ],
+        "latest_reviews": [
+          {"round": 5, "role": "architecture_contract", "status": "approved", "critical": 0, "high": 0},
+          {"round": 5, "role": "security_authority_boundary", "status": "approved", "critical": 0, "high": 0},
+          {"round": 5, "role": "test_compatibility_packaging", "status": "approved", "critical": 0, "high": 0}
+        ],
+        "unresolved_findings": []
+      }
+    },
+    "semantic_sha256": "fa1c0be3ad34f47ad9fa929c992985aad971376a216d564bfe30a0ff56095164"
+  },
+  "recovery_checks": [
+    "checkpoint commit resolves to the recorded tree, parent, and subject",
+    "implementation and evidence commits are ancestors of the checkpoint",
+    "tracked W04 evidence and final ExecPlan digests match",
+    "ignored state matches the canonical W04 semantic projection",
+    "source and handoff identities remain unchanged"
+  ]
+}

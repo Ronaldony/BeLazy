@@ -1,0 +1,88 @@
+{
+  "protocol_version": "be-lazy-wave-recovery-anchor/1.0",
+  "wave": "W05-AUTOMATION-QUALITY-RELEASE",
+  "created_at": "2026-08-09T17:58:53.442Z",
+  "checkpoint": {
+    "commit": "22df49acf9fb0370b78b0ed5a4e42373b2352877",
+    "tree": "d471e49ac55195a6057cd81071dcb38b4f3a135c",
+    "parent": "9b09887654fec942bfded625282889eab7045d46",
+    "subject": "autopilot(W05): automate candidate quality and release decisions"
+  },
+  "implementation": {
+    "commit": "a241fe300676c0fcd8d31615534c2e728e02dbcb",
+    "tree": "bec97b6def4fec9a7c0e0316e04b5f4c0ff160cb"
+  },
+  "evidence": {
+    "commit": "9b09887654fec942bfded625282889eab7045d46",
+    "tree": "363ae9ba7c56e8854d087fade26b055fae045f79",
+    "provenance_path": "docs/provenance/w05-automation-quality-release.json",
+    "provenance_sha256": "955f174b32132d78995ceed4e6a10879023313dd4e5a820acb70eb02a13587a1",
+    "receipt_path": "reports/autopilot/waves/W05/test-receipt.json",
+    "receipt_sha256": "e46aab187df84da351559e1d36a56e0618aeefe45372eb5378f111dd455d85c7",
+    "review_path": "reports/autopilot/waves/W05/review-round-9.md",
+    "review_sha256": "bbd8832d7be298a8f22c61055e3fc937c9df8b799f25ae1b5542b579a771f609",
+    "execplan_path": ".agent/execplans/be-lazy-autopilot.md",
+    "execplan_sha256": "60e74026e924a26cda4681513b6504b76a74f4508c80f8126233483f43578d39"
+  },
+  "inputs": {
+    "source_archive_sha256": "954325b77028bcf7d36a88136d8e1ed0ec2348ad15014623710614cced94034a",
+    "handoff_manifest_sha256": "1bd3aa1687299c15f81539641afcd1563097b0ff8cebc9c24a793e132386244a"
+  },
+  "state": {
+    "location": ".be-lazy/autopilot/state.json",
+    "tracking": "REPOSITORY_LOCAL_IGNORED",
+    "schema_path": ".be-lazy/autopilot/schemas/autopilot-state.schema.json",
+    "schema_sha256": "bf102391da9c2797bbf37067efa8520fcae05ba2b115b33dfe9b15ba0f7155aa",
+    "semantic_canonicalization": "sha256-utf8-json-sort-keys-compact-ensure-ascii-false-v1",
+    "semantic_projection": {
+      "protocol_version": "be-lazy-prompt-autopilot-state/1.0",
+      "program_id": "be-lazy-successor-redesign",
+      "source": {
+        "expected_sha256": "954325b77028bcf7d36a88136d8e1ed0ec2348ad15014623710614cced94034a",
+        "observed_sha256": "954325b77028bcf7d36a88136d8e1ed0ec2348ad15014623710614cced94034a",
+        "unchanged": true
+      },
+      "handoff": {
+        "manifest_sha256": "1bd3aa1687299c15f81539641afcd1563097b0ff8cebc9c24a793e132386244a",
+        "verified": true
+      },
+      "target": {
+        "branch": "agent/autopilot-v4",
+        "initial_commit": "b7aaaf2ac43ca99970c317a7d505316a07d320e9"
+      },
+      "passed_wave": {
+        "id": "W05-AUTOMATION-QUALITY-RELEASE",
+        "status": "passed",
+        "attempts": 9,
+        "task_ids": ["SEL-001", "QA-001", "REL-001"],
+        "checkpoint_commit": "22df49acf9fb0370b78b0ed5a4e42373b2352877",
+        "tests": [
+          {"id": "w05-final-delta", "status": "passed", "result": "6 passed on exact implementation commit a241fe300676c0fcd8d31615534c2e728e02dbcb"},
+          {"id": "w05-authority-selection", "status": "passed", "result": "187 passed across authority and CandidateDecision on byte-identical final implementation files"},
+          {"id": "w05-full", "status": "passed", "result": "1004 passed in 618.26s; independent acceptance rerun 1004 passed in 657.10s"},
+          {"id": "w05-boundaries", "status": "passed", "result": "core_purity 408, side_effect_free 135, repo_isolation 289, target_boundary 493 files/72 directories"},
+          {"id": "w05-prior-recovery", "status": "passed", "result": "W00/W01 provenance, W01/W02/W03/W04 recovery and generic recovery anchor all PASS"},
+          {"id": "w05-schema-quality-resources", "status": "passed", "result": "80 schemas, 75 registered versions, quality-release manifest and target policy PASS"},
+          {"id": "w05-deterministic-wheel", "status": "passed", "result": "two identical 230-member, 442916-byte wheels ce70c7ce6a8eeea6eb4948df5fec8144f670a4a36bbc2413bceba5beeb694076"},
+          {"id": "w05-isolated-wheel-probe", "status": "passed", "result": "two isolated probes loaded 80 schemas, 75 versions and all workflow, Director and quality-release resources"},
+          {"id": "w05-standard-backend", "status": "environment_blocked", "result": "build/setuptools/wheel absent; stdlib PEP 427 verification is not claimed as backend verification"},
+          {"id": "w05-input-postcheck", "status": "passed", "result": "clean handoff manifest projection verified 49 files; source archive verified 211 members unchanged"}
+        ],
+        "latest_reviews": [
+          {"round": 9, "role": "architecture_contract", "status": "approved", "critical": 0, "high": 0},
+          {"round": 9, "role": "security_authority_boundary", "status": "approved", "critical": 0, "high": 0},
+          {"round": 9, "role": "test_compatibility_packaging", "status": "approved", "critical": 0, "high": 0}
+        ],
+        "unresolved_findings": []
+      }
+    },
+    "semantic_sha256": "a6648aefd140d51c1df0022171ebb3838246e8a60902e7250b0cd80c6a1273fd"
+  },
+  "recovery_checks": [
+    "checkpoint commit resolves to the recorded tree, parent, and subject",
+    "implementation and evidence commits are ancestors of the checkpoint",
+    "tracked W05 evidence and final ExecPlan digests match",
+    "ignored state matches the canonical W05 semantic projection",
+    "source and handoff identities remain unchanged"
+  ]
+}

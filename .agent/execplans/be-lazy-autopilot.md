@@ -27,7 +27,7 @@ evidence and no external side effects.
 | W01 Trust Boundary | passed | P0-PKG-001, P0-JSON-001, P0-AUTH-001 | `47d968d3cf8014573b349ad858d6a04bdf724f94` |
 | W02 Managed Mutation | passed | MUT-001..004 | `17107e815996e18032132a739140aeeae0b2716e` |
 | W03 Director/Blueprint | passed | BP-001, DIR-001, DIR-002, BP-002 | `254e20fdb63c77d6e84d746664a5f1a0a9524c03` |
-| W04 Workflow/Authority | pending | WF-001, AUTH-001, AUTH-002, WF-002 | pending |
+| W04 Workflow/Authority | reviewing | WF-001, AUTH-001, AUTH-002, WF-002 | pending evidence checkpoint |
 | W05 Automation/Quality/Release | pending | SEL-001, QA-001, REL-001 | pending |
 | W06 Runtime/Migration | pending | RUN-001, RUN-002, MIG-001, REL-002 | pending |
 | W07 Final Audit | pending | AUDIT-001..003 | pending |
@@ -234,3 +234,71 @@ schema/semantics, and target containment before continuing.
 - Final fresh architecture, security/authority, and test/packaging reviews:
   Critical 0, High 0, Medium 0 on the exact final implementation commit/tree.
 - Handoff 49/49 files and source archive 211 members/CRC/digest remain exact.
+
+## W04 decisions and evidence
+
+1. The legacy imperative planner and all public action identifiers remain
+   available while a separate target-owned declarative workflow evaluates 24
+   claims and gates. The actual dual-run corpus covers 26 action seeds in three
+   modes and compares action, blocker, actor, required authority, consumed
+   evidence, and prohibited actions.
+2. Gate results, workflow evaluations, parity reports, and executable plans are
+   immutable and non-authorizing. Their exact material context, frontier,
+   evidence, executable-plan digest, and ordered incremental predecessor chain
+   must be recomputed before an authority request can consume them.
+3. Incremental adapter inputs are mode-aware and gate-local. Unchanged helpers
+   are actually skipped, changed claims invalidate their exact dependents, and
+   the incremental semantic projection must equal a clean recomputation. A
+   chain longer than eight predecessors requires a clean rebase.
+4. DeclarativeGateRun is an ephemeral cache, not evidence. Its owner-bound seal
+   cannot survive replacement or copying; reused claim IDs and GateResults must
+   exactly match the previous evaluation's unchanged inputs and results.
+5. Routine storyboard review is a non-human integrated preflight. Standard and
+   Controlled intentionally consolidate only the legacy `approve_storyboard`
+   frontier into `create_generation_packet`. The explanation is target-owned
+   and restricted to those exact two rows and all six compared dimensions.
+6. Assurance, autonomy, and action risk are independent. The exact request and
+   closed hard-escalation facts are classified by the target policy. A known
+   material creative deviation becomes supported R4 and requires two
+   independent humans; an UNKNOWN fact remains unsupported and denied.
+7. Every authority source requires current trusted verification evidence.
+   Standing documents are parse-only, self-approval is forbidden, R4 standing
+   authority is forbidden, two human signature proofs must be content-distinct,
+   and the R4 validity window is at most 300 seconds.
+8. Dispatch, reconcile, and mutation obtain a fresh purpose-bound reservation
+   receipt. Exact request, context, risk, evaluation chain, scope, budget,
+   idempotency, workspace, adapter, service, revocation, and kill-switch facts
+   are revalidated immediately before the side effect; unsupported risk stops
+   before the ledger port is called.
+9. W02 mutation uses the same exact W04 request-envelope and idempotency
+   identity and retains its additional R4 break-glass evidence. W04 does not
+   implement durable ledger storage, real identity/signature infrastructure,
+   provider execution, publication, deployment, or migration cutover.
+
+## W04 actual checks
+
+- Final implementation: `9ff1465c88ce48be70bbb185d8495d860f68cb61`
+  (tree `88929617fc1e563cd28f50a5938b8339f8b1a758`).
+- Final delta tests: 6 passed; focused W04 suite: 379 passed; integrated
+  workflow/authority/orchestration/adapter/mutation suite: 495 passed.
+- Actual dual run: 78 passed (26 seeds x 3 modes); the only action differences
+  are the two target-owned storyboard process-consolidation rows.
+- Compatibility/schema/resource/CLI suite: 138 passed. Full suite: 947 passed
+  in 200.34s on the exact implementation tree.
+- Core purity 362, side-effect-free 117, repository isolation 255, and target
+  boundary 438 files/67 directories: PASS. W00/W01 provenance and W01/W02/W03
+  recovery checks remain PASS.
+- Schema resources: 73 root/package byte-identical schemas and 68 registered
+  versions. Workflow-authority resources: exact definition, policy, parity
+  normalization, and three-entry digest manifest.
+- Deterministic stdlib wheel: two identical 203-member, 389418-byte builds,
+  SHA-256 `25d9f865aefd49670af0f1f73c6e53830a97675dee5166748e20b70df63a6d66`.
+- Isolated wheel verification: RECORD, unique metadata, 73/68 schema resources,
+  workflow-authority resources, imports, CLI 17, and version 0.3.1 PASS.
+- Standard backend command remains environment-blocked because `build`,
+  `setuptools`, and `wheel` are absent; the fallback is not represented as
+  backend verification.
+- Final fresh architecture, security/authority, and test/packaging reviews:
+  Critical 0, High 0, Medium 0 on the exact final implementation commit/tree.
+- A clean manifest projection verifies all 49 handoff files; the source archive
+  remains exact at 211 members and its mandated digest.

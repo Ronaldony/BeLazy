@@ -1,0 +1,159 @@
+{
+  "schema_version": "be-lazy-w04-workflow-authority/1.0",
+  "wave": "W04-WORKFLOW-AUTHORITY",
+  "created_at": "2026-08-09T09:31:49.843Z",
+  "implementation": {
+    "commit": "9ff1465c88ce48be70bbb185d8495d860f68cb61",
+    "tree": "88929617fc1e563cd28f50a5938b8339f8b1a758",
+    "parent": "1e8aeae53eef1099046096575e282184622b869d",
+    "baseline_ancestor": "86cb95572f4302116a5e8267021139cce43fd345",
+    "branch": "agent/autopilot-v4",
+    "candidate_chain": [
+      "ced5a5d7c0fdb2cc30903f8d4fbdc6475aa5c2e5",
+      "a3d99ff3b064dd98482caca1af42c87dd50a1b9b",
+      "34ea16d457e9efc949200acf170eaf7cc1150bf5",
+      "1e8aeae53eef1099046096575e282184622b869d",
+      "9ff1465c88ce48be70bbb185d8495d860f68cb61"
+    ]
+  },
+  "inputs": {
+    "source_archive_sha256": "954325b77028bcf7d36a88136d8e1ed0ec2348ad15014623710614cced94034a",
+    "source_member_count": 211,
+    "handoff_manifest_sha256": "1bd3aa1687299c15f81539641afcd1563097b0ff8cebc9c24a793e132386244a",
+    "handoff_file_count": 49,
+    "postcheck_method": "clean manifest projection plus exact source archive verification"
+  },
+  "schema_resources": {
+    "manifest_path": "src/video_factory/resources/schemas/schema-manifest.json",
+    "manifest_sha256": "b5f6eda7db9bf97cd603e7c167239ae34f630244577051466758d2bfa290e775",
+    "schema_count": 73,
+    "registered_version_count": 68,
+    "w04_artifact_versions": [
+      "action-risk-assessment/1.0",
+      "approval-request/1.0",
+      "authority-decision/1.0",
+      "authority-verification-receipt/1.0",
+      "executable-production-plan/1.0",
+      "gate-result/1.0",
+      "policy-bundle/1.0",
+      "standing-authorization/1.0",
+      "workflow-definition/1.0",
+      "workflow-evaluation/1.0",
+      "workflow-parity-report/1.0"
+    ],
+    "common_schema": "workflow-authority-common.schema.json"
+  },
+  "workflow_authority_resources": {
+    "manifest_path": "src/video_factory/resources/workflow_authority/workflow-authority-resource-manifest.json",
+    "manifest_sha256": "17079016fafb46fea02b88acb536277a6582feb5caf5e09c8b22c561607f44a8",
+    "resource_count": 3,
+    "workflow_file_sha256": "6a21c935043bd619103cd47ef73d39f2dedf84301f74c450f7374f9b7cb0a808",
+    "workflow_logical_sha256": "ace55cb2304b3d28c5fa1e3ddac525ba17ce6feff0803748348cb601ec5ce552",
+    "policy_file_sha256": "31c7236cec11d3a6e34a7bb440aa5a95d2f64eae5c324b112b7b7b6b53cea35d",
+    "policy_logical_sha256": "20cf86efeb26d545e160ff1b0c189c15fe4293010f95b879902d75e012fe8a1b",
+    "parity_normalization_file_sha256": "489bae106de56c2a69a7757751a970f88160836f6cf5f6b82edc2a2a532e7deb",
+    "claim_count": 24,
+    "gate_count": 24,
+    "action_count": 26,
+    "hard_escalation_trigger_count": 13,
+    "enforcement_matrix_row_count": 34
+  },
+  "workflow_boundary": {
+    "legacy_planner_remains_public": true,
+    "actual_dual_run_rows": 78,
+    "comparison_dimensions": 6,
+    "unexplained_difference_count": 0,
+    "explained_process_consolidation_rows": 2,
+    "incremental_inputs_are_mode_and_gate_local": true,
+    "unchanged_evaluators_are_not_reexecuted": true,
+    "clean_recomputation_equivalence_required": true,
+    "maximum_incremental_predecessors": 8,
+    "ordered_predecessor_chain_bound_to_plan_parity_and_authority": true,
+    "copied_or_rebound_gate_run_cache_rejected": true,
+    "workflow_artifacts_authority_effect": "none"
+  },
+  "authority_boundary": {
+    "assurance_autonomy_and_risk_are_independent": true,
+    "caller_risk_can_lower_policy": false,
+    "standing_documents_are_verified_authority": false,
+    "self_approval_forbidden": true,
+    "r4_standing_authority_forbidden": true,
+    "r4_required_independent_humans": 2,
+    "r4_maximum_ttl_seconds": 300,
+    "known_material_change_is_supported_r4": true,
+    "unknown_classifier_fact_is_supported": false,
+    "unsupported_risk_reaches_predispatch_ledger": false,
+    "fresh_purpose_bound_receipt_required": ["dispatch", "reconcile", "mutation"],
+    "exact_request_context_evaluation_scope_and_runtime_binding": true,
+    "w02_mutation_request_and_idempotency_binding": true,
+    "w02_r4_break_glass_is_additive": true
+  },
+  "deferred_boundaries": {
+    "w05": [
+      "candidate quality and release automation",
+      "policy-driven release decision artifacts"
+    ],
+    "w06": [
+      "concrete durable ledger and execution journal",
+      "real identity and signature infrastructure",
+      "provider and mutation side effects with crash recovery",
+      "legacy authoritative cutover and migration runtime"
+    ]
+  },
+  "manual_wheel": {
+    "role": "STDLIB_PEP427_ACCEPTANCE_FALLBACK_ONLY",
+    "filename": "video_production_core-0.3.1-py3-none-any.whl",
+    "sha256": "25d9f865aefd49670af0f1f73c6e53830a97675dee5166748e20b70df63a6d66",
+    "size_bytes": 389418,
+    "member_count": 203,
+    "two_builds_identical": true,
+    "record_verified": true,
+    "isolated_registry_load": "73 schemas; 68 registered versions; three workflow-authority resources"
+  },
+  "test_evidence": {
+    "receipt": {
+      "path": "reports/autopilot/waves/W04/test-receipt.json",
+      "sha256": "98b960037a5ffafab3dceab4c3c1efcd653cb62fc01fdda5247281d7690ead27"
+    },
+    "focused": "379 passed on exact implementation commit",
+    "core_integration": "495 passed on exact implementation tree",
+    "dual_run": "78 passed on exact implementation commit",
+    "full": "947 passed on exact implementation tree",
+    "boundaries": "core_purity, side_effect_free, repo_isolation, target_boundary PASS",
+    "standard_build_backend": {
+      "status": "ENVIRONMENT_BLOCKED",
+      "observed": "build=false; setuptools=false; wheel=false",
+      "fallback_misrepresented_as_backend": false
+    }
+  },
+  "review_evidence": {
+    "discovery": {
+      "path": "reports/autopilot/waves/W04/discovery.md",
+      "sha256": "9148a7ded114ca6c3bcfa769cab3e86dbc0ba100d9f5dfcc1f51b49d121f11c2"
+    },
+    "rounds": [
+      {"round": 1, "path": "reports/autopilot/waves/W04/review-round-1.md", "sha256": "08d89539c6853d81b32b1d98a9643c4ea6af5b7afa8f95707a2ec234b4050d96", "result": "CHANGES_REQUESTED"},
+      {"round": 2, "path": "reports/autopilot/waves/W04/review-round-2.md", "sha256": "133b97398ffae46c93024c6b87f64104ae6d347ae07cf0219a037cbb0ad9723a", "result": "CHANGES_REQUESTED"},
+      {"round": 3, "path": "reports/autopilot/waves/W04/review-round-3.md", "sha256": "0cddcf3ec8cf0fb9fdb074d3e0a1768b84ac1cde972ed206dcaf472877c598d3", "result": "CHANGES_REQUESTED"},
+      {"round": 4, "path": "reports/autopilot/waves/W04/review-round-4.md", "sha256": "8b92d3927dcad9086012c3e0053370297b390769b90741855de89e18c123500e", "result": "CHANGES_REQUESTED"},
+      {"round": 5, "path": "reports/autopilot/waves/W04/review-round-5.md", "sha256": "d9478cf30da770829ccd0b7626dc5dd0c4f9cbb07476ef7f4f042734752ed21f", "result": "GO"}
+    ],
+    "final_reviewers": [
+      {"role": "architecture_contract", "critical": 0, "high": 0, "medium": 0, "result": "GO"},
+      {"role": "security_authority_boundary", "critical": 0, "high": 0, "medium": 0, "result": "GO"},
+      {"role": "test_compatibility_packaging", "critical": 0, "high": 0, "medium": 0, "result": "GO"}
+    ]
+  },
+  "execplan": {
+    "path": ".agent/execplans/be-lazy-autopilot.md",
+    "sha256": "4b7ea1ba57cc0f786bc55ef48076a276611b14c060de92d8186a52627b098df5"
+  },
+  "claims_not_made": [
+    "setuptools_backend_verification",
+    "durable_ledger_or_identity_infrastructure",
+    "human_approval_or_signature_synthesis",
+    "provider_execution_publication_or_deployment",
+    "legacy_authoritative_cutover",
+    "public_identifier_migration"
+  ]
+}

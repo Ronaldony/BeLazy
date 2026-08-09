@@ -1,0 +1,89 @@
+{
+  "receipt_version": "be-lazy-wave-test-receipt/1.1",
+  "wave": "W04-WORKFLOW-AUTHORITY",
+  "recorded_at": "2026-08-09T09:31:49.843Z",
+  "subject": {
+    "source": {
+      "archive_sha256": "954325b77028bcf7d36a88136d8e1ed0ec2348ad15014623710614cced94034a",
+      "member_count": 211,
+      "handoff_manifest_sha256": "1bd3aa1687299c15f81539641afcd1563097b0ff8cebc9c24a793e132386244a"
+    },
+    "target": {
+      "repository": "be-lazy",
+      "branch": "agent/autopilot-v4",
+      "baseline_ancestor": "86cb95572f4302116a5e8267021139cce43fd345",
+      "implementation_commit": "9ff1465c88ce48be70bbb185d8495d860f68cb61",
+      "implementation_tree": "88929617fc1e563cd28f50a5938b8339f8b1a758",
+      "implementation_parent": "1e8aeae53eef1099046096575e282184622b869d"
+    },
+    "schema_resources": {
+      "manifest_path": "src/video_factory/resources/schemas/schema-manifest.json",
+      "manifest_sha256": "b5f6eda7db9bf97cd603e7c167239ae34f630244577051466758d2bfa290e775",
+      "schema_count": 73,
+      "registered_version_count": 68
+    },
+    "workflow_authority_resources": {
+      "manifest_path": "src/video_factory/resources/workflow_authority/workflow-authority-resource-manifest.json",
+      "manifest_sha256": "17079016fafb46fea02b88acb536277a6582feb5caf5e09c8b22c561607f44a8",
+      "resource_count": 3,
+      "workflow_definition_sha256": "ace55cb2304b3d28c5fa1e3ddac525ba17ce6feff0803748348cb601ec5ce552",
+      "policy_bundle_sha256": "20cf86efeb26d545e160ff1b0c189c15fe4293010f95b879902d75e012fe8a1b",
+      "claim_count": 24,
+      "gate_count": 24,
+      "action_count": 26,
+      "policy_matrix_rows": 34
+    },
+    "manual_wheel": {
+      "sha256": "25d9f865aefd49670af0f1f73c6e53830a97675dee5166748e20b70df63a6d66",
+      "size_bytes": 389418,
+      "member_count": 203,
+      "classification": "STDLIB_PEP427_ACCEPTANCE_FALLBACK_ONLY"
+    }
+  },
+  "environment": {
+    "host_os": "Windows",
+    "python": "CPython 3.12.10 AMD64",
+    "test_runner_role": "PREEXISTING_READ_ONLY_TEST_RUNNER",
+    "test_runner_sha256": "0b471133e110cfb53a061cad528ce8e517d7b9ac41a0a396c39ad795a487fc14",
+    "pytest": "9.1.1",
+    "jsonschema": "4.26.0",
+    "network_used": false,
+    "packages_installed": false,
+    "target_environment_modified": false,
+    "variables": {
+      "PYTHONDONTWRITEBYTECODE": "1",
+      "PYTHONNOUSERSITE": "1",
+      "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
+      "basetemp": "UNIQUE_EXTERNAL_TEMP_DIRECTORY"
+    }
+  },
+  "commands": [
+    {"id": "w04-final-delta", "cwd_role": "TARGET_ROOT", "exit_code": 0, "result": "6 passed on exact implementation commit"},
+    {"id": "w04-focused", "cwd_role": "TARGET_ROOT", "exit_code": 0, "result": "379 passed on exact implementation commit"},
+    {"id": "w04-core-integration", "cwd_role": "TARGET_ROOT", "exit_code": 0, "result": "495 passed across workflow, authority, orchestration, adapter and managed mutation paths"},
+    {"id": "w04-dual-run", "cwd_role": "TARGET_ROOT", "exit_code": 0, "result": "78 passed; 26 legacy seeds x 3 modes; exact two-row target process consolidation"},
+    {"id": "w04-compat-schema-resource-cli", "cwd_role": "TARGET_ROOT", "exit_code": 0, "result": "138 passed; public compatibility, 73/68 schemas, three workflow-authority resources, CLI 17"},
+    {"id": "w04-full", "cwd_role": "TARGET_ROOT", "exit_code": 0, "result": "947 passed in 200.34s on exact implementation tree"},
+    {"id": "w04-boundaries", "cwd_role": "TARGET_ROOT", "exit_code": 0, "result": "core_purity PASS 362; side_effect_free PASS 117; repo_isolation PASS 255; target_boundary PASS 438 files/67 directories"},
+    {"id": "w04-prior-recovery", "cwd_role": "TARGET_ROOT", "exit_code": 0, "result": "W00/W01 provenance, W01/W02/W03 recovery and recovery anchor all PASS"},
+    {"id": "w04-deterministic-wheel", "cwd_role": "TARGET_ROOT", "exit_code": 0, "result": "two independent builds matched; 203 members; 389418 bytes; sha256 25d9f865aefd49670af0f1f73c6e53830a97675dee5166748e20b70df63a6d66"},
+    {"id": "w04-isolated-wheel-probe", "cwd_role": "EXTERNAL_TEMP_INSTALL", "exit_code": 0, "result": "RECORD, metadata, schemas and workflow-authority resources verified; 73 schemas and 68 versions loaded from each wheel"},
+    {"id": "w04-input-postcheck", "cwd_role": "HANDOFF_MANIFEST_PROJECTION", "exit_code": 0, "result": "clean manifest projection verified 49 files; source archive verified 211 members and exact digest; original inputs unchanged"}
+  ],
+  "final_reviews": [
+    {"round": 5, "role": "architecture_contract", "critical": 0, "high": 0, "medium": 0, "result": "GO"},
+    {"round": 5, "role": "security_authority_boundary", "critical": 0, "high": 0, "medium": 0, "result": "GO"},
+    {"round": 5, "role": "test_compatibility_packaging", "critical": 0, "high": 0, "medium": 0, "result": "GO"}
+  ],
+  "not_executed": [
+    {"command": "python -m build --wheel --no-isolation", "status": "ENVIRONMENT_BLOCKED", "observed_result": "build=false; setuptools=false; wheel=false", "reason": "The offline host has no build frontend, setuptools, or wheel package. No download is authorized; the stdlib fallback is not represented as backend verification."}
+  ],
+  "claims_not_made": [
+    "setuptools backend verification",
+    "durable ledger or identity infrastructure",
+    "human approval or signature synthesis",
+    "provider execution, publication or deployment",
+    "legacy authoritative cutover",
+    "public identifier migration"
+  ]
+}

@@ -23,6 +23,7 @@ SCHEMA_PREFIX = "video_factory/resources/schemas/"
 DIRECTOR_PREFIX = "video_factory/resources/directors/"
 WORKFLOW_AUTHORITY_PREFIX = "video_factory/resources/workflow_authority/"
 QUALITY_RELEASE_PREFIX = "video_factory/resources/quality_release/"
+RUNTIME_MIGRATION_PREFIX = "video_factory/resources/runtime_migration/"
 EXPECTED_WHEEL_TAG = "py3-none-any"
 DIRECTOR_RESOURCE_ROOT = (
     Path(__file__).resolve().parents[1]
@@ -44,6 +45,13 @@ QUALITY_RELEASE_RESOURCE_ROOT = (
     / "video_factory"
     / "resources"
     / "quality_release"
+)
+RUNTIME_MIGRATION_RESOURCE_ROOT = (
+    Path(__file__).resolve().parents[1]
+    / "src"
+    / "video_factory"
+    / "resources"
+    / "runtime_migration"
 )
 
 
@@ -93,7 +101,8 @@ def _validate_dist_info(
         )
     metadata_name = f"{dist_info}/METADATA"
     wheel_name = f"{dist_info}/WHEEL"
-    for required in (metadata_name, wheel_name):
+    top_level_name = f"{dist_info}/top_level.txt"
+    for required in (metadata_name, wheel_name, top_level_name):
         if required not in names:
             raise ValueError(f"wheel metadata member is missing: {required}")
 
@@ -148,6 +157,17 @@ def _validate_dist_info(
         raise ValueError("wheel must declare Root-Is-Purelib: true")
     if wheel.get_all("Tag", []) != [EXPECTED_WHEEL_TAG]:
         raise ValueError("wheel compatibility tag mismatch")
+    if archive.read(top_level_name) != b"video_factory\nvideo_factory_runtime\n":
+        raise ValueError("wheel top-level package list is invalid")
+    for required in (
+        "video_factory/runtime/__init__.py",
+        "video_factory_runtime/__init__.py",
+        "video_factory_runtime/journal.py",
+        "video_factory_runtime/publisher.py",
+        "video_factory_runtime/migration.py",
+    ):
+        if required not in names:
+            raise ValueError(f"wheel runtime boundary member is missing: {required}")
 
 
 def _strict_object(payload: bytes, label: str) -> Mapping[str, object]:
@@ -442,6 +462,99 @@ def _validate_quality_release_resources(
         raise ValueError("wheel quality/release manifest does not match code projection")
 
 
+def _validate_runtime_migration_resources(
+    archive: zipfile.ZipFile, names: list[str]
+) -> None:
+    manifest_leaf = "runtime-migration-resource-manifest.json"
+    manifest_name = RUNTIME_MIGRATION_PREFIX + manifest_leaf
+    documents = {"migration-registry-v1.json", "runtime-policy-v1.json"}
+    expected = {
+        RUNTIME_MIGRATION_PREFIX + "__init__.py",
+        manifest_name,
+        *(RUNTIME_MIGRATION_PREFIX + value for value in documents),
+    }
+    actual = {name for name in names if name.startswith(RUNTIME_MIGRATION_PREFIX)}
+    if actual != expected:
+        raise ValueError("wheel runtime/migration resource member set is invalid")
+    manifest = _strict_object(archive.read(manifest_name), manifest_name)
+    if (
+        set(manifest) != {"manifest_version", "resource_count", "resources"}
+        or manifest.get("manifest_version")
+        != "runtime-migration-resource-manifest/1.0"
+        or manifest.get("resource_count") != 2
+    ):
+        raise ValueError("wheel runtime/migration manifest shape/version is invalid")
+    entries = manifest.get("resources")
+    if not isinstance(entries, list) or len(entries) != 2:
+        raise ValueError("wheel runtime/migration manifest entries are invalid")
+    filenames: list[str] = []
+    for entry in entries:
+        if not isinstance(entry, Mapping) or set(entry) != {"filename", "sha256"}:
+            raise ValueError("wheel runtime/migration manifest entry is invalid")
+        filename = entry.get("filename")
+        if not isinstance(filename, str):
+            raise ValueError("wheel runtime/migration filename is invalid")
+        filenames.append(filename)
+        payload = archive.read(RUNTIME_MIGRATION_PREFIX + filename)
+        if hashlib.sha256(payload).hexdigest() != entry.get("sha256"):
+            raise ValueError(f"wheel runtime/migration digest mismatch: {filename}")
+        if payload != (RUNTIME_MIGRATION_RESOURCE_ROOT / filename).read_bytes():
+            raise ValueError(
+                f"wheel runtime/migration resource differs from code projection: {filename}"
+            )
+    if filenames != sorted(filenames) or set(filenames) != documents:
+        raise ValueError("wheel runtime/migration manifest set is invalid")
+    if archive.read(manifest_name) != (
+        RUNTIME_MIGRATION_RESOURCE_ROOT / manifest_leaf
+    ).read_bytes():
+        raise ValueError("wheel runtime/migration manifest differs from code projection")
+    policy_document = _strict_object(
+        archive.read(RUNTIME_MIGRATION_PREFIX + "runtime-policy-v1.json"),
+        "wheel runtime policy",
+    )
+    policy_identity = dict(policy_document)
+    policy_sha = policy_identity.pop("policy_sha256", None)
+    if (
+        policy_identity.get("policy_version") != "runtime-policy/1.0"
+        or policy_identity.get("fixture_only") is not True
+        or policy_identity.get("production_enabled") is not False
+        or policy_sha != _canonical_sha256(policy_identity)
+    ):
+        raise ValueError("wheel runtime policy identity or safety mode is invalid")
+    migration = policy_identity.get("migration")
+    if not isinstance(migration, Mapping) or (
+        migration.get("production_activation_enabled") is not False
+        or migration.get("projections_are_authority") is not False
+        or migration.get("projection_read_only") is not True
+    ):
+        raise ValueError("wheel runtime migration safety policy is invalid")
+    registry = _strict_object(
+        archive.read(RUNTIME_MIGRATION_PREFIX + "migration-registry-v1.json"),
+        "wheel migration registry",
+    )
+    registry_identity = dict(registry)
+    registry_sha = registry_identity.pop("registry_sha256", None)
+    views = registry_identity.get("views")
+    if (
+        registry_identity.get("registry_version")
+        != "projection-migration-registry/1.0"
+        or registry_identity.get("fixture_only") is not True
+        or registry_identity.get("production_activation_enabled") is not False
+        or registry_sha != _canonical_sha256(registry_identity)
+        or not isinstance(views, list)
+        or len(views) != 6
+        or [item.get("view_kind") for item in views]
+        != sorted(item.get("view_kind") for item in views)
+        or any(
+            not isinstance(item, Mapping)
+            or item.get("consumer_status") != "unregistered"
+            or item.get("fixture_pinned_parity_required") is not True
+            for item in views
+        )
+    ):
+        raise ValueError("wheel migration registry identity or safety mode is invalid")
+
+
 def inspect_wheel(path: Path) -> tuple[int, int, str]:
     payload = path.read_bytes()
     with zipfile.ZipFile(path) as archive:
@@ -456,6 +569,7 @@ def inspect_wheel(path: Path) -> tuple[int, int, str]:
         _validate_director_resources(archive, names)
         _validate_workflow_authority_resources(archive, names)
         _validate_quality_release_resources(archive, names)
+        _validate_runtime_migration_resources(archive, names)
         schema_names = sorted(
             name
             for name in names
@@ -552,13 +666,18 @@ import sys
 install = Path(sys.argv[1]).resolve()
 sys.path.insert(0, str(install))
 import video_factory
-from video_factory import authority, blueprint, directors, quality, release, selection, workflow
+import video_factory_runtime
+from video_factory import authority, blueprint, directors, quality, release, runtime, selection, workflow
 from video_factory.artifacts import ArtifactSchemaRegistry, validate_artifact_mapping
 from video_factory.workflow.resources import validate_packaged_workflow_resources
 from video_factory.quality.resources import validate_packaged_quality_resources
+from video_factory.runtime.resources import validate_packaged_runtime_resources
 package_file = Path(video_factory.__file__).resolve()
+runtime_package_file = Path(video_factory_runtime.__file__).resolve()
 if not package_file.is_relative_to(install):
     raise SystemExit(f'package escaped isolated install: {package_file}')
+if not runtime_package_file.is_relative_to(install):
+    raise SystemExit(f'runtime package escaped isolated install: {runtime_package_file}')
 registry = ArtifactSchemaRegistry()
 expected_schemas = int(sys.argv[2])
 expected_versions = int(sys.argv[3])
@@ -578,10 +697,13 @@ if authority.target_policy_bundle().policy_version != 'authority-policy/2.1':
     raise SystemExit('installed authority policy missing')
 validate_packaged_workflow_resources()
 validate_packaged_quality_resources()
+validate_packaged_runtime_resources()
 if quality.target_quality_policy().artifact_version != 'quality-policy/1.0':
     raise SystemExit('installed quality policy missing')
 if not hasattr(selection, 'CandidateDecision') or not hasattr(release, 'ReleaseAssessment'):
     raise SystemExit('installed W05 public contracts missing')
+if not hasattr(runtime, 'ExecutionIntent') or not hasattr(video_factory_runtime, 'SQLiteExecutionJournal'):
+    raise SystemExit('installed W06 runtime contracts missing')
 valid = {'artifact_version': 'approval-requirement/1.0', 'rules_version': 'rules', 'episode_id': 'ep', 'requirement_id': 'req', 'capability_id': 'cap', 'bound_artifacts': [{'path': 'a.json', 'sha256': 'a'*64, 'artifact_version': 'brief/1.0'}], 'effective_config_sha256': 'b'*64, 'kind': 'packet', 'creates_evidence': False}
 if not validate_artifact_mapping(valid, registry=registry).ok:
     raise SystemExit('installed registry could not validate a valid artifact')

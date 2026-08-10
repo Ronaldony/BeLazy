@@ -4,6 +4,7 @@ from pathlib import Path
 import tomllib
 
 import video_factory
+import video_factory_runtime
 from video_factory import (
     analytics,
     approvals,
@@ -29,6 +30,7 @@ from video_factory import (
     quality,
     release,
     review,
+    runtime,
     security,
     selection,
     sheets,
@@ -61,6 +63,7 @@ DOCUMENTED_PUBLIC_PACKAGES = {
     "video_factory.quality",
     "video_factory.release",
     "video_factory.review",
+    "video_factory.runtime",
     "video_factory.security",
     "video_factory.selection",
     "video_factory.sheets",
@@ -101,6 +104,7 @@ def test_current_contract_identity_and_public_packages() -> None:
             quality,
             release,
             review,
+            runtime,
             security,
             selection,
             sheets,
@@ -109,6 +113,9 @@ def test_current_contract_identity_and_public_packages() -> None:
         )
     }
     assert imported_public_packages == DOCUMENTED_PUBLIC_PACKAGES
+    assert video_factory_runtime.__name__ == "video_factory_runtime"
+    assert hasattr(video_factory_runtime, "SQLiteExecutionJournal")
+    assert hasattr(video_factory_runtime, "FixtureRuntimeBoundary")
     assert all(
         name.startswith("video_factory.")
         for name in imported_public_packages

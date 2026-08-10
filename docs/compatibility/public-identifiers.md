@@ -32,4 +32,8 @@ namespace, CLI, or legacy identifiers. W05 likewise adds
 and seven `/1.0` artifact versions. These are additive contracts.
 `candidate-decision/1.0` does not alter `candidate-ranking/1.0`, and the W05
 legacy projection never claims `selected_by_human=true` or current authority.
-Runtime cutover remains deferred to W06.
+W06 additively introduces `video_factory.runtime`, the fixture-only
+`video_factory_runtime` package, and seven `/1.0` runtime/migration artifact
+versions. It changes no legacy distribution, import, CLI, schema, artifact, or
+serialized marker identifier. Fixture projection selection is read-only and
+non-authorizing; public identifier migration remains deferred to T90.

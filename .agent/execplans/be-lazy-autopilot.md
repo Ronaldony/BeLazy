@@ -29,7 +29,7 @@ evidence and no external side effects.
 | W03 Director/Blueprint | passed | BP-001, DIR-001, DIR-002, BP-002 | `254e20fdb63c77d6e84d746664a5f1a0a9524c03` |
 | W04 Workflow/Authority | passed | WF-001, AUTH-001, AUTH-002, WF-002 | `5bc36f63d51e0a78c42603fa13946b691ed67585` |
 | W05 Automation/Quality/Release | passed | SEL-001, QA-001, REL-001 | `22df49acf9fb0370b78b0ed5a4e42373b2352877` |
-| W06 Runtime/Migration | pending | RUN-001, RUN-002, MIG-001, REL-002 | pending |
+| W06 Runtime/Migration | in progress | RUN-001, RUN-002, MIG-001, REL-002 | pending |
 | W07 Final Audit | pending | AUDIT-001..003 | pending |
 
 ## W00 decisions and evidence
@@ -363,3 +363,77 @@ schema/semantics, and target containment before continuing.
 - A first direct handoff post-check correctly rejected scratch verification
   directories. A clean manifest projection then verified all 49 listed files;
   the source archive verified 211 members and its exact mandated digest.
+
+## W06 decisions and evidence
+
+1. The pure `video_factory` package remains side-effect-free. Seven strict
+   runtime/migration artifacts live in `video_factory.runtime`; concrete local
+   adapters live only in the additive `video_factory_runtime` package. The
+   packaged policy fixes fixture-only operation and disables production.
+2. The SQLite journal atomically claims action/idempotency scope with exact
+   request and intent digests, uses FULL synchronization, preserves an
+   append-only hash chain and immutable receipt history, and rejects same-key
+   different-request reuse.
+3. `planned`, `authorized`, and `reserved` may resume only after every current
+   check is repeated. `dispatching`, `dispatched`, `partial`, `reconciling`, and
+   `uncertain` are reconcile-only. Exact terminal replay is read-only and does
+   not re-attest identity, consult the kill switch, reserve authority, or invoke
+   the effect port.
+4. The managed fixture executor uses stable no-follow file descriptors and
+   operation-level actual-use CAS, containment, byte, link/reparse, authority,
+   and journal checks. Partial or ambiguous state becomes durable uncertainty
+   and is never restarted from the beginning.
+5. The synthetic external executor validates exact output references and
+   bytes, request identity, cost/currency, workspace changes, and uncertainty.
+   Restart reconciliation recovers the durable external reference without
+   redispatch.
+6. Publication is separate from W05 readiness. The fake publisher freshly
+   verifies candidate, assessment, destination, workspace, service identity,
+   kill switch, and a distinct R3 W04 side-effect reservation. Before/after
+   workspace verifier records, settlement, uncertainty, and reconciliation are
+   durable; production publication remains disabled.
+7. Migration is read-only and reversible across legacy-only, dual-read,
+   projection-read-only, and rolled-back states. A fixture-pinned exact-byte
+   parity receipt and separate current activation/rollback verification are
+   mandatory. Every production consumer remains unregistered and projections
+   remain non-current and non-authorizing.
+8. Deployment, migration, rollback, incident, drift, break-glass, journal
+   recovery, and release runbooks preserve exact evidence and name the
+   no-redispatch/rollback conditions. Public identifier migration remains
+   deferred to T90.
+9. The ordered mutation-effect sequence is inside the canonical
+   `ExecutionIntent`, not trusted from a mutable journal index. Dispatch claims
+   revalidate the execution row and complete event chain in their transaction.
+   Success, failure, and reconciliation can be recorded only atomically with a
+   bound receipt. Windows fixture mutation keeps the complete ancestor chain
+   and exact directory/file handles live, then rejects any directory-path
+   rebound before a handle-relative effect.
+
+## W06 checks in progress
+
+- Broad W06/runtime/core-bridge/schema/public focused suite: 290 passed, 2
+  platform skips (symlink creation unavailable and the POSIX-only leaf-swap
+  case replaced by Windows exact-handle coverage).
+- Latest post-review journal plus executor/mutation/publication delta: 54
+  passed, 1 POSIX-only skip. This includes intent-bound effect plans,
+  transaction-local row/chain validation, receipt-required terminal states,
+  process-death reservation recovery, non-serializable credential leases, and
+  Windows ancestor-rebound CREATE/REPLACE negatives.
+- Current schema/resource projection: 87 root/package byte-identical schemas,
+  82 registered versions, and exact runtime/migration resource manifests.
+- Two clean offline wheel builds are byte-identical: 255 members, 532427 bytes,
+  SHA-256 `c7e9ca29ddc50e769c563a5780c23ced7adc57988997d431da4a06d2bd0b9412`.
+  Both source-free isolated probes passed with 87 schemas, 82 registered
+  versions, manifest SHA-256
+  `4a962a180621efd7e422c252caf561bbf62a1ef6edd53baa79c6ca7316bd89d0`,
+  both packages, and exact Director/workflow/authority/quality/runtime resource
+  semantics. All 13 wheel corruption/identity negative tests pass.
+- Final boundaries currently pass: core purity 462/0, side-effect-free 140/0,
+  runtime dependency direction 140 core + 10 runtime/0, repository isolation
+  323/0, and target boundary 560 files + 77 directories/0.
+- The first full collection yielded 1069 passes and 2 platform skips; its 13
+  failures were the one stale wheel-member assertion (`253` versus the exact
+  intended `255` after adding authority/credential runtime modules). Direct
+  archive comparison proved those were the only two new members, and the 13
+  tests pass after correcting the assertion. A clean canonical full run,
+  checkpoint, and source/handoff post-check remain pending.

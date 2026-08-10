@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.video-factory.invalid/runtime/execution-journal-event.schema.json",
+  "title": "Append-only runtime journal event",
+  "type": "object",
+  "required": [
+    "artifact_version", "event_id", "event_sha256", "journal_id", "sequence",
+    "previous_event_sha256", "intent_sha256", "authority_receipt_sha256",
+    "workspace_observation_sha256", "reservation_sha256", "state",
+    "operation_id", "occurred_at", "reason_codes", "external_reference_id",
+    "may_have_started"
+  ],
+  "properties": {
+    "artifact_version": { "const": "execution-journal-event/1.0" },
+    "event_id": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" },
+    "event_sha256": { "$ref": "artifact-common.schema.json#/$defs/sha256" },
+    "journal_id": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" },
+    "sequence": { "type": "integer", "minimum": 0 },
+    "previous_event_sha256": { "$ref": "#/$defs/nullableSha" },
+    "intent_sha256": { "$ref": "artifact-common.schema.json#/$defs/sha256" },
+    "authority_receipt_sha256": { "$ref": "#/$defs/nullableSha" },
+    "workspace_observation_sha256": { "$ref": "#/$defs/nullableSha" },
+    "reservation_sha256": { "$ref": "#/$defs/nullableSha" },
+    "state": { "enum": ["planned", "authorized", "reserved", "dispatching", "dispatched", "reconciling", "succeeded", "failed", "partial", "uncertain", "reconciled"] },
+    "operation_id": { "$ref": "#/$defs/nullableToken" },
+    "occurred_at": { "type": "string", "format": "date-time" },
+    "reason_codes": { "$ref": "artifact-common.schema.json#/$defs/canonicalReasonCodes" },
+    "external_reference_id": { "$ref": "#/$defs/nullableToken" },
+    "may_have_started": { "type": "boolean" }
+  },
+  "$defs": {
+    "nullableSha": { "oneOf": [{ "type": "null" }, { "$ref": "artifact-common.schema.json#/$defs/sha256" }] },
+    "nullableToken": { "oneOf": [{ "type": "null" }, { "$ref": "artifact-common.schema.json#/$defs/opaqueId" }] }
+  },
+  "additionalProperties": false
+}

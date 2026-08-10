@@ -1,0 +1,14 @@
+{
+  "manifest_version": "runtime-migration-resource-manifest/1.0",
+  "resource_count": 2,
+  "resources": [
+    {
+      "filename": "migration-registry-v1.json",
+      "sha256": "57342aa35e3dd84b1dc72e9883f2b48173f30fdba2fb7f03db1d6886a6ad5fa2"
+    },
+    {
+      "filename": "runtime-policy-v1.json",
+      "sha256": "5f81e4b11fda2267d84eeb557a219f78efa57980f8cd84123cbd50ad81b871b4"
+    }
+  ]
+}

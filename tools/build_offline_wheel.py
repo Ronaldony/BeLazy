@@ -38,17 +38,18 @@ def _zip_info(name: str) -> zipfile.ZipInfo:
 
 
 def _project_files(project_root: Path) -> dict[str, bytes]:
-    package_root = project_root / "src" / "video_factory"
-    if not package_root.is_dir():
-        raise ValueError(f"package root is missing: {package_root}")
     output: dict[str, bytes] = {}
-    for path in sorted(package_root.rglob("*")):
-        if not path.is_file():
-            continue
-        if "__pycache__" in path.parts or path.suffix in {".pyc", ".pyo"}:
-            continue
-        relative = path.relative_to(project_root / "src").as_posix()
-        output[relative] = path.read_bytes()
+    for package_name in ("video_factory", "video_factory_runtime"):
+        package_root = project_root / "src" / package_name
+        if not package_root.is_dir():
+            raise ValueError(f"package root is missing: {package_root}")
+        for path in sorted(package_root.rglob("*")):
+            if not path.is_file():
+                continue
+            if "__pycache__" in path.parts or path.suffix in {".pyc", ".pyo"}:
+                continue
+            relative = path.relative_to(project_root / "src").as_posix()
+            output[relative] = path.read_bytes()
     schema_prefix = "video_factory/resources/schemas/"
     schemas = [
         name
@@ -100,7 +101,7 @@ def build_wheel(project_root: Path, output_dir: Path) -> tuple[Path, int]:
     files[f"{dist_info}/entry_points.txt"] = (
         "[console_scripts]\nvideo-factory = video_factory.cli:main\n"
     ).encode("utf-8")
-    files[f"{dist_info}/top_level.txt"] = b"video_factory\n"
+    files[f"{dist_info}/top_level.txt"] = b"video_factory\nvideo_factory_runtime\n"
 
     record_name = f"{dist_info}/RECORD"
     record_stream = io.StringIO(newline="")

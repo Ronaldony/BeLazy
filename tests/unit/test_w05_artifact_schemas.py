@@ -27,8 +27,8 @@ from tests.unit.test_release_control import _authority, _release_fixture
 
 def test_w05_schema_registry_and_all_public_mappings_are_strict() -> None:
     registry = ArtifactSchemaRegistry()
-    assert len(registry.all_schemas()) == 80
-    assert len(registry.list_versions()) == 75
+    assert len(registry.all_schemas()) == 87
+    assert len(registry.list_versions()) == 82
     expected = {
         "quality-policy/1.0",
         "quality-bundle/1.0",

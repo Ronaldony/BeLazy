@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.video-factory.invalid/runtime/migration-cutover-state.schema.json",
+  "title": "Reversible read-only projection migration state",
+  "type": "object",
+  "required": [
+    "artifact_version", "state_id", "state_sha256", "migration_id",
+    "consumer_id", "view_kind", "generation", "mode",
+    "previous_state_sha256", "parity_receipts", "feature_flag_sha256",
+    "activation_record", "rollback_record", "activated_at",
+    "rollback_required", "read_only", "projections_are_authority",
+    "authority_effect"
+  ],
+  "properties": {
+    "artifact_version": { "const": "migration-cutover-state/1.0" },
+    "state_id": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" },
+    "state_sha256": { "$ref": "artifact-common.schema.json#/$defs/sha256" },
+    "migration_id": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" },
+    "consumer_id": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" },
+    "view_kind": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" },
+    "generation": { "type": "integer", "minimum": 0 },
+    "mode": { "enum": ["legacy_only", "dual_read_compare", "projection_read_only", "rolled_back"] },
+    "previous_state_sha256": { "$ref": "#/$defs/nullableSha" },
+    "parity_receipts": { "type": "array", "uniqueItems": true, "items": { "$ref": "artifact-common.schema.json#/$defs/boundArtifact" } },
+    "feature_flag_sha256": { "$ref": "artifact-common.schema.json#/$defs/sha256" },
+    "activation_record": { "$ref": "artifact-common.schema.json#/$defs/boundArtifact" },
+    "rollback_record": { "$ref": "#/$defs/nullableRef" },
+    "activated_at": { "type": "string", "format": "date-time" },
+    "rollback_required": { "type": "boolean" },
+    "read_only": { "const": true },
+    "projections_are_authority": { "const": false },
+    "authority_effect": { "const": "none" }
+  },
+  "$defs": {
+    "nullableSha": { "oneOf": [{ "type": "null" }, { "$ref": "artifact-common.schema.json#/$defs/sha256" }] },
+    "nullableRef": { "oneOf": [{ "type": "null" }, { "$ref": "artifact-common.schema.json#/$defs/boundArtifact" }] }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.video-factory.invalid/runtime/execution-intent.schema.json",
+  "title": "Durable runtime execution intent",
+  "type": "object",
+  "required": [
+    "artifact_version", "intent_id", "intent_sha256", "request_id",
+    "request_sha256", "idempotency_key", "action_kind", "action_id",
+    "planned_effect_ids",
+    "workspace_id", "plan_sha256", "gate_context_sha256",
+    "workspace_observation_sha256", "authority_decision_sha256",
+    "authority_receipt_sha256", "service_identity",
+    "service_identity_attestation", "credential_handle_id",
+    "credential_verification", "destination",
+    "created_at"
+  ],
+  "properties": {
+    "artifact_version": { "const": "execution-intent/1.0" },
+    "intent_id": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" },
+    "intent_sha256": { "$ref": "artifact-common.schema.json#/$defs/sha256" },
+    "request_id": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" },
+    "request_sha256": { "$ref": "artifact-common.schema.json#/$defs/sha256" },
+    "idempotency_key": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" },
+    "action_kind": { "enum": ["executor", "mutation", "publication", "migration"] },
+    "action_id": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" },
+    "planned_effect_ids": {
+      "type": "array",
+      "items": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" },
+      "uniqueItems": true
+    },
+    "workspace_id": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" },
+    "plan_sha256": { "$ref": "artifact-common.schema.json#/$defs/sha256" },
+    "gate_context_sha256": { "$ref": "artifact-common.schema.json#/$defs/sha256" },
+    "workspace_observation_sha256": { "$ref": "artifact-common.schema.json#/$defs/sha256" },
+    "authority_decision_sha256": { "$ref": "artifact-common.schema.json#/$defs/sha256" },
+    "authority_receipt_sha256": { "$ref": "#/$defs/nullableSha" },
+    "service_identity": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" },
+    "service_identity_attestation": { "$ref": "artifact-common.schema.json#/$defs/boundArtifact" },
+    "credential_handle_id": { "$ref": "#/$defs/nullableToken" },
+    "credential_verification": { "$ref": "#/$defs/nullableCredential" },
+    "destination": { "oneOf": [{ "type": "null" }, { "type": "string", "minLength": 1 }] },
+    "created_at": { "type": "string", "format": "date-time" }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "action_kind": { "const": "mutation" } },
+        "required": ["action_kind"]
+      },
+      "then": { "properties": { "planned_effect_ids": { "minItems": 1 } } },
+      "else": { "properties": { "planned_effect_ids": { "maxItems": 0 } } }
+    }
+  ],
+  "$defs": {
+    "nullableSha": { "oneOf": [{ "type": "null" }, { "$ref": "artifact-common.schema.json#/$defs/sha256" }] },
+    "nullableToken": { "oneOf": [{ "type": "null" }, { "$ref": "artifact-common.schema.json#/$defs/opaqueId" }] },
+    "nullableArtifact": { "oneOf": [{ "type": "null" }, { "$ref": "artifact-common.schema.json#/$defs/boundArtifact" }] },
+    "nullableCredential": {
+      "oneOf": [
+        { "type": "null" },
+        {
+          "allOf": [
+            { "$ref": "artifact-common.schema.json#/$defs/boundArtifact" },
+            { "properties": { "artifact_version": { "const": "credential-registration-attestation/1.0" } } }
+          ]
+        }
+      ]
+    }
+  },
+  "additionalProperties": false
+}

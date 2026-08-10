@@ -69,15 +69,15 @@ def _rewrite(
 def _built_wheel(tmp_path: Path) -> Path:
     root = Path(__file__).resolve().parents[2]
     wheel, members = build_wheel(root, tmp_path / "wheel")
-    assert members == 230
+    assert members == 255
     return wheel
 
 
 def test_offline_wheel_record_metadata_and_tag_are_verified(tmp_path: Path) -> None:
     wheel = _built_wheel(tmp_path)
     members, schemas, digest = inspect_wheel(wheel)
-    assert members == 230
-    assert schemas == 80
+    assert members == 255
+    assert schemas == 87
     assert digest == hashlib.sha256(wheel.read_bytes()).hexdigest()
 
 
@@ -151,6 +151,41 @@ def test_wheel_rejects_coherently_rehashed_director_resource_tamper(
         refresh_record=True,
     )
     with pytest.raises(ValueError, match="code projection"):
+        inspect_wheel(damaged)
+
+
+def test_wheel_rejects_coherently_rehashed_runtime_safety_tamper(
+    tmp_path: Path,
+) -> None:
+    wheel = _built_wheel(tmp_path)
+    policy_name = "video_factory/resources/runtime_migration/runtime-policy-v1.json"
+    manifest_name = (
+        "video_factory/resources/runtime_migration/"
+        "runtime-migration-resource-manifest.json"
+    )
+    with zipfile.ZipFile(wheel) as archive:
+        policy = json.loads(archive.read(policy_name))
+        manifest = json.loads(archive.read(manifest_name))
+    policy["production_enabled"] = True
+    identity = dict(policy)
+    identity.pop("policy_sha256")
+    policy["policy_sha256"] = _canonical_sha256(identity)
+    policy_payload = _render(policy)
+    for entry in manifest["resources"]:
+        if entry["filename"] == "runtime-policy-v1.json":
+            entry["sha256"] = hashlib.sha256(policy_payload).hexdigest()
+    damaged = tmp_path / "runtime-safety-damaged" / wheel.name
+    damaged.parent.mkdir()
+    _rewrite(
+        wheel,
+        damaged,
+        {
+            policy_name: policy_payload,
+            manifest_name: _render(manifest),
+        },
+        refresh_record=True,
+    )
+    with pytest.raises(ValueError, match="runtime/migration"):
         inspect_wheel(damaged)
 
 

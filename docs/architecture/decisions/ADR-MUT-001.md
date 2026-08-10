@@ -1,6 +1,6 @@
 # ADR-MUT-001 — Managed Mutation Plane and no direct human file mutation
 
-- Status: Accepted (W02 contract and guard; concrete runtime deferred to W06)
+- Status: Accepted (W02 contract/guard and W06 fixture runtime)
 - Decision owner: System architecture
 - Scope: production artifacts, channel/episode workspaces, policies, approvals, generated projections
 
@@ -20,8 +20,9 @@ W02 implements this boundary additively as `video_factory.mutation` plus
 `video_factory.providers.ManagedMutationExecutorPort`. It does not add a
 filesystem executor, durable journal implementation, or human-approval issuer.
 W04 supplies the trusted authority-ledger port and exact decision/receipt
-contracts; concrete durable ledger and executor implementations remain W06
-responsibilities.
+contracts. W06 supplies a fixture-only concrete executor and durable journal in
+`video_factory_runtime`; production filesystem and ledger implementations are
+still disabled.
 
 ## Required contracts
 

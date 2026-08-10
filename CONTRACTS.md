@@ -46,6 +46,8 @@ Production planning is evidence-based, not presence-based:
 | `video_factory.quality` | exact-media nine-dimension QualityBundle aggregation, target-owned hard gates, current media/evaluator-receipt verification ports, and bounded affected-target-only remediation plans |
 | `video_factory.selection` | trusted-confidence/score/margin-bound CandidateDecision with exact `auto_select_candidates` W04 authority and a read-only non-current legacy ranking projection |
 | `video_factory.release` | non-secret destination binding, cycle-free ReleaseCandidate identity, and exactly-one-human non-publishing ReleaseAssessment handoff |
+| `video_factory.runtime` | pure W06 execution/publication/parity/migration artifacts, strict serialization, and packaged fixture-only policy projections; never performs an effect |
+| `video_factory_runtime` | marker-bound fixture adapters: SQLite journal, no-follow workspace/content access, managed mutation, external executor, fake publication, and reversible read-only migration; production activation is forbidden |
 | `video_factory.feasibility` | pure checks for capability, minimum duration, first-frame aspect/before-state, continuity anchors, cross-shot first-frame state carryover, and unsupported render dependencies |
 | `video_factory.qc` | injected constraints with pass/warn/fail/inconclusive/not-applicable outcomes and fallback measurement hints |
 | `video_factory.continuity` | cross-shot comparison of one opaque element between two generated clips (relative-scale / orientation-shape / presence); plan-only, caller-supplied finite nonnegative tolerances, closed measurement serialization, and pure serialized-document rejudgment |
@@ -66,12 +68,14 @@ Production planning is evidence-based, not presence-based:
 
 ## Plan-only core invariant (2026-07-23)
 
-Core **must not perform side effects**. Allowed: observe (read / existence checks), validate, compute, and
-**produce structured Plan objects**. Forbidden inside `src/`: file write/delete/move, archive creation, and
-child-process launches. Actual managed mutation belongs to a trusted runtime
-service behind `ManagedMutationExecutorPort`; humans submit intent, review
-semantic diffs, and approve or deny authority, but do not normally edit managed
-files directly.
+Core **must not perform side effects**. Inside `src/video_factory`, allowed
+operations are observe (read / existence checks), validate, compute, and
+**produce structured Plan or evidence objects**. File write/delete/move,
+archive creation, child-process launch, network access, and real effect ports
+are forbidden there. Concrete fixture effects live only in the separate
+`src/video_factory_runtime` package behind explicit contracts; humans submit
+intent, review semantic diffs, and approve or deny authority, but do not
+normally edit managed files directly.
 
 This generalizes the existing `EncodeCommandPlan` pattern (`executed=False` always) and provider
 `human_only` → `AWAITING_HUMAN` outcomes.
@@ -96,8 +100,12 @@ This generalizes the existing `EncodeCommandPlan` pattern (`executed=False` alwa
 | `plan_wheel_build` | `WheelBuildPlan` | `python -m build --wheel` argv + vendor placement notes | invalid version |
 | `verify_lock_against_installed` | `LockVerdict` | compatible / upgrade_available / breaking / python_mismatch | invalid lock |
 
-Gate: `tools/check_side_effect_free.py` statically scans `src/` (AST-first, regex backup) and exits 1 on
-write/process APIs. Complements `check_core_purity.py` and `check_repo_isolation.py`.
+Gate: `tools/check_side_effect_free.py` statically scans `src/video_factory`
+(AST-first, regex backup) and exits 1 on write/process APIs.
+`tools/check_runtime_boundary.py` separately forbids core imports of the
+concrete runtime and forbids network/process/module-launch effects in the
+fixture runtime. These complement `check_core_purity.py` and
+`check_repo_isolation.py`.
 
 ## ProductionBlueprint and Director shadow plane (W03)
 
@@ -262,9 +270,11 @@ also requires the existing exact break-glass evidence and two-human binding.
 W04 does not activate lower mutation tiers merely from a path or requester
 label. The immutable mutation plan preserves the originating requester; the
 W04 request must match it, and that requester cannot appear in either human
-approver set. Concrete durable ledger storage, signatures, clocks, budget settlement,
-executor/journal persistence, and crash/TOCTOU recovery remain W06 runtime
-implementations behind the completed W04 ports.
+approver set. W06 exercises the completed W04 ports through a fixture-only
+durable journal, clock/identity/kill-switch fakes, reservation settlement,
+executor, publisher, and crash/TOCTOU recovery. Production ledger storage,
+signatures, credentials, providers, and effect adapters remain outside this
+program.
 
 ## Automated selection, integrated quality, and release handoff (W05)
 
@@ -316,12 +326,62 @@ assessment time and then binds the authority result. Initial W05 policy
 requires exactly one current one-shot human principal; release campaign remains disabled.
 Missing approval yields only a non-authorizing `ApprovalRequest`. Even a ready
 assessment has `publish_performed=false` and `authority_effect=none`; there is
-no W05 publisher API.
+no publisher API in the W05 core plane.
 
 The seven W05 artifact schemas and exact quality-policy resource are packaged
-with semantic wheel verification. Concrete evaluators/resolvers, durable
-attempt ledgers, execution, upload, publication, and migration cutover remain
-W06 responsibilities.
+with semantic wheel verification. W06 adds seven closed runtime/migration
+schemas and fixture adapters. Real evaluators/resolvers, credential systems,
+provider execution, production publication, and production migration cutover
+remain external.
+
+## Durable fixture runtime and reversible migration (W06)
+
+`video_factory.runtime` defines seven authority-free durable artifacts:
+`execution-intent/1.0`, `execution-journal-event/1.0`,
+`execution-receipt/1.0`, `publication-intent/1.0`,
+`publication-receipt/1.0`, `projection-parity-receipt/1.0`, and
+`migration-cutover-state/1.0`. Every public serializer validates its own
+registered closed schema; duplicate keys, non-finite values, unknown fields,
+identity rebound, and cross-field inconsistencies fail closed. The wheel now
+contains 87 schemas and 82 registered artifact versions.
+
+`video_factory_runtime` is additive and explicitly fixture-only. A boundary
+marker binds an empty isolated root to one runtime ID. The concrete SQLite
+journal uses `BEGIN IMMEDIATE`, `synchronous=FULL`, atomic idempotency claims,
+and append-only hash-chain events. The same `(action kind, action id,
+idempotency key)` with another request digest is rejected. Terminal exact
+replay returns its receipt without a fresh effect check. A durable pre-effect
+`planned`, `authorized`, or `reserved` record may continue only after every
+current check is repeated. `dispatching`, `dispatched`, `partial`,
+`reconciling`, and `uncertain` are reconcile-only and can never redispatch.
+For mutation, the ordered effect IDs are part of the canonical intent identity;
+the transaction that claims an effect revalidates the execution row, complete
+event chain, and exact next intent-bound operation before writing a marker.
+Success, failure, and reconciliation require one atomic event-plus-receipt
+commit; the generic state API cannot terminalize may-have-started work.
+
+The fixture executor validates exact request/output/cost/workspace semantics.
+The managed filesystem executor rechecks no-follow file identity, bytes,
+manifest CAS, containment, and link/reparse state at actual use and records
+operation-level partial/uncertain evidence. Both persist fresh W04 reservation
+and settlement records. A raw credential string or caller-minted opaque ID is
+not authority: only a broker-issued, destination/service/purpose-bound current
+lease may cross the effect boundary, and that lease cannot be serialized.
+
+Publication remains separate from W05 readiness. A fixture publication first
+recomputes current ReleaseCandidate/ReleaseAssessment eligibility, then
+requires an exact R3 `ready_for_human_publish`/`publish` W04 request, current
+workspace verification, service identity, kill switch, opaque credential
+handle, journal, and settlement. It persists before/after workspace verifier
+records and never treats the W05 assessment as authority.
+
+Migration uses a durable hash-chained state with `legacy_only`,
+`dual_read_compare`, `projection_read_only`, and `rolled_back`. A projection is
+selectable only for read-only use after an exact trusted parity receipt and a
+separate current activation verification. It remains non-current and
+`authority_effect=none`. The only parity verifier is a fixture-pinned exact-byte
+corpus; every production consumer is `unregistered` and production activation
+is disabled. Public identifier migration remains deferred to T90.
 
 ## Managed mutation plane (W02)
 

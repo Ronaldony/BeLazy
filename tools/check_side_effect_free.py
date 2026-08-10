@@ -1,4 +1,4 @@
-"""Fail when core ``src/`` performs writes or launches external processes.
+"""Fail when pure core ``src/video_factory`` performs side effects.
 
 Complements purity (channel identity) and isolation (tree escape). This gate
 enforces the plan-only invariant: core may observe, validate, compute, and
@@ -22,7 +22,7 @@ SKIPPED_DIRECTORIES = frozenset(
     {".git", ".pytest_cache", ".mypy_cache", ".ruff_cache", "__pycache__", ".venv"}
 )
 
-SCAN_ROOT = "src"
+SCAN_ROOT = "src/video_factory"
 
 # Regex safety net applied to source text (and used by regression tests).
 # Patterns intentionally match the acceptance-criteria search set.
@@ -301,7 +301,7 @@ def _iter_src_files(root: Path) -> Iterable[tuple[Path, str, bytes]]:
 
 
 def scan_tree(root: Path) -> tuple[list[Violation], int]:
-    """Scan ``src/`` under *root* for side-effect violations."""
+    """Scan the pure ``src/video_factory`` package under *root*."""
 
     violations: list[Violation] = []
     scanned_files = 0

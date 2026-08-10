@@ -40,10 +40,10 @@ forbids standing grants. Managed mutation remains fixed R4 and requires both
 the W04 dual-human decision and its existing exact break-glass evidence.
 
 The repository packages the workflow, authority policy, parity normalization,
-quality/release policy, 80 schemas (75 registered artifact versions), and their
-exact manifests in the
-offline wheel. Concrete persistent ledger, executor, and crash-recovery
-implementations remain deferred to the runtime wave.
+quality/release policy, W06 fixture-runtime policy, 87 schemas (82 registered
+artifact versions), and their exact manifests in the offline wheel. Production
+ledger, credential, provider, publisher, and migration implementations remain
+disabled.
 
 ## Automated selection, quality, and release boundary
 
@@ -70,9 +70,37 @@ during verification. A later ReleaseAssessment first reverifies that exact
 candidate at its assessment time
 and requires exactly one current one-shot human release approval. It can make
 the package eligible for handoff, but never publishes:
-there is no publisher API and every W05 artifact has `authority_effect=none`.
+there is no publisher API in the W05 core plane and every W05 artifact has
+`authority_effect=none`.
 Legacy ranking/edit artifacts remain unchanged and their projection is
-read-only and non-current; runtime cutover remains W06 work.
+read-only and non-current.
+
+## Durable fixture runtime and migration boundary
+
+W06 adds pure durable artifacts under `video_factory.runtime` and concrete
+local adapters in the separate `video_factory_runtime` package. The latter can
+open only a marker-bound isolated fixture root and packages
+`production_enabled=false`. It contains a SQLite atomic-idempotency journal,
+stable no-follow workspace access, managed mutation, a synthetic external
+executor, a fake publisher, and reversible read-only projection migration. It
+does not contain a real provider, real publisher, credential material, network
+client, or production filesystem adapter.
+
+Every new effect is preceded by exact workspace, identity, kill-switch, W04
+purpose-bound reservation, destination, and idempotency checks. Journal states
+after a dispatch marker are reconcile-only; they are never blindly retried.
+The canonical intent includes the exact ordered mutation-effect sequence, and
+the atomic dispatch claim revalidates the execution row and full event chain.
+Exact terminal replay only returns the existing durable receipt. Publication
+requires a separate R3 side-effect action, current release/workspace proof, and
+a broker-issued non-serializable credential lease; W05 `ready` alone cannot
+publish.
+
+Migration supports only `legacy_only`, `dual_read_compare`,
+`projection_read_only`, and `rolled_back` in fixture tests. Projection selection
+requires exact pinned parity and a separate activation record, stays read-only
+and non-authorizing, and never marks the projection current. All production
+consumer entries remain unregistered, so public cutover is still deferred.
 
 ## 0.3 continuity
 
@@ -140,12 +168,17 @@ pillars, provider-specific limits, episode identifiers, local user paths,
 credentials, or concrete adapter bindings. Such values are supplied by
 workspace rules, profiles, policies, adapters, and observed artifacts.
 
-All `src/` APIs remain plan-only:
+All APIs under the pure `src/video_factory` package remain plan-only:
 
 - no filesystem writes, deletes, or moves;
 - no child-process launch;
 - no network access;
 - no automatic approval, generation, selection, or publish action.
+
+The separate `src/video_factory_runtime` package is covered by
+`tools/check_runtime_boundary.py` and is restricted to marker-bound synthetic
+fixtures. It must never import a network/process launcher or accept a real
+production root.
 
 ## Python and installation
 
@@ -167,6 +200,7 @@ Provide dependencies from an approved offline wheelhouse, then run:
 python -m pytest
 python tools/check_core_purity.py
 python tools/check_side_effect_free.py
+python tools/check_runtime_boundary.py
 python tools/check_repo_isolation.py
 ```
 

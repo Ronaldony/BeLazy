@@ -2,6 +2,33 @@
 
 ## Unreleased
 
+- Added the fixture-only `video_factory_runtime` package and pure
+  `video_factory.runtime` contracts. The SQLite journal atomically binds exact
+  idempotency scope and request/intent digests, persists a hash-chained state
+  history with immutable receipts, resumes only proven pre-effect states, and
+  routes every may-have-started state through reconciliation without blind
+  redispatch. Exact terminal replay is read-only and does not mint fresh
+  authority.
+- Added marker-bound stable no-follow filesystem access, operation-level
+  managed mutation with actual-use CAS/TOCTOU checks, a synthetic durable
+  executor, and a fake publication coordinator. Publication freshly reverifies
+  W05 release/workspace evidence and requires a separate R3 W04 reservation;
+  before/after workspace verification, settlement, uncertainty, and recovery
+  evidence are durable. Real providers, credentials, publishers, and production
+  roots remain disabled.
+- Bound the exact ordered mutation-effect sequence into `ExecutionIntent` and
+  revalidate the execution row plus complete event chain inside every atomic
+  dispatch claim. Windows fixture mutation now keeps the complete ancestor
+  chain and exact file/directory handles live through handle-relative effects;
+  directory rebound becomes durable uncertainty rather than redirection.
+  Terminal success, failure, and reconciliation now require an atomic
+  event-plus-receipt commit rather than a standalone state update.
+- Added exact pinned-byte projection parity and a reversible read-only fixture
+  migration state machine with separate activation/rollback verification. All
+  production consumers remain unregistered and projections remain non-current
+  with `authority_effect=none`. Seven closed W06 schemas bring the wheel to 87
+  schemas and 82 registered artifact versions, with exact runtime/migration
+  resource verification and operational runbooks.
 - Added W05 exact-media quality, automatic selection, and release-handoff
   contracts. QualityBundle requires nine independent dimensions, an
   independently bound origin time, and trusted origin/current evaluator

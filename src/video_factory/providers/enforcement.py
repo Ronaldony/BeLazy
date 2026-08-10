@@ -19,6 +19,7 @@ from video_factory.authority import (
     AuthorityContractError,
     AuthorityDecision,
     TrustedAuthorizationLedger,
+    VerifiedAuthorityDecision,
     VerificationPurpose,
     revalidate_authority_for_side_effect,
 )
@@ -279,7 +280,7 @@ class OrchestrationGuard:
         )
 
 
-def enforce_adapter_dispatch(
+def verify_adapter_dispatch_authority(
     request: RequestEnvelope,
     descriptor: CapabilityDescriptor,
     expected_kind: AdapterKind,
@@ -298,7 +299,7 @@ def enforce_adapter_dispatch(
     service_identity: str | None = None,
     executor_authority_scope: ExecutorAuthorityScope | None = None,
     verification_purpose: VerificationPurpose = VerificationPurpose.DISPATCH,
-) -> None:
+) -> VerifiedAuthorityDecision:
     """ADR-004 point 4: recheck immediately before an external process."""
 
     if descriptor.adapter_kind is not expected_kind:
@@ -438,7 +439,7 @@ def enforce_adapter_dispatch(
         _reject("executor runtime scope is bound to another workspace")
     assert workspace_observation is not None
     try:
-        revalidate_authority_for_side_effect(
+        verified = revalidate_authority_for_side_effect(
             authority_decision,
             authority_request,
             ledger=authority_ledger,
@@ -453,3 +454,47 @@ def enforce_adapter_dispatch(
         )
     except AuthorityContractError as error:
         _reject(f"W04 authority revalidation failed: {error.reason_code}")
+    return verified
+
+
+def enforce_adapter_dispatch(
+    request: RequestEnvelope,
+    descriptor: CapabilityDescriptor,
+    expected_kind: AdapterKind,
+    *,
+    authorization: OrchestrationAuthorization | None = None,
+    current_context: GateContext | None = None,
+    evaluated_at: datetime | None = None,
+    workspace_observation: WorkspaceObservation | None = None,
+    expected_workspace_id: str | None = None,
+    expected_workspace_revision_id: str | None = None,
+    expected_workspace_revision: WorkspaceRevision | None = None,
+    expected_workspace_revision_sha256: str | None = None,
+    authority_request: ActionAuthorityRequest | None = None,
+    authority_decision: AuthorityDecision | None = None,
+    authority_ledger: TrustedAuthorizationLedger | None = None,
+    service_identity: str | None = None,
+    executor_authority_scope: ExecutorAuthorityScope | None = None,
+    verification_purpose: VerificationPurpose = VerificationPurpose.DISPATCH,
+) -> None:
+    """Compatibility guard preserving the original non-returning contract."""
+
+    verify_adapter_dispatch_authority(
+        request,
+        descriptor,
+        expected_kind,
+        authorization=authorization,
+        current_context=current_context,
+        evaluated_at=evaluated_at,
+        workspace_observation=workspace_observation,
+        expected_workspace_id=expected_workspace_id,
+        expected_workspace_revision_id=expected_workspace_revision_id,
+        expected_workspace_revision=expected_workspace_revision,
+        expected_workspace_revision_sha256=expected_workspace_revision_sha256,
+        authority_request=authority_request,
+        authority_decision=authority_decision,
+        authority_ledger=authority_ledger,
+        service_identity=service_identity,
+        executor_authority_scope=executor_authority_scope,
+        verification_purpose=verification_purpose,
+    )

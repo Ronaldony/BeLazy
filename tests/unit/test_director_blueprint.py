@@ -1913,8 +1913,8 @@ def test_w03_registered_schema_set_is_exact() -> None:
         "blueprint-projection/1.0",
     }
     assert expected.issubset(registry.list_versions())
-    assert len(registry.all_schemas()) == 80
-    assert len(registry.list_versions()) == 75
+    assert len(registry.all_schemas()) == 87
+    assert len(registry.list_versions()) == 82
     assert blueprint_context_sha256(_blueprint_fixture()[-1].context) == canonical_sha256(
         production_blueprint_to_mapping(_blueprint_fixture()[-1])["context"]
     )

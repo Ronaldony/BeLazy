@@ -101,7 +101,7 @@ def test_side_effect_scan_tree_on_temp_workspace(tmp_path: Path) -> None:
     """Full-tree scan finds a planted write under a fake src/ layout."""
 
     gate = _load_side_effect_free()
-    src = tmp_path / "src" / "pkg"
+    src = tmp_path / "src" / "video_factory" / "pkg"
     src.mkdir(parents=True)
     planted = src / "leaky.py"
     # Build "shutil.copy2" without a continuous banned token in this test file's

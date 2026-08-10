@@ -45,5 +45,9 @@ defines no publisher port.
 
 ## Consequences
 
-Actual upload, scheduling, credential access, pre-publish revalidation,
-idempotency, journal, reconciliation, and publication remain W06 runtime work.
+W06 implements upload/publication semantics only through an isolated fake
+publisher. It requires fresh candidate/assessment/workspace verification, a
+separate R3 side-effect decision, opaque credential handle, durable journal,
+settlement, and reconciliation. The packaged runtime policy keeps production
+publication disabled; actual scheduling, credential brokerage, and provider
+publication remain outside this program.

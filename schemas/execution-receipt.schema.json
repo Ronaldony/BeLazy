@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.video-factory.invalid/runtime/execution-receipt.schema.json",
+  "title": "Terminal durable runtime receipt",
+  "type": "object",
+  "required": [
+    "artifact_version", "receipt_id", "receipt_sha256", "intent_sha256",
+    "journal_id", "journal_head_sha256", "final_state", "started_at",
+    "completed_at", "output_refs", "measured_cost_minor_units", "currency",
+    "before_workspace_observation_sha256", "after_workspace_observation_sha256",
+    "authority_receipt_sha256", "settlement_record", "reconciliation_record",
+    "reason_codes", "authority_effect"
+  ],
+  "properties": {
+    "artifact_version": { "const": "execution-receipt/1.0" },
+    "receipt_id": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" },
+    "receipt_sha256": { "$ref": "artifact-common.schema.json#/$defs/sha256" },
+    "intent_sha256": { "$ref": "artifact-common.schema.json#/$defs/sha256" },
+    "journal_id": { "$ref": "artifact-common.schema.json#/$defs/opaqueId" },
+    "journal_head_sha256": { "$ref": "artifact-common.schema.json#/$defs/sha256" },
+    "final_state": { "enum": ["succeeded", "failed", "partial", "uncertain", "reconciled"] },
+    "started_at": { "type": "string", "format": "date-time" },
+    "completed_at": { "type": "string", "format": "date-time" },
+    "output_refs": { "type": "array", "items": { "$ref": "artifact-common.schema.json#/$defs/boundArtifact" } },
+    "measured_cost_minor_units": { "oneOf": [{ "type": "null" }, { "type": "integer", "minimum": 0 }] },
+    "currency": { "oneOf": [{ "type": "null" }, { "type": "string", "minLength": 1 }] },
+    "before_workspace_observation_sha256": { "$ref": "artifact-common.schema.json#/$defs/sha256" },
+    "after_workspace_observation_sha256": { "$ref": "#/$defs/nullableSha" },
+    "authority_receipt_sha256": { "$ref": "#/$defs/nullableSha" },
+    "settlement_record": { "$ref": "#/$defs/nullableRef" },
+    "reconciliation_record": { "$ref": "#/$defs/nullableRef" },
+    "reason_codes": { "$ref": "artifact-common.schema.json#/$defs/canonicalReasonCodes" },
+    "authority_effect": { "const": "none" }
+  },
+  "$defs": {
+    "nullableSha": { "oneOf": [{ "type": "null" }, { "$ref": "artifact-common.schema.json#/$defs/sha256" }] },
+    "nullableRef": { "oneOf": [{ "type": "null" }, { "$ref": "artifact-common.schema.json#/$defs/boundArtifact" }] }
+  },
+  "additionalProperties": false
+}

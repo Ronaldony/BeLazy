@@ -42,6 +42,7 @@ from .enforcement import (
     OrchestrationGuard,
     OrchestrationPolicy,
     enforce_adapter_dispatch,
+    verify_adapter_dispatch_authority,
     request_envelope_sha256,
 )
 from .registry import AdapterBinding, InMemoryCapabilityRegistry, RegistryError
@@ -104,6 +105,7 @@ __all__ = [
     "UncertaintyModel",
     "ValidationReport",
     "enforce_adapter_dispatch",
+    "verify_adapter_dispatch_authority",
     "request_envelope_sha256",
     "require_trusted_workspace",
     "known_cost",

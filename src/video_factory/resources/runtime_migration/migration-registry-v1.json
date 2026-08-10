@@ -1,0 +1,44 @@
+{
+  "registry_version": "projection-migration-registry/1.0",
+  "fixture_only": true,
+  "production_activation_enabled": false,
+  "views": [
+    {
+      "view_kind": "brief",
+      "legacy_artifact_version": "brief/1.0",
+      "consumer_status": "unregistered",
+      "fixture_pinned_parity_required": true
+    },
+    {
+      "view_kind": "edit",
+      "legacy_artifact_version": "edit-manifest/1.0",
+      "consumer_status": "unregistered",
+      "fixture_pinned_parity_required": true
+    },
+    {
+      "view_kind": "generation",
+      "legacy_artifact_version": "generation-packet/2.1",
+      "consumer_status": "unregistered",
+      "fixture_pinned_parity_required": true
+    },
+    {
+      "view_kind": "publish",
+      "legacy_artifact_version": "publish-manifest/1.0",
+      "consumer_status": "unregistered",
+      "fixture_pinned_parity_required": true
+    },
+    {
+      "view_kind": "sound",
+      "legacy_artifact_version": "sound-manifest/1.0",
+      "consumer_status": "unregistered",
+      "fixture_pinned_parity_required": true
+    },
+    {
+      "view_kind": "storyboard",
+      "legacy_artifact_version": "storyboard/1.0",
+      "consumer_status": "unregistered",
+      "fixture_pinned_parity_required": true
+    }
+  ],
+  "registry_sha256": "1061192811cf3ab00d8b1bdf2a931466ff1b2a82b593645b72f1264bdc4b27b6"
+}

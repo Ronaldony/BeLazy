@@ -535,22 +535,51 @@ def _validate_runtime_migration_resources(
     registry_identity = dict(registry)
     registry_sha = registry_identity.pop("registry_sha256", None)
     views = registry_identity.get("views")
+    shadow_only_views = registry_identity.get("shadow_only_views")
+    expected_views = [
+        {
+            "view_kind": "brief",
+            "legacy_artifact_version": "brief/1.0",
+            "consumer_status": "unregistered",
+            "fixture_pinned_parity_required": True,
+        },
+        {
+            "view_kind": "edit",
+            "legacy_artifact_version": "edit-manifest/1.0",
+            "consumer_status": "unregistered",
+            "fixture_pinned_parity_required": True,
+        },
+        {
+            "view_kind": "generation",
+            "legacy_artifact_version": "generation-packet/2.1",
+            "consumer_status": "unregistered",
+            "fixture_pinned_parity_required": True,
+        },
+        {
+            "view_kind": "storyboard",
+            "legacy_artifact_version": "storyboard/1.0",
+            "consumer_status": "unregistered",
+            "fixture_pinned_parity_required": True,
+        },
+    ]
+    expected_shadow_only_views = [
+        {
+            "view_kind": "publish",
+            "migration_status": "no_registered_legacy_contract",
+        },
+        {
+            "view_kind": "sound",
+            "migration_status": "no_registered_legacy_contract",
+        },
+    ]
     if (
         registry_identity.get("registry_version")
-        != "projection-migration-registry/1.0"
+        != "projection-migration-registry/1.1"
         or registry_identity.get("fixture_only") is not True
         or registry_identity.get("production_activation_enabled") is not False
         or registry_sha != _canonical_sha256(registry_identity)
-        or not isinstance(views, list)
-        or len(views) != 6
-        or [item.get("view_kind") for item in views]
-        != sorted(item.get("view_kind") for item in views)
-        or any(
-            not isinstance(item, Mapping)
-            or item.get("consumer_status") != "unregistered"
-            or item.get("fixture_pinned_parity_required") is not True
-            for item in views
-        )
+        or views != expected_views
+        or shadow_only_views != expected_shadow_only_views
     ):
         raise ValueError("wheel migration registry identity or safety mode is invalid")
 

@@ -1,0 +1,87 @@
+{
+  "receipt_version": "be-lazy-wave-test-receipt/1.1",
+  "wave": "W06-RUNTIME-MIGRATION",
+  "recorded_at": "2026-08-10T02:08:22.461Z",
+  "subject": {
+    "source": {
+      "archive_sha256": "954325b77028bcf7d36a88136d8e1ed0ec2348ad15014623710614cced94034a",
+      "member_count": 211,
+      "handoff_manifest_sha256": "1bd3aa1687299c15f81539641afcd1563097b0ff8cebc9c24a793e132386244a"
+    },
+    "target": {
+      "repository": "be-lazy",
+      "branch": "agent/autopilot-v4",
+      "baseline_ancestor": "9cca6ff6bb0955c9fa7dafd0a1daf46a4a42ce10",
+      "implementation_commit": "376cca4e2113e9d730dfbf130fc6ce5216717400",
+      "implementation_tree": "c6644afcc90985b37de422c4cf71a823f6af6486",
+      "implementation_parent": "a36c0a5424c3d7b8506d246db8ef52dd46cb93c3"
+    },
+    "schema_resources": {
+      "manifest_path": "src/video_factory/resources/schemas/schema-manifest.json",
+      "manifest_sha256": "b418fe462b187ee1f4c0d7d7f7a7332203504d3456b0a44f0820e73589075ff1",
+      "schema_count": 87,
+      "registered_version_count": 82
+    },
+    "runtime_migration_resources": {
+      "manifest_path": "src/video_factory/resources/runtime_migration/runtime-migration-resource-manifest.json",
+      "manifest_sha256": "8417a172e2274f17d9d9d38744da554d893c21301fa3807c195d0ddf820733e8",
+      "resource_count": 2,
+      "runtime_policy_file_sha256": "eb017117c26315805a2c4ff9fae4c777a9b400dd19b31db803f856dc84d78ea4",
+      "runtime_policy_logical_sha256": "fed35707f42909381d4f77805e175a86264f6978559d82d10522261eeddb3044",
+      "migration_registry_file_sha256": "57342aa35e3dd84b1dc72e9883f2b48173f30fdba2fb7f03db1d6886a6ad5fa2",
+      "migration_registry_logical_sha256": "1061192811cf3ab00d8b1bdf2a931466ff1b2a82b593645b72f1264bdc4b27b6",
+      "registered_view_count": 6
+    },
+    "manual_wheel": {
+      "sha256": "76635b5340c108299f9fdc2694fbe9128fc9046779a3dc92d8afa9d570702f45",
+      "size_bytes": 534338,
+      "member_count": 255,
+      "classification": "STDLIB_PEP427_ACCEPTANCE_FALLBACK_ONLY"
+    }
+  },
+  "environment": {
+    "host_os": "Windows",
+    "python": "CPython 3.12.10 AMD64",
+    "test_runner_role": "PREEXISTING_READ_ONLY_TEST_RUNNER",
+    "test_runner_sha256": "0b471133e110cfb53a061cad528ce8e517d7b9ac41a0a396c39ad795a487fc14",
+    "pytest": "9.1.1",
+    "jsonschema": "4.26.0",
+    "network_used": false,
+    "packages_installed": false,
+    "target_environment_modified": false,
+    "variables": {
+      "PYTHONDONTWRITEBYTECODE": "1",
+      "PYTHONNOUSERSITE": "1",
+      "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
+      "basetemp": "UNIQUE_EXTERNAL_TEMP_DIRECTORY"
+    }
+  },
+  "commands": [
+    {"id": "w06-final-focused", "cwd_role": "TARGET_ROOT", "exit_code": 0, "result": "139 passed, 4 platform-only skipped on exact implementation commit"},
+    {"id": "w06-independent-focused", "cwd_role": "TARGET_ROOT", "exit_code": 0, "result": "acceptance 102 passed/4 skipped; architecture 70 passed/3 skipped; authority 8 direct cases passed"},
+    {"id": "w06-full", "cwd_role": "TARGET_ROOT", "exit_code": 0, "result": "1086 passed, 4 platform-only skipped in 916.60s; independent acceptance 1086 passed, 4 skipped in 883.30s"},
+    {"id": "w06-boundaries", "cwd_role": "TARGET_ROOT", "exit_code": 0, "result": "core_purity PASS 462; side_effect_free PASS 140; runtime_boundary PASS 140 core/10 runtime; repo_isolation PASS 323; target_boundary PASS 560 files/77 directories"},
+    {"id": "w06-prior-recovery", "cwd_role": "TARGET_ROOT", "exit_code": 0, "result": "W00/W01 provenance, W01/W02/W03/W04/W05 recovery and generic recovery anchor all PASS"},
+    {"id": "w06-schema-runtime-resources", "cwd_role": "TARGET_ROOT", "exit_code": 0, "result": "87 root/package schemas, 82 registered versions, runtime-migration manifest and both target resources verified"},
+    {"id": "w06-deterministic-wheel", "cwd_role": "TARGET_ROOT", "exit_code": 0, "result": "two independent builds matched; 255 members; 534338 bytes; sha256 76635b5340c108299f9fdc2694fbe9128fc9046779a3dc92d8afa9d570702f45"},
+    {"id": "w06-isolated-wheel-probe", "cwd_role": "EXTERNAL_TEMP_INSTALL", "exit_code": 0, "result": "RECORD, metadata, 87 schemas, 82 versions, both packages and all runtime-migration resources verified twice"},
+    {"id": "w06-input-postcheck", "cwd_role": "TARGET_ROOT", "exit_code": 0, "result": "W00/W01 provenance tools reverified the unchanged 211-member source archive and 49-file handoff manifest identity"}
+  ],
+  "final_reviews": [
+    {"round": 2, "role": "architecture_contract", "critical": 0, "high": 0, "medium": 0, "result": "GO"},
+    {"round": 2, "role": "security_authority_boundary", "critical": 0, "high": 0, "medium": 0, "result": "GO"},
+    {"round": 2, "role": "test_compatibility_packaging", "critical": 0, "high": 0, "medium": 0, "result": "GO"}
+  ],
+  "not_executed": [
+    {"command": "python -m build --wheel --no-isolation", "status": "ENVIRONMENT_BLOCKED", "observed_result": "build=false; setuptools=false; wheel=false", "reason": "The offline host has no build frontend, setuptools, or wheel package. No download is authorized; the stdlib fallback is not represented as backend verification."}
+  ],
+  "claims_not_made": [
+    "setuptools backend verification",
+    "production provider, publication, deployment or credential use",
+    "production-enabled filesystem mutation",
+    "authoritative migration cutover",
+    "public identifier migration",
+    "human approval or signature synthesis"
+  ]
+}
+

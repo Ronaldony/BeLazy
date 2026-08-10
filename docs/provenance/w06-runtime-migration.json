@@ -1,0 +1,142 @@
+{
+  "schema_version": "be-lazy-w06-runtime-migration/1.0",
+  "wave": "W06-RUNTIME-MIGRATION",
+  "created_at": "2026-08-10T02:08:22.461Z",
+  "implementation": {
+    "commit": "376cca4e2113e9d730dfbf130fc6ce5216717400",
+    "tree": "c6644afcc90985b37de422c4cf71a823f6af6486",
+    "parent": "a36c0a5424c3d7b8506d246db8ef52dd46cb93c3",
+    "baseline_ancestor": "9cca6ff6bb0955c9fa7dafd0a1daf46a4a42ce10",
+    "branch": "agent/autopilot-v4",
+    "candidate_chain": [
+      "a36c0a5424c3d7b8506d246db8ef52dd46cb93c3",
+      "376cca4e2113e9d730dfbf130fc6ce5216717400"
+    ],
+    "change_summary": "75 files changed; 18447 insertions; 74 deletions from the sealed W05 recovery ancestor"
+  },
+  "inputs": {
+    "source_archive_sha256": "954325b77028bcf7d36a88136d8e1ed0ec2348ad15014623710614cced94034a",
+    "source_member_count": 211,
+    "handoff_manifest_sha256": "1bd3aa1687299c15f81539641afcd1563097b0ff8cebc9c24a793e132386244a",
+    "handoff_file_count": 49,
+    "postcheck_method": "W00/W01 exact source and handoff provenance plus all prior recovery checks"
+  },
+  "schema_resources": {
+    "manifest_path": "src/video_factory/resources/schemas/schema-manifest.json",
+    "manifest_sha256": "b418fe462b187ee1f4c0d7d7f7a7332203504d3456b0a44f0820e73589075ff1",
+    "schema_count": 87,
+    "registered_version_count": 82,
+    "w06_artifact_versions": [
+      "execution-intent/1.0",
+      "execution-journal-event/1.0",
+      "execution-receipt/1.0",
+      "migration-cutover-state/1.0",
+      "projection-parity-receipt/1.0",
+      "publication-intent/1.0",
+      "publication-receipt/1.0"
+    ]
+  },
+  "runtime_migration_resources": {
+    "manifest_path": "src/video_factory/resources/runtime_migration/runtime-migration-resource-manifest.json",
+    "manifest_sha256": "8417a172e2274f17d9d9d38744da554d893c21301fa3807c195d0ddf820733e8",
+    "resource_count": 2,
+    "runtime_policy_file_sha256": "eb017117c26315805a2c4ff9fae4c777a9b400dd19b31db803f856dc84d78ea4",
+    "runtime_policy_sha256": "fed35707f42909381d4f77805e175a86264f6978559d82d10522261eeddb3044",
+    "migration_registry_file_sha256": "57342aa35e3dd84b1dc72e9883f2b48173f30fdba2fb7f03db1d6886a6ad5fa2",
+    "migration_registry_sha256": "1061192811cf3ab00d8b1bdf2a931466ff1b2a82b593645b72f1264bdc4b27b6",
+    "registered_view_count": 6,
+    "fixture_only": true,
+    "production_enabled": false
+  },
+  "runtime_boundary": {
+    "pure_core_package": "video_factory",
+    "concrete_runtime_package": "video_factory_runtime",
+    "core_imports_runtime": false,
+    "sqlite_full_sync": true,
+    "atomic_idempotency_claim": true,
+    "stable_reservation_and_fresh_receipt_separated": true,
+    "append_only_receipt_history": true,
+    "reconcile_only_after_may_have_started": true,
+    "opaque_current_credential_lease_required": true,
+    "production_effects_enabled": false
+  },
+  "mutation_boundary": {
+    "posix_complete_no_follow_directory_chain": true,
+    "posix_handle_relative_effects": true,
+    "windows_exact_directory_and_file_handles": true,
+    "operation_level_actual_use_cas": true,
+    "manifest_authority_identity_and_kill_switch_rechecked": true,
+    "blind_retry_after_dispatch_forbidden": true
+  },
+  "publication_boundary": {
+    "w05_ready_is_publish_authority": false,
+    "separate_w04_side_effect_reservation": true,
+    "release_destination_workspace_and_credentials_reverified": true,
+    "fixture_publisher_only": true,
+    "production_publication_enabled": false
+  },
+  "migration_boundary": {
+    "read_only": true,
+    "projection_is_authority": false,
+    "exact_legacy_anchor_persisted": true,
+    "trusted_exact_byte_parity_required": true,
+    "separate_current_activation_verification": true,
+    "immediate_predecessor_rollback_binding": true,
+    "historical_receipt_reuse_rejected": true,
+    "production_activation_enabled": false
+  },
+  "manual_wheel": {
+    "role": "STDLIB_PEP427_ACCEPTANCE_FALLBACK_ONLY",
+    "filename": "video_production_core-0.3.1-py3-none-any.whl",
+    "sha256": "76635b5340c108299f9fdc2694fbe9128fc9046779a3dc92d8afa9d570702f45",
+    "size_bytes": 534338,
+    "member_count": 255,
+    "two_builds_identical": true,
+    "record_verified": true,
+    "isolated_registry_load": "87 schemas; 82 registered versions; both packages and exact runtime-migration resources"
+  },
+  "test_evidence": {
+    "receipt": {
+      "path": "reports/autopilot/waves/W06/test-receipt.json",
+      "sha256": "845f8007eb8eb37b03ebd3dfaa2f7d94db265dc60b2abd2f0e8107664aefabb8"
+    },
+    "root_focused": "139 passed, 4 platform-only skipped",
+    "independent_focused": "acceptance 102/4; architecture 70/3; authority 8 direct cases",
+    "full": "1086 passed, 4 platform-only skipped in 916.60s; independent acceptance 1086/4 in 883.30s",
+    "boundaries": "core_purity, side_effect_free, runtime_dependency, repo_isolation, target_boundary PASS",
+    "prior_recovery": "W00/W01 provenance and W01/W02/W03/W04/W05 plus generic recovery PASS",
+    "standard_build_backend": {
+      "status": "ENVIRONMENT_BLOCKED",
+      "observed": "build=false; setuptools=false; wheel=false",
+      "fallback_misrepresented_as_backend": false
+    }
+  },
+  "review_evidence": {
+    "discovery": {
+      "path": "reports/autopilot/waves/W06/discovery.md",
+      "sha256": "2e0fbdff26cb2d58900f0d88f6f96fff1e11792aa82749e8e44726a166458cd3"
+    },
+    "rounds": [
+      {"round": 1, "path": "reports/autopilot/waves/W06/review-round-1.md", "sha256": "a1f1c04356e47b1cb9faec2837e73e69f13ce169520611cf3ec521956b44e3ff", "result": "CHANGES_REQUESTED"},
+      {"round": 2, "path": "reports/autopilot/waves/W06/review-round-2.md", "sha256": "42b1d103826e2460443db9add94eb9773ab10e437c4a690b35519eb6f641bf62", "result": "GO"}
+    ],
+    "final_reviewers": [
+      {"role": "architecture_contract", "critical": 0, "high": 0, "medium": 0, "result": "GO"},
+      {"role": "security_authority_boundary", "critical": 0, "high": 0, "medium": 0, "result": "GO"},
+      {"role": "test_compatibility_packaging", "critical": 0, "high": 0, "medium": 0, "result": "GO"}
+    ]
+  },
+  "execplan": {
+    "path": ".agent/execplans/be-lazy-autopilot.md",
+    "sha256": "0688131325d5ed7e81a0d029b9c572e284fb5f44b9e71d1835bf6ba67643f487"
+  },
+  "claims_not_made": [
+    "setuptools_backend_verification",
+    "production_provider_publication_deployment_or_credential_use",
+    "production_enabled_filesystem_mutation",
+    "authoritative_migration_cutover",
+    "public_identifier_migration",
+    "human_approval_or_signature_synthesis"
+  ]
+}
+

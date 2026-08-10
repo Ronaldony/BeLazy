@@ -29,7 +29,7 @@ evidence and no external side effects.
 | W03 Director/Blueprint | passed | BP-001, DIR-001, DIR-002, BP-002 | `254e20fdb63c77d6e84d746664a5f1a0a9524c03` |
 | W04 Workflow/Authority | passed | WF-001, AUTH-001, AUTH-002, WF-002 | `5bc36f63d51e0a78c42603fa13946b691ed67585` |
 | W05 Automation/Quality/Release | passed | SEL-001, QA-001, REL-001 | `22df49acf9fb0370b78b0ed5a4e42373b2352877` |
-| W06 Runtime/Migration | in progress | RUN-001, RUN-002, MIG-001, REL-002 | pending |
+| W06 Runtime/Migration | reviewing | RUN-001, RUN-002, MIG-001, REL-002 | pending |
 | W07 Final Audit | pending | AUDIT-001..003 | pending |
 
 ## W00 decisions and evidence
@@ -409,31 +409,34 @@ schema/semantics, and target containment before continuing.
    and exact directory/file handles live, then rejects any directory-path
    rebound before a handle-relative effect.
 
-## W06 checks in progress
+## W06 completed checks
 
-- Broad W06/runtime/core-bridge/schema/public focused suite: 290 passed, 2
-  platform skips (symlink creation unavailable and the POSIX-only leaf-swap
-  case replaced by Windows exact-handle coverage).
-- Latest post-review journal plus executor/mutation/publication delta: 54
-  passed, 1 POSIX-only skip. This includes intent-bound effect plans,
-  transaction-local row/chain validation, receipt-required terminal states,
-  process-death reservation recovery, non-serializable credential leases, and
-  Windows ancestor-rebound CREATE/REPLACE negatives.
-- Current schema/resource projection: 87 root/package byte-identical schemas,
-  82 registered versions, and exact runtime/migration resource manifests.
-- Two clean offline wheel builds are byte-identical: 255 members, 532427 bytes,
-  SHA-256 `c7e9ca29ddc50e769c563a5780c23ced7adc57988997d431da4a06d2bd0b9412`.
-  Both source-free isolated probes passed with 87 schemas, 82 registered
-  versions, manifest SHA-256
-  `4a962a180621efd7e422c252caf561bbf62a1ef6edd53baa79c6ca7316bd89d0`,
-  both packages, and exact Director/workflow/authority/quality/runtime resource
-  semantics. All 13 wheel corruption/identity negative tests pass.
-- Final boundaries currently pass: core purity 462/0, side-effect-free 140/0,
-  runtime dependency direction 140 core + 10 runtime/0, repository isolation
-  323/0, and target boundary 560 files + 77 directories/0.
-- The first full collection yielded 1069 passes and 2 platform skips; its 13
-  failures were the one stale wheel-member assertion (`253` versus the exact
-  intended `255` after adding authority/credential runtime modules). Direct
-  archive comparison proved those were the only two new members, and the 13
-  tests pass after correcting the assertion. A clean canonical full run,
-  checkpoint, and source/handoff post-check remain pending.
+- The final implementation is commit
+  `376cca4e2113e9d730dfbf130fc6ce5216717400`, tree
+  `c6644afcc90985b37de422c4cf71a823f6af6486`, with a clean tracked
+  worktree. The final repair preserves the complete POSIX directory capability
+  chain, separates stable reservations from fresh authority receipts, and
+  binds every migration generation to one exact legacy artifact.
+- The root final focused run passed 139 tests with four platform-only skips.
+  Independent focused reviews passed 102 tests with four skips, 70 tests with
+  three POSIX-only skips, and eight direct authority/runtime cases.
+- Two independent full runs passed 1086 tests with four platform-only skips
+  and zero failures. The root run completed in 916.60 seconds; independent
+  acceptance completed in 883.30 seconds.
+- Schema/resource projection passed with 87 root/package byte-identical
+  schemas, 82 registered versions, schema manifest SHA-256
+  `b418fe462b187ee1f4c0d7d7f7a7332203504d3456b0a44f0820e73589075ff1`,
+  and runtime/migration resource manifest SHA-256
+  `8417a172e2274f17d9d9d38744da554d893c21301fa3807c195d0ddf820733e8`.
+- Two clean offline wheel builds were byte-identical: 255 members, 534338
+  bytes, SHA-256
+  `76635b5340c108299f9fdc2694fbe9128fc9046779a3dc92d8afa9d570702f45`.
+  Both source-free isolated probes loaded 87 schemas and 82 versions and
+  verified the exact packaged resource manifests.
+- Final boundaries passed: core purity 462/0, side-effect-free 140/0, runtime
+  dependency direction 140 core + 10 runtime/0, repository isolation 323/0,
+  and target boundary 560 files + 77 directories/0. W00/W01 provenance and all
+  W01 through W05 recovery checks also passed.
+- Final architecture, authority/security, and test/packaging reviewers each
+  reported Critical 0, High 0, Medium 0 and `GO`. W06 evidence sealing is the
+  only remaining work before the W07 final independent audit.

@@ -29,7 +29,7 @@ evidence and no external side effects.
 | W03 Director/Blueprint | passed | BP-001, DIR-001, DIR-002, BP-002 | `254e20fdb63c77d6e84d746664a5f1a0a9524c03` |
 | W04 Workflow/Authority | passed | WF-001, AUTH-001, AUTH-002, WF-002 | `5bc36f63d51e0a78c42603fa13946b691ed67585` |
 | W05 Automation/Quality/Release | passed | SEL-001, QA-001, REL-001 | `22df49acf9fb0370b78b0ed5a4e42373b2352877` |
-| W06 Runtime/Migration | passed | RUN-001, RUN-002, MIG-001, REL-002 | this checkpoint commit; exact hash recorded by recovery seal |
+| W06 Runtime/Migration | passed | RUN-001, RUN-002, MIG-001, REL-002 | `7c4b83ad89df51710452dbc7f494113cf45970b2` |
 | W07 Final Audit | pending | AUDIT-001..003 | pending |
 
 ## W00 decisions and evidence

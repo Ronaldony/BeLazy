@@ -1,0 +1,89 @@
+{
+  "protocol_version": "be-lazy-wave-recovery-anchor/1.0",
+  "wave": "W06-RUNTIME-MIGRATION",
+  "created_at": "2026-08-10T02:17:31.888Z",
+  "checkpoint": {
+    "commit": "7c4b83ad89df51710452dbc7f494113cf45970b2",
+    "tree": "689c99cc4042365e15386c29fbaf8b72c180932a",
+    "parent": "2d002481f0b213967a3a90ad394eb8b528142d49",
+    "subject": "autopilot(W06): complete durable runtime migration"
+  },
+  "implementation": {
+    "commit": "376cca4e2113e9d730dfbf130fc6ce5216717400",
+    "tree": "c6644afcc90985b37de422c4cf71a823f6af6486"
+  },
+  "evidence": {
+    "commit": "2d002481f0b213967a3a90ad394eb8b528142d49",
+    "tree": "6ddb75444d281d0924cb0aab68186c8d88a4d994",
+    "provenance_path": "docs/provenance/w06-runtime-migration.json",
+    "provenance_sha256": "4906876537709e315a855f92bc700eb02143db52622af493b86fcdf101469c44",
+    "receipt_path": "reports/autopilot/waves/W06/test-receipt.json",
+    "receipt_sha256": "845f8007eb8eb37b03ebd3dfaa2f7d94db265dc60b2abd2f0e8107664aefabb8",
+    "review_path": "reports/autopilot/waves/W06/review-round-2.md",
+    "review_sha256": "42b1d103826e2460443db9add94eb9773ab10e437c4a690b35519eb6f641bf62",
+    "execplan_path": ".agent/execplans/be-lazy-autopilot.md",
+    "execplan_sha256": "84c3e5df9742919c24cef1f7ad026eb45a0937acb689b754919e40f95c0f9bcc"
+  },
+  "inputs": {
+    "source_archive_sha256": "954325b77028bcf7d36a88136d8e1ed0ec2348ad15014623710614cced94034a",
+    "handoff_manifest_sha256": "1bd3aa1687299c15f81539641afcd1563097b0ff8cebc9c24a793e132386244a"
+  },
+  "state": {
+    "location": ".be-lazy/autopilot/state.json",
+    "tracking": "REPOSITORY_LOCAL_IGNORED",
+    "schema_path": ".be-lazy/autopilot/schemas/autopilot-state.schema.json",
+    "schema_sha256": "bf102391da9c2797bbf37067efa8520fcae05ba2b115b33dfe9b15ba0f7155aa",
+    "semantic_canonicalization": "sha256-utf8-json-sort-keys-compact-ensure-ascii-false-v1",
+    "semantic_projection": {
+      "protocol_version": "be-lazy-prompt-autopilot-state/1.0",
+      "program_id": "be-lazy-successor-redesign",
+      "source": {
+        "expected_sha256": "954325b77028bcf7d36a88136d8e1ed0ec2348ad15014623710614cced94034a",
+        "observed_sha256": "954325b77028bcf7d36a88136d8e1ed0ec2348ad15014623710614cced94034a",
+        "unchanged": true
+      },
+      "handoff": {
+        "manifest_sha256": "1bd3aa1687299c15f81539641afcd1563097b0ff8cebc9c24a793e132386244a",
+        "verified": true
+      },
+      "target": {
+        "branch": "agent/autopilot-v4",
+        "initial_commit": "b7aaaf2ac43ca99970c317a7d505316a07d320e9"
+      },
+      "passed_wave": {
+        "id": "W06-RUNTIME-MIGRATION",
+        "status": "passed",
+        "attempts": 2,
+        "task_ids": ["RUN-001", "RUN-002", "MIG-001", "REL-002"],
+        "checkpoint_commit": "7c4b83ad89df51710452dbc7f494113cf45970b2",
+        "tests": [
+          {"id": "w06-final-focused", "status": "passed", "result": "139 passed, 4 platform-only skipped on exact implementation commit 376cca4e2113e9d730dfbf130fc6ce5216717400"},
+          {"id": "w06-independent-focused", "status": "passed", "result": "acceptance 102/4, architecture 70/3, authority 8 direct cases; all final reviews C0/H0/M0 GO"},
+          {"id": "w06-full", "status": "passed", "result": "1086 passed, 4 platform-only skipped in 916.60s; independent acceptance 1086/4 in 883.30s"},
+          {"id": "w06-boundaries", "status": "passed", "result": "core_purity 462, side_effect_free 140, runtime_boundary 140 core/10 runtime, repo_isolation 323, target_boundary 560 files/77 directories"},
+          {"id": "w06-prior-recovery", "status": "passed", "result": "W00/W01 provenance, W01/W02/W03/W04/W05 recovery and generic recovery anchor PASS"},
+          {"id": "w06-schema-runtime-resources", "status": "passed", "result": "87 schemas, 82 registered versions, schema and runtime-migration manifests PASS"},
+          {"id": "w06-deterministic-wheel", "status": "passed", "result": "two identical 255-member, 534338-byte wheels 76635b5340c108299f9fdc2694fbe9128fc9046779a3dc92d8afa9d570702f45"},
+          {"id": "w06-isolated-wheel-probe", "status": "passed", "result": "two isolated probes loaded 87 schemas, 82 versions, both packages and exact runtime-migration resources"},
+          {"id": "w06-standard-backend", "status": "environment_blocked", "result": "build/setuptools/wheel absent; stdlib PEP 427 verification is not claimed as backend verification"},
+          {"id": "w06-input-postcheck", "status": "passed", "result": "W00/W01 provenance reverified source 211 members and handoff 49 files unchanged"}
+        ],
+        "latest_reviews": [
+          {"round": 2, "role": "architecture_contract", "status": "approved", "critical": 0, "high": 0},
+          {"round": 2, "role": "security_authority_boundary", "status": "approved", "critical": 0, "high": 0},
+          {"round": 2, "role": "test_compatibility_packaging", "status": "approved", "critical": 0, "high": 0}
+        ],
+        "unresolved_findings": []
+      }
+    },
+    "semantic_sha256": "eec4baf2e13e4fe382924dae5c9bbab0d7d04336d7045d985ab5da23204b3c92"
+  },
+  "recovery_checks": [
+    "checkpoint commit resolves to the recorded tree, parent, and subject",
+    "implementation and evidence commits are ancestors of the checkpoint",
+    "tracked W06 evidence and final ExecPlan digests match",
+    "ignored state matches the canonical W06 semantic projection",
+    "source and handoff identities remain unchanged"
+  ]
+}
+

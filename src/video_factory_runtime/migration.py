@@ -45,6 +45,7 @@ from video_factory.runtime import (
     ProjectionParityReceipt,
     build_migration_cutover_state,
     build_projection_parity_receipt,
+    migratable_legacy_versions,
     migration_cutover_state_from_mapping,
     migration_cutover_state_to_mapping,
     projection_parity_receipt_to_mapping,
@@ -236,6 +237,30 @@ def _persist_mapping(
     )
 
 
+def _validate_legacy_artifact(
+    legacy_artifact: ArtifactReference, legacy_document: bytes
+) -> None:
+    if hashlib.sha256(legacy_document).hexdigest() != str(legacy_artifact.sha256):
+        raise MigrationRuntimeError(
+            "runtime.migration.legacy_rebound",
+            "legacy bytes differ from the immutable reference",
+        )
+    try:
+        mapping = require_json_object(parse_json_bytes(legacy_document))
+    except (JsonInputError, ValueError, TypeError) as error:
+        raise MigrationRuntimeError(
+            "runtime.migration.legacy_json", "legacy artifact is not strict JSON"
+        ) from error
+    report = validate_artifact_mapping(mapping)
+    if not report.ok or mapping.get("artifact_version") != str(
+        legacy_artifact.artifact_version
+    ):
+        raise MigrationRuntimeError(
+            "runtime.migration.legacy_schema",
+            "legacy artifact does not satisfy its exact registered schema",
+        )
+
+
 class FixturePinnedParityVerifier:
     """Exact-byte verifier backed by a test-owned, immutable parity corpus.
 
@@ -334,27 +359,7 @@ class FixturePinnedParityVerifier:
     def _validate_legacy(
         legacy_artifact: ArtifactReference, legacy_document: bytes
     ) -> None:
-        if hashlib.sha256(legacy_document).hexdigest() != str(
-            legacy_artifact.sha256
-        ):
-            raise MigrationRuntimeError(
-                "runtime.migration.legacy_rebound",
-                "legacy bytes differ from the immutable reference",
-            )
-        try:
-            mapping = require_json_object(parse_json_bytes(legacy_document))
-        except (JsonInputError, ValueError, TypeError) as error:
-            raise MigrationRuntimeError(
-                "runtime.migration.legacy_json", "legacy artifact is not strict JSON"
-            ) from error
-        report = validate_artifact_mapping(mapping)
-        if not report.ok or mapping.get("artifact_version") != str(
-            legacy_artifact.artifact_version
-        ):
-            raise MigrationRuntimeError(
-                "runtime.migration.legacy_schema",
-                "legacy artifact does not satisfy its exact registered schema",
-            )
+        _validate_legacy_artifact(legacy_artifact, legacy_document)
 
     @staticmethod
     def _validate_projection(
@@ -481,9 +486,24 @@ class DurableReadOnlyMigrationRuntime:
                 "runtime.migration.policy",
                 "allowed consumer/view pairs must be sorted and unique",
             )
+        legacy_versions = migratable_legacy_versions()
+        unsupported = tuple(
+            sorted(
+                str(view_kind)
+                for _, view_kind in policy.allowed_consumers
+                if str(view_kind) not in legacy_versions
+            )
+        )
+        if unsupported:
+            raise MigrationRuntimeError(
+                "runtime.migration.policy_view",
+                "migration policy enables a view without a registered legacy contract",
+            )
         self._parity_verifier = parity_verifier
         self._approval_verifier = approval_verifier
         self._policy = policy
+        self._legacy_versions = legacy_versions
+        self._boundary = boundary
         self._directory = boundary.require_directory("migration-state", create=True)
         self._evidence_directory = boundary.require_directory(
             "migration-receipts", create=True
@@ -493,6 +513,7 @@ class DurableReadOnlyMigrationRuntime:
 
     @contextmanager
     def _connect(self) -> Iterator[sqlite3.Connection]:
+        self._boundary.assert_current()
         connection = sqlite3.connect(self._database)
         connection.row_factory = sqlite3.Row
         connection.execute("PRAGMA foreign_keys = ON")
@@ -559,6 +580,16 @@ class DurableReadOnlyMigrationRuntime:
                 "migration consumer/view is not enabled by the current policy",
             )
 
+    def _require_legacy_contract(
+        self, view_kind: OpaqueId, legacy_artifact: ArtifactReference
+    ) -> None:
+        expected = self._legacy_versions.get(str(view_kind))
+        if expected is None or str(legacy_artifact.artifact_version) != expected:
+            raise MigrationRuntimeError(
+                "runtime.migration.legacy_contract",
+                "legacy artifact version does not match the target-owned migration registry",
+            )
+
     def verify_pair(
         self,
         *,
@@ -572,6 +603,7 @@ class DurableReadOnlyMigrationRuntime:
         evaluated_at: datetime,
     ) -> tuple[ProjectionParityReceipt, ArtifactReference]:
         self._require_allowed(consumer_id, view_kind)
+        self._require_legacy_contract(view_kind, legacy_artifact)
         verification = self._parity_verifier.verify_exact(
             consumer_id=consumer_id,
             view_kind=view_kind,
@@ -761,10 +793,13 @@ class DurableReadOnlyMigrationRuntime:
         consumer_id: OpaqueId,
         view_kind: OpaqueId,
         legacy_artifact: ArtifactReference,
+        legacy_document: bytes,
         feature_flag_sha256: HashDigest,
         evaluated_at: datetime,
     ) -> MigrationCutoverState:
         self._require_allowed(consumer_id, view_kind)
+        self._require_legacy_contract(view_kind, legacy_artifact)
+        _validate_legacy_artifact(legacy_artifact, legacy_document)
         request = MigrationActivationRequest(
             migration_id=migration_id,
             consumer_id=consumer_id,

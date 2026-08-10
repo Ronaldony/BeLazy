@@ -2,7 +2,8 @@
 
 - Status: Accepted for W06 fixture read-only migration; production cutover disabled
 - Decision owner: Migration architecture
-- Scope: brief, storyboard, generation, edit, sound, and publish views
+- Scope: six Blueprint shadow views; fixture migration for the four views with
+  registered legacy contracts
 
 ## Context
 
@@ -13,7 +14,7 @@ consumer migration are proven.
 
 ## Decision
 
-All six views are wrapped in `blueprint-projection/1.0`. The envelope binds the
+All six design views are wrapped in `blueprint-projection/1.0`. The envelope binds the
 exact source Blueprint reference and digest, Blueprint context, compiler
 identity/version/digest, target view kind, intended legacy version, payload
 digest, and canonical fields.
@@ -41,7 +42,9 @@ explicitly disabled for production.
 
 ## Cutover rule
 
-W06 supports a durable, read-only fixture state machine:
+W06 supports a durable, read-only fixture state machine for `brief`,
+`storyboard`, `generation`, and `edit`, whose exact legacy versions are present
+in the installed schema registry:
 
 `legacy_only -> dual_read_compare -> projection_read_only -> rolled_back`.
 
@@ -59,15 +62,23 @@ immediately preceding activation's parity references for audit; callers do not
 choose a historical rollback receipt. A rollback directly from dual-read needs
 no parity receipt and still resolves the same anchored legacy artifact.
 
-All six production consumer entries are packaged as `unregistered`, and
-`production_activation_enabled=false`. Production cutover still requires a
+`sound` and `publish` remain design-only shadow projections. No registered
+legacy `sound-manifest/1.0` or `publish-manifest/1.0` contract exists, so those
+views are deliberately excluded from the migration registry and cannot mint a
+parity receipt or enter the cutover state machine. The resource loader proves
+that every migratable `legacy_artifact_version` resolves in the installed
+schema registry and fails closed otherwise.
+
+All four migratable production consumer entries are packaged as `unregistered`,
+and `production_activation_enabled=false`. Production cutover still requires a
 reviewed version-specific semantic normalizer, consumer inventory, accepted
 activation decision, coexistence evidence, and rollback rehearsal. Public
 identifier migration remains deferred to T90.
 
 ## Consequences
 
-- Deterministic projections can be generated and compared immediately.
+- Deterministic projections can be generated immediately; exact migration
+  comparison is available only for views backed by a registered legacy contract.
 - Projection edits and stale compiler/source replay fail closed.
 - Duplicate design storage remains temporarily during dual-run.
 - Fixture consumers can exercise reversible read selection without changing

@@ -6,10 +6,16 @@ The packaged migration registry lists every production consumer as
 `unregistered`, and production activation is disabled. W03 diagnostic shadow
 observations are not parity evidence. W06 can exercise only an isolated fixture
 consumer backed by an immutable pinned exact-byte parity corpus.
+Only `brief`, `storyboard`, `generation`, and `edit` have registered legacy
+contracts and are eligible. `sound` and `publish` are design-only shadows and
+must not be initialized as legacy migrations.
 
 ## Procedure
 
-1. Verify exact legacy bytes and the strict registered legacy artifact schema.
+1. Load the target-owned migration registry, require the exact view-to-version
+   mapping, then verify exact legacy bytes and that strict registered legacy
+   artifact schema. Initialization repeats these checks before persisting the
+   generation-zero anchor.
 2. Verify exact `blueprint-projection/1.0` bytes, source Blueprint digest,
    compiler identity, consumer ID, and view kind.
 3. Obtain a `projection-parity-receipt/1.0` from the trusted verifier. An unseen

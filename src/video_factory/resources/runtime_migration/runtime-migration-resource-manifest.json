@@ -4,7 +4,7 @@
   "resources": [
     {
       "filename": "migration-registry-v1.json",
-      "sha256": "57342aa35e3dd84b1dc72e9883f2b48173f30fdba2fb7f03db1d6886a6ad5fa2"
+      "sha256": "f4b59b838d61bbeee83a8473096380e17dae7220afc1179144569f9ad643c52d"
     },
     {
       "filename": "runtime-policy-v1.json",

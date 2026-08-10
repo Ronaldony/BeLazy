@@ -195,11 +195,13 @@ class FixtureCredentialBroker:
             )
             for item in registrations
         }
+        self._boundary = boundary
         self._directory = boundary.require_directory(
             "credential-verifications", create=True
         )
 
     def revoke(self, credential_reference: ArtifactReference) -> None:
+        self._boundary.assert_current()
         if credential_reference not in self._registrations:
             raise CredentialRuntimeError(
                 "runtime.credential.unknown", "credential reference is not registered"
@@ -213,6 +215,7 @@ class FixtureCredentialBroker:
         prefix: str,
         artifact_version: str,
     ) -> ArtifactReference:
+        self._boundary.assert_current()
         payload = canonical_json_bytes(mapping)
         digest = HashDigest(hashlib.sha256(payload).hexdigest())
         path = self._directory / f"{prefix}-{digest}.json"
@@ -238,6 +241,7 @@ class FixtureCredentialBroker:
         *,
         evaluated_at: datetime,
     ) -> CredentialLease | None:
+        self._boundary.assert_current()
         if evaluated_at.tzinfo is None or evaluated_at.utcoffset() is None:
             raise CredentialRuntimeError(
                 "runtime.credential.clock", "credential evaluation time is naive"
@@ -259,7 +263,6 @@ class FixtureCredentialBroker:
                 "sha256": str(credential_reference.sha256),
                 "artifact_version": str(credential_reference.artifact_version),
             },
-            "scope_sha256": str(scope_sha),
             "valid_from": registration.valid_from.isoformat(),
             "valid_until": registration.valid_until.isoformat(),
             "generation": registration.generation,

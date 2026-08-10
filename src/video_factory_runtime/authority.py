@@ -133,6 +133,7 @@ class FixtureAuthoritySettlementStore:
     artifact_version = "fixture-authority-settlement/1.0"
 
     def __init__(self, boundary: FixtureRuntimeBoundary) -> None:
+        self._boundary = boundary
         self._directory = boundary.require_directory(
             "authority-settlements", create=True
         )
@@ -159,6 +160,7 @@ class FixtureAuthoritySettlementStore:
         final_state: JournalState,
         evaluated_at: datetime,
     ) -> ArtifactReference | None:
+        self._boundary.assert_current()
         if (
             not reservation_claim_sha256s
             or len(reservation_claim_sha256s) != len(reservation_sha256s)

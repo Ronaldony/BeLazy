@@ -80,6 +80,9 @@ from .journal import (
 
 MUTATION_RECEIPT_VERSION = "mutation-receipt/1.0"
 RECOVERY_PLAN_VERSION = "runtime-reconciliation-plan/1.0"
+MUTATION_AUTHORIZATION_VERIFICATION_VERSION = (
+    "mutation-authorization-verification/1.0"
+)
 
 
 class ManagedMutationRuntimeError(ValueError):
@@ -92,6 +95,17 @@ class ManagedMutationRuntimeError(ValueError):
 class RuntimeAuthorityReservation:
     receipt_sha256: HashDigest
     reservation_sha256: HashDigest
+
+
+@dataclass(frozen=True, slots=True)
+class MutationAuthorizationVerification:
+    """Trusted proof that W02 issued the exact authorization being consumed."""
+
+    plan_sha256: HashDigest
+    authorization_sha256: HashDigest
+    service_identity: OpaqueId
+    verification_record: ArtifactReference
+    verified_at: datetime
 
 
 class TrustedRuntimeClock(Protocol):
@@ -120,6 +134,17 @@ class FreshMutationAuthorityPort(Protocol):
         purpose: VerificationPurpose,
         runtime_claim_sha256: HashDigest,
     ) -> RuntimeAuthorityReservation | None: ...
+
+
+class TrustedMutationAuthorizationVerifier(Protocol):
+    def verify_current(
+        self,
+        plan: MutationPlan,
+        authorization: MutationExecutionAuthorization,
+        *,
+        service_identity: OpaqueId,
+        evaluated_at: datetime,
+    ) -> MutationAuthorizationVerification | None: ...
 
 
 class AuthorityReservationSettlementPort(Protocol):
@@ -233,6 +258,7 @@ class FixtureManagedMutationExecutor:
         journal: SQLiteExecutionJournal,
         observer: FixtureWorkspaceObserver,
         content_store: ContentAddressedFixtureStore,
+        authorization_verifier: TrustedMutationAuthorizationVerifier,
         authority: FreshMutationAuthorityPort,
         identity_attestor: RuntimeIdentityAttestor,
         kill_switch: RuntimeKillSwitch,
@@ -245,6 +271,7 @@ class FixtureManagedMutationExecutor:
         self._journal = journal
         self._observer = observer
         self._content = content_store
+        self._authorization_verifier = authorization_verifier
         self._atomic_mutation = FixtureAtomicMutationPort(
             boundary,
             observer=observer,
@@ -262,6 +289,35 @@ class FixtureManagedMutationExecutor:
         self._observation_directory = boundary.require_directory(
             "observations", create=True
         )
+
+    def _require_authorization_current(
+        self,
+        plan: MutationPlan,
+        authorization: MutationExecutionAuthorization,
+        *,
+        evaluated_at: datetime,
+    ) -> MutationAuthorizationVerification:
+        expected_sha256 = mutation_execution_authorization_sha256(authorization)
+        verification = self._authorization_verifier.verify_current(
+            plan,
+            authorization,
+            service_identity=self._service_identity,
+            evaluated_at=evaluated_at,
+        )
+        if (
+            not isinstance(verification, MutationAuthorizationVerification)
+            or verification.plan_sha256 != plan.plan_sha256
+            or verification.authorization_sha256 != expected_sha256
+            or verification.service_identity != self._service_identity
+            or verification.verified_at != evaluated_at
+            or str(verification.verification_record.artifact_version)
+            != MUTATION_AUTHORIZATION_VERIFICATION_VERSION
+        ):
+            raise ManagedMutationRuntimeError(
+                "runtime.mutation.authorization_unverified",
+                "trusted W02 issuance verification is missing or rebound",
+            )
+        return verification
 
     @staticmethod
     def _aware(value: datetime) -> datetime:
@@ -355,6 +411,8 @@ class FixtureManagedMutationExecutor:
             authority_decision is not None,
             snapshot.intent.authority_decision_sha256
             == (authority_decision.sha256 if authority_decision is not None else None),
+            snapshot.intent.authority_receipt_sha256
+            == mutation_execution_authorization_sha256(authorization),
             snapshot.intent.service_identity == self._service_identity,
             authorization.service_identity == self._service_identity,
             snapshot.intent.credential_handle_id is None,
@@ -504,6 +562,7 @@ class FixtureManagedMutationExecutor:
         return stable.byte_length
 
     def _apply_operation(self, operation) -> int | None:
+        self._boundary.assert_current()
         return self._atomic_mutation.apply_exact(operation)
 
     @staticmethod
@@ -773,11 +832,16 @@ class FixtureManagedMutationExecutor:
     ) -> MutationReceipt:
         """Reconcile may-have-started work from observed bytes; never redispatch it."""
 
+        self._boundary.assert_current()
         try:
             validate_mutation_plan(plan)
             validate_mutation_execution_authorization_for_plan(authorization, plan)
         except MutationPlanError as error:
             raise ManagedMutationRuntimeError(error.reason_code, str(error)) from error
+        evaluated_at = self._aware(self._clock.now())
+        self._require_authorization_current(
+            plan, authorization, evaluated_at=evaluated_at
+        )
         snapshot = self._journal.load_by_scope(
             action_kind=RuntimeActionKind.MUTATION,
             action_id=OpaqueId("managed_mutation"),
@@ -790,7 +854,6 @@ class FixtureManagedMutationExecutor:
                 "only may-have-started mutation work can be reconciled",
             )
         self._require_journal_binding(snapshot, plan, authorization)
-        evaluated_at = self._aware(self._clock.now())
         attestation = self._identity.attest_current(
             self._service_identity, evaluated_at=evaluated_at
         )
@@ -975,11 +1038,16 @@ class FixtureManagedMutationExecutor:
         plan: MutationPlan,
         authorization: MutationExecutionAuthorization,
     ) -> MutationReceipt:
+        self._boundary.assert_current()
         try:
             validate_mutation_plan(plan)
             validate_mutation_execution_authorization_for_plan(authorization, plan)
         except MutationPlanError as error:
             raise ManagedMutationRuntimeError(error.reason_code, str(error)) from error
+        identity_time = self._aware(self._clock.now())
+        self._require_authorization_current(
+            plan, authorization, evaluated_at=identity_time
+        )
         existing = self._journal.load_by_scope(
             action_kind=RuntimeActionKind.MUTATION,
             action_id=OpaqueId("managed_mutation"),
@@ -1000,7 +1068,6 @@ class FixtureManagedMutationExecutor:
                 "runtime.mutation.service_identity", "authorization names another service"
             )
         created_at = authorization.evaluated_at
-        identity_time = self._aware(self._clock.now())
         attestation = self._identity.attest_current(
             self._service_identity, evaluated_at=identity_time
         )
@@ -1024,7 +1091,9 @@ class FixtureManagedMutationExecutor:
             gate_context_sha256=authorization.gate_context_sha256,
             workspace_observation_sha256=authorization.workspace_observation_sha256,
             authority_decision_sha256=authorization.authority_decision.sha256,
-            authority_receipt_sha256=None,
+            authority_receipt_sha256=mutation_execution_authorization_sha256(
+                authorization
+            ),
             service_identity=self._service_identity,
             service_identity_attestation=attestation,
             credential_handle_id=None,
@@ -1231,6 +1300,9 @@ class FixtureManagedMutationExecutor:
                     verified_at=effect_at.isoformat(),
                 )
                 last_authority_sha = effect_reservation.receipt_sha256
+                self._require_authorization_current(
+                    plan, authorization, evaluated_at=effect_at
+                )
                 expected_entries = self._expected_entries(
                     final_observation.entries,
                     operation,
@@ -1418,11 +1490,14 @@ __all__ = [
     "AuthorityReservationSettlementPort",
     "FixtureManagedMutationExecutor",
     "FreshMutationAuthorityPort",
+    "MUTATION_AUTHORIZATION_VERIFICATION_VERSION",
     "ManagedMutationRuntimeError",
+    "MutationAuthorizationVerification",
     "MutationFaultHook",
     "RuntimeAuthorityReservation",
     "RuntimeIdentityAttestor",
     "RuntimeKillSwitch",
     "TrustedRuntimeClock",
+    "TrustedMutationAuthorizationVerifier",
     "W04MutationAuthorityAdapter",
 ]

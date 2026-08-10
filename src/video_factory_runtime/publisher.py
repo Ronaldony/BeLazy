@@ -360,6 +360,7 @@ class DurablePublicationRuntime:
         settlement: AuthorityReservationSettlementPort,
         clock: TrustedRuntimeClock,
     ) -> None:
+        self._boundary = boundary
         self._journal = journal
         self._publisher = publisher
         self._workspace = workspace_verifier
@@ -396,7 +397,30 @@ class DurablePublicationRuntime:
 
     @staticmethod
     def _credential_lease_id(reference: ArtifactReference) -> OpaqueId:
-        return OpaqueId(f"credential-ref-{str(reference.sha256)[:24]}")
+        digest = canonical_sha256(
+            {
+                "artifact_version": "runtime-credential-reference-binding/1.0",
+                "path": str(reference.path),
+                "sha256": str(reference.sha256),
+                "credential_artifact_version": str(reference.artifact_version),
+            }
+        )
+        return OpaqueId(f"credential-ref-{digest}")
+
+    def _require_credential_lease_binding(
+        self,
+        snapshot: JournalSnapshot,
+        lease: CredentialLease,
+    ) -> None:
+        if (
+            snapshot.intent.credential_handle_id
+            != self._credential_lease_id(lease.credential_reference)
+            or snapshot.intent.credential_verification != lease.attestation_record
+        ):
+            raise PublicationRuntimeError(
+                "runtime.publication.credential_rebound",
+                "current credential lease differs from the durable exact attestation",
+            )
 
     @staticmethod
     def _aware(value: datetime) -> datetime:
@@ -1112,6 +1136,7 @@ class DurablePublicationRuntime:
         return domain[0]
 
     def publish(self, inputs: PublicationRuntimeInputs) -> PublicationReceipt:
+        self._boundary.assert_current()
         self._verify_binding(inputs, None)
         existing = self._journal.load_by_scope(
             action_kind=RuntimeActionKind.PUBLICATION,
@@ -1237,6 +1262,7 @@ class DurablePublicationRuntime:
             self._credential_scope(inputs, VerificationPurpose.DISPATCH),
             evaluated_at=marker_at,
         )
+        self._require_credential_lease_binding(snapshot, current_credential)
         workspace_at_marker = self._workspace.verify_current(
             inputs.release_candidate,
             revision_id=inputs.workspace_revision_id,
@@ -1312,6 +1338,7 @@ class DurablePublicationRuntime:
             self._credential_scope(inputs, VerificationPurpose.DISPATCH),
             evaluated_at=effect_at,
         )
+        self._require_credential_lease_binding(snapshot, effect_credential)
         effect_workspace = self._workspace.verify_current(
             inputs.release_candidate,
             revision_id=inputs.workspace_revision_id,
@@ -1372,6 +1399,7 @@ class DurablePublicationRuntime:
             verified_at=effect_at.isoformat(),
         )
         try:
+            self._boundary.assert_current()
             result = self._publisher.publish(
                 inputs.release_candidate,
                 inputs.destination,
@@ -1522,6 +1550,7 @@ class DurablePublicationRuntime:
     ) -> PublicationReceipt:
         """Reconcile may-have-published work and never invoke publish again."""
 
+        self._boundary.assert_current()
         snapshot = self._journal.load(journal_id)
         if not snapshot.reconcile_only:
             raise PublicationRuntimeError(
@@ -1606,6 +1635,7 @@ class DurablePublicationRuntime:
             self._credential_scope(inputs, VerificationPurpose.RECONCILE),
             evaluated_at=marker_at,
         )
+        self._require_credential_lease_binding(snapshot, current_credential)
         workspace_at_marker = self._workspace.verify_current(
             inputs.release_candidate,
             revision_id=inputs.workspace_revision_id,
@@ -1655,6 +1685,7 @@ class DurablePublicationRuntime:
             self._credential_scope(inputs, VerificationPurpose.RECONCILE),
             evaluated_at=effect_at,
         )
+        self._require_credential_lease_binding(snapshot, effect_credential)
         effect_workspace = self._workspace.verify_current(
             inputs.release_candidate,
             revision_id=inputs.workspace_revision_id,
@@ -1715,6 +1746,7 @@ class DurablePublicationRuntime:
             verified_at=effect_at.isoformat(),
         )
         try:
+            self._boundary.assert_current()
             result = self._publisher.reconcile(
                 inputs.release_candidate,
                 inputs.destination,

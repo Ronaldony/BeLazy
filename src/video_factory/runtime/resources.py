@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 from importlib.resources import files
 import json
+from typing import Mapping
 
 from video_factory.config.canonical import canonical_sha256
 from video_factory.json_boundary import parse_json_bytes, require_json_object
@@ -16,6 +17,14 @@ RESOURCE_FILENAMES = (
     "migration-registry-v1.json",
     "runtime-policy-v1.json",
 )
+
+_MIGRATABLE_LEGACY_VIEWS = (
+    ("brief", "brief/1.0"),
+    ("edit", "edit-manifest/1.0"),
+    ("generation", "generation-packet/2.1"),
+    ("storyboard", "storyboard/1.0"),
+)
+_SHADOW_ONLY_VIEWS = ("publish", "sound")
 
 
 def _render(value: object) -> bytes:
@@ -86,46 +95,24 @@ def _runtime_policy() -> dict[str, object]:
 
 def _migration_registry() -> dict[str, object]:
     identity: dict[str, object] = {
-        "registry_version": "projection-migration-registry/1.0",
+        "registry_version": "projection-migration-registry/1.1",
         "fixture_only": True,
         "production_activation_enabled": False,
         "views": [
             {
-                "view_kind": "brief",
-                "legacy_artifact_version": "brief/1.0",
+                "view_kind": view_kind,
+                "legacy_artifact_version": artifact_version,
                 "consumer_status": "unregistered",
                 "fixture_pinned_parity_required": True,
-            },
+            }
+            for view_kind, artifact_version in _MIGRATABLE_LEGACY_VIEWS
+        ],
+        "shadow_only_views": [
             {
-                "view_kind": "edit",
-                "legacy_artifact_version": "edit-manifest/1.0",
-                "consumer_status": "unregistered",
-                "fixture_pinned_parity_required": True,
-            },
-            {
-                "view_kind": "generation",
-                "legacy_artifact_version": "generation-packet/2.1",
-                "consumer_status": "unregistered",
-                "fixture_pinned_parity_required": True,
-            },
-            {
-                "view_kind": "publish",
-                "legacy_artifact_version": "publish-manifest/1.0",
-                "consumer_status": "unregistered",
-                "fixture_pinned_parity_required": True,
-            },
-            {
-                "view_kind": "sound",
-                "legacy_artifact_version": "sound-manifest/1.0",
-                "consumer_status": "unregistered",
-                "fixture_pinned_parity_required": True,
-            },
-            {
-                "view_kind": "storyboard",
-                "legacy_artifact_version": "storyboard/1.0",
-                "consumer_status": "unregistered",
-                "fixture_pinned_parity_required": True,
-            },
+                "view_kind": view_kind,
+                "migration_status": "no_registered_legacy_contract",
+            }
+            for view_kind in _SHADOW_ONLY_VIEWS
         ],
     }
     return {
@@ -134,11 +121,76 @@ def _migration_registry() -> dict[str, object]:
     }
 
 
-def runtime_resource_documents() -> dict[str, dict[str, object]]:
+def validate_runtime_migration_registry(
+    registry: Mapping[str, object] | None = None,
+) -> None:
+    """Fail closed unless every migratable legacy view has a real schema.
+
+    Blueprint still exposes six read-only design projections.  Only views with
+    an independently registered legacy document contract may enter the W06
+    exact-byte parity and cutover state machine.
+    """
+
+    from video_factory.artifacts import get_default_registry
+
+    value = _migration_registry() if registry is None else dict(registry)
+    if value.get("registry_version") != "projection-migration-registry/1.1":
+        raise ValueError("unsupported projection migration registry version")
+    views = value.get("views")
+    shadow_only = value.get("shadow_only_views")
+    if not isinstance(views, list) or not isinstance(shadow_only, list):
+        raise ValueError("projection migration registry view sets are malformed")
+
+    expected_views = dict(_MIGRATABLE_LEGACY_VIEWS)
+    actual_views: dict[str, str] = {}
+    schemas = get_default_registry()
+    for item in views:
+        if not isinstance(item, Mapping):
+            raise ValueError("projection migration registry view is malformed")
+        view_kind = item.get("view_kind")
+        artifact_version = item.get("legacy_artifact_version")
+        if not isinstance(view_kind, str) or not isinstance(artifact_version, str):
+            raise ValueError("projection migration registry view identity is malformed")
+        if view_kind in actual_views:
+            raise ValueError("projection migration registry contains a duplicate view")
+        if not schemas.has(artifact_version):
+            raise ValueError(
+                f"projection migration legacy schema is unregistered: {artifact_version}"
+            )
+        actual_views[view_kind] = artifact_version
+    if actual_views != expected_views:
+        raise ValueError("projection migration registry differs from target policy")
+
+    actual_shadow = {
+        item.get("view_kind")
+        for item in shadow_only
+        if isinstance(item, Mapping)
+        and item.get("migration_status") == "no_registered_legacy_contract"
+    }
+    if actual_shadow != set(_SHADOW_ONLY_VIEWS):
+        raise ValueError("shadow-only projection registry differs from target policy")
+    if set(actual_views) & actual_shadow:
+        raise ValueError("a projection view cannot be migratable and shadow-only")
+
+
+def migratable_legacy_versions() -> dict[str, str]:
+    """Return the exact target-owned migration view-to-contract mapping."""
+
+    registry = _migration_registry()
+    validate_runtime_migration_registry(registry)
     return {
+        str(item["view_kind"]): str(item["legacy_artifact_version"])
+        for item in registry["views"]
+    }
+
+
+def runtime_resource_documents() -> dict[str, dict[str, object]]:
+    documents = {
         "migration-registry-v1.json": _migration_registry(),
         "runtime-policy-v1.json": _runtime_policy(),
     }
+    validate_runtime_migration_registry(documents["migration-registry-v1.json"])
+    return documents
 
 
 def runtime_resource_bytes() -> dict[str, bytes]:
@@ -194,9 +246,11 @@ def validate_packaged_runtime_resources() -> str:
 __all__ = [
     "RESOURCE_FILENAMES",
     "RESOURCE_MANIFEST_VERSION",
+    "migratable_legacy_versions",
     "runtime_resource_bytes",
     "runtime_resource_documents",
     "runtime_resource_manifest",
     "runtime_resource_manifest_bytes",
+    "validate_runtime_migration_registry",
     "validate_packaged_runtime_resources",
 ]

@@ -1001,6 +1001,7 @@ class FixtureWorkspaceObserver:
         return observations
 
     def observe(self, *, revision_id: OpaqueId) -> WorkspaceObservation:
+        self._boundary.assert_current()
         entries = tuple(self._scan(self.root))
         trust = (
             WorkspaceTrustState.UNTRUSTED
@@ -1022,6 +1023,7 @@ class FixtureWorkspaceObserver:
         return observation
 
     def managed_path(self, value: str) -> Path:
+        self._boundary.assert_current()
         relative = require_managed_path(value)
         candidate = self.root.joinpath(*str(relative).split("/"))
         current = self.root
@@ -1102,6 +1104,7 @@ class ContentAddressedFixtureStore:
         }
 
     def put(self, *, object_id: OpaqueId, payload: bytes) -> ContentObjectObservation:
+        self._boundary.assert_current()
         if not isinstance(payload, bytes):
             raise RuntimeFilesystemError(
                 "runtime.content.payload", "fixture content payload must be exact bytes"
@@ -1151,6 +1154,7 @@ class ContentAddressedFixtureStore:
         *,
         evaluated_at: datetime,
     ) -> ContentObjectObservation | None:
+        self._boundary.assert_current()
         if evaluated_at.tzinfo is None or evaluated_at.utcoffset() is None:
             raise RuntimeFilesystemError(
                 "runtime.content.evaluation_time", "content lookup time must be aware"
@@ -1161,6 +1165,7 @@ class ContentAddressedFixtureStore:
         return self._observation(content)
 
     def read_current(self, content: ContentObject) -> bytes:
+        self._boundary.assert_current()
         path = self._object_path(content.exact_sha256)
         stable, payload = read_stable_regular_bytes(path)
         if stable.exact_sha256 != content.exact_sha256 or stable.byte_length != content.byte_length:
@@ -1187,6 +1192,7 @@ class FixtureAtomicMutationPort:
         observer: FixtureWorkspaceObserver,
         content_store: ContentAddressedFixtureStore,
     ) -> None:
+        self._boundary = boundary
         self._root = boundary.root
         self._observer = observer
         self._content = content_store
@@ -1545,6 +1551,7 @@ class FixtureAtomicMutationPort:
     def apply_exact(self, operation) -> int | None:
         """Apply one operation under the fixture lock with reversible staging."""
 
+        self._boundary.assert_current()
         before_stage, new_stage = self._stage_paths(operation.operation_id)
         with _exclusive_fixture_lock(self._lock_path):
             target = self._observer.managed_path(str(operation.path))

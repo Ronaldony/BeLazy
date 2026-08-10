@@ -52,10 +52,12 @@ from .serialization import (
     runtime_artifact_from_mapping,
 )
 from .resources import (
+    migratable_legacy_versions,
     runtime_resource_bytes,
     runtime_resource_documents,
     runtime_resource_manifest,
     runtime_resource_manifest_bytes,
+    validate_runtime_migration_registry,
     validate_packaged_runtime_resources,
 )
 
@@ -104,9 +106,11 @@ __all__ = [
     "runtime_artifact_to_bytes",
     "runtime_artifact_from_bytes",
     "runtime_artifact_from_mapping",
+    "migratable_legacy_versions",
     "runtime_resource_bytes",
     "runtime_resource_documents",
     "runtime_resource_manifest",
     "runtime_resource_manifest_bytes",
+    "validate_runtime_migration_registry",
     "validate_packaged_runtime_resources",
 ]

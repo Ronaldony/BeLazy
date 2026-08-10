@@ -52,6 +52,14 @@ Add the separate `candidate-decision/1.0` contract.
 ## Consequences
 
 W05 introduces an additive automation plane without changing legacy artifact
-truth semantics or the W04 78-row compatibility oracle. Legacy orchestration
-cutover and removal of the human-selection branch remain a W06 migration
-decision after runtime and parity evidence exist.
+truth semantics or the W04 78-row compatibility oracle. W06 explicitly keeps
+production activation disabled: the legacy human-selection branch remains the
+compatibility oracle and authoritative fallback. W07 adds the explicit,
+non-authorizing `route_candidate_selection` coordinator. Its reversible mode
+switch routes only a currently reverified `AUTO_SELECTED` decision to
+`assemble_selected_candidates`; low-confidence or denied decisions stay on a
+bounded human exception route, and rollback selects the unchanged legacy
+`select_edit_inputs` path. Removing the fallback still requires a later
+production-activation mandate with workflow-specific parity and rollback
+evidence; Blueprint projection parity is never selection-workflow cutover
+evidence.

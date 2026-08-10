@@ -136,6 +136,26 @@ class KillSwitch:
         return self.engaged_value
 
 
+class ReboundAttestationBroker:
+    def __init__(self, delegate) -> None:
+        self.delegate = delegate
+
+    def verify_current(self, credential_reference, scope, *, evaluated_at):
+        lease = self.delegate.verify_current(
+            credential_reference, scope, evaluated_at=evaluated_at
+        )
+        if lease is None or scope.purpose is not VerificationPurpose.RECONCILE:
+            return lease
+        return replace(
+            lease,
+            attestation_record=ArtifactReference(
+                RelativeArtifactPath("credentials/rebound-attestation.json"),
+                HashDigest("1" * 64),
+                ArtifactVersion("credential-registration-attestation/1.0"),
+            ),
+        )
+
+
 class Settlement:
     def __init__(self):
         self.calls = 0
@@ -641,6 +661,43 @@ def test_uncertain_publication_reconciles_without_republishing(tmp_path) -> None
     assert journal.load(snapshot.journal_id).state is JournalState.RECONCILED
     assert journal.unresolved() == ()
     assert journal.unsettled_reservation_claims() == ()
+
+
+def test_publication_reconcile_rejects_credential_attestation_rebound(tmp_path) -> None:
+    runtime, journal, publisher, workspace, settlement, inputs = _setup(
+        tmp_path, behavior="timeout"
+    )
+    runtime.publish(inputs)
+    snapshot = journal.unresolved()[0]
+    publisher.behavior = "reconcile-success"
+    runtime._credentials = ReboundAttestationBroker(runtime._credentials)
+
+    with pytest.raises(PublicationRuntimeError) as caught:
+        runtime.reconcile_pending(snapshot.journal_id, inputs)
+
+    assert caught.value.reason_code == "runtime.publication.credential_rebound"
+    assert publisher.reconcile_calls == 0
+
+
+def test_publication_reconcile_binds_full_credential_reference(tmp_path) -> None:
+    runtime, journal, publisher, workspace, settlement, inputs = _setup(
+        tmp_path, behavior="timeout"
+    )
+    runtime.publish(inputs)
+    snapshot = journal.unresolved()[0]
+    rebound = replace(
+        inputs,
+        credential_reference=replace(
+            inputs.credential_reference,
+            path=RelativeArtifactPath("credentials/foreign-publisher.json"),
+        ),
+    )
+
+    with pytest.raises(PublicationRuntimeError) as caught:
+        runtime.reconcile_pending(snapshot.journal_id, rebound)
+
+    assert caught.value.reason_code == "runtime.publication.reconcile_rebound"
+    assert publisher.reconcile_calls == 0
 
 
 def test_process_death_during_reconcile_preserves_history_and_retries_observation(

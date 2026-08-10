@@ -188,6 +188,7 @@ def test_exact_pinned_pair_enables_only_a_read_only_reversible_projection(
         consumer_id=CONSUMER,
         view_kind=VIEW,
         legacy_artifact=legacy_ref,
+        legacy_document=legacy_document,
         feature_flag_sha256=FEATURE_SHA,
         evaluated_at=NOW,
     )
@@ -290,12 +291,14 @@ def test_dual_read_rollback_selects_only_the_state_bound_legacy_anchor(
     fixture = _fixture(tmp_path)
     runtime = fixture[1]
     projection_ref = fixture[6]
+    legacy_document = fixture[7]
     legacy_ref = fixture[8]
     legacy = runtime.initialize_legacy(
         migration_id=MIGRATION_ID,
         consumer_id=CONSUMER,
         view_kind=VIEW,
         legacy_artifact=legacy_ref,
+        legacy_document=legacy_document,
         feature_flag_sha256=FEATURE_SHA,
         evaluated_at=NOW,
     )
@@ -357,6 +360,40 @@ def test_dual_read_rollback_selects_only_the_state_bound_legacy_anchor(
             parity_receipt_reference=None,
         )
     assert foreign.value.reason_code == "runtime.migration.legacy_rebound"
+
+
+def test_legacy_initialization_requires_registered_view_contract_and_exact_bytes(
+    tmp_path: Path,
+) -> None:
+    fixture = _fixture(tmp_path)
+    runtime = fixture[1]
+    legacy_document, legacy_ref = fixture[7:9]
+
+    with pytest.raises(MigrationRuntimeError) as wrong_contract:
+        runtime.initialize_legacy(
+            migration_id=OpaqueId("migration-wrong-contract"),
+            consumer_id=CONSUMER,
+            view_kind=VIEW,
+            legacy_artifact=replace(
+                legacy_ref, artifact_version=ArtifactVersion("edit-manifest/1.0")
+            ),
+            legacy_document=legacy_document,
+            feature_flag_sha256=FEATURE_SHA,
+            evaluated_at=NOW,
+        )
+    assert wrong_contract.value.reason_code == "runtime.migration.legacy_contract"
+
+    with pytest.raises(MigrationRuntimeError) as wrong_bytes:
+        runtime.initialize_legacy(
+            migration_id=OpaqueId("migration-wrong-bytes"),
+            consumer_id=CONSUMER,
+            view_kind=VIEW,
+            legacy_artifact=legacy_ref,
+            legacy_document=b"{}",
+            feature_flag_sha256=FEATURE_SHA,
+            evaluated_at=NOW,
+        )
+    assert wrong_bytes.value.reason_code == "runtime.migration.legacy_rebound"
 
 
 def test_unseen_or_rebound_pair_never_creates_parity_evidence(tmp_path: Path) -> None:
@@ -425,6 +462,7 @@ def test_activation_requires_fresh_exact_parity_and_separate_approval(
         consumer_id=CONSUMER,
         view_kind=VIEW,
         legacy_artifact=legacy_ref,
+        legacy_document=legacy_document,
         feature_flag_sha256=FEATURE_SHA,
         evaluated_at=NOW,
     )
@@ -477,7 +515,7 @@ def test_activation_rejects_caller_minted_unregistered_parity_receipt(
     fixture = _fixture(tmp_path)
     runtime = fixture[1]
     projection, _, projection_ref = fixture[4:7]
-    _, legacy_ref = fixture[7:9]
+    legacy_document, legacy_ref = fixture[7:9]
     minted = build_projection_parity_receipt(
         consumer_id=CONSUMER,
         view_kind=VIEW,
@@ -515,6 +553,7 @@ def test_activation_rejects_caller_minted_unregistered_parity_receipt(
         consumer_id=CONSUMER,
         view_kind=VIEW,
         legacy_artifact=legacy_ref,
+        legacy_document=legacy_document,
         feature_flag_sha256=FEATURE_SHA,
         evaluated_at=NOW,
     )
@@ -557,6 +596,7 @@ def test_projection_selection_rejects_receipt_rebound(tmp_path: Path) -> None:
         consumer_id=CONSUMER,
         view_kind=VIEW,
         legacy_artifact=legacy_ref,
+        legacy_document=legacy_document,
         feature_flag_sha256=FEATURE_SHA,
         evaluated_at=NOW,
     )

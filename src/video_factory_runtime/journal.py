@@ -153,6 +153,7 @@ class SQLiteExecutionJournal:
 
     @contextmanager
     def _connect(self) -> Iterator[sqlite3.Connection]:
+        self.boundary.assert_current()
         connection = sqlite3.connect(
             self.database_path,
             timeout=30,

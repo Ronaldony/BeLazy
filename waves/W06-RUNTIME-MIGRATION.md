@@ -57,6 +57,12 @@ Provide concrete local runtime boundaries outside the pure core, durable executi
 - Migration accepts only exact pinned fixture parity plus separate current
   activation/rollback evidence. Generation zero permanently anchors the exact
   legacy reference, including direct dual-read rollback. Every production consumer is unregistered and
-  public identifier migration remains deferred.
+  public identifier migration remains deferred. Only brief, storyboard,
+  generation, and edit have registered legacy contracts and may enter this
+  state machine; sound and publish remain non-migratable design shadows.
+- The W04 78-row workflow remains the byte-stable compatibility oracle. W06
+  makes no production selection-workflow cutover: the W05 automatic selection
+  plane is available to direct verified consumers, and the human-selection
+  branch remains the reversible fallback until a separate activation mandate.
 - Deployment, migration, rollback, incident, drift, break-glass, journal
   recovery, and release procedures are under `docs/runbooks/`.

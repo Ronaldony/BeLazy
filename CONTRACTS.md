@@ -44,7 +44,7 @@ Production planning is evidence-based, not presence-based:
 | `video_factory.workflow` | target-owned versioned claims/gates/actions DAG, complete blocker and parallel-frontier evaluation, incremental invalidation, per-action executable plan identities, and non-authorizing legacy parity reports |
 | `video_factory.authority` | separate assurance/autonomy/risk contracts, exact action requests, parse-only standing grants, non-authorizing approval requests, target policy classification, authority decisions, and trusted ledger verification/revalidation ports |
 | `video_factory.quality` | exact-media nine-dimension QualityBundle aggregation, target-owned hard gates, current media/evaluator-receipt verification ports, and bounded affected-target-only remediation plans |
-| `video_factory.selection` | trusted-confidence/score/margin-bound CandidateDecision with exact `auto_select_candidates` W04 authority and a read-only non-current legacy ranking projection |
+| `video_factory.selection` | trusted-confidence/score/margin-bound CandidateDecision with exact `auto_select_candidates` W04 authority, a read-only non-current legacy ranking projection, and a reversible non-authorizing verified-selection coordinator |
 | `video_factory.release` | non-secret destination binding, cycle-free ReleaseCandidate identity, and exactly-one-human non-publishing ReleaseAssessment handoff |
 | `video_factory.runtime` | pure W06 execution/publication/parity/migration artifacts, strict serialization, and packaged fixture-only policy projections; never performs an effect |
 | `video_factory_runtime` | marker-bound fixture adapters: SQLite journal, no-follow workspace/content access, managed mutation, external executor, fake publication, and reversible read-only migration; production activation is forbidden |
@@ -412,8 +412,13 @@ filesystem executor or approval issuer.
   base revision digest, policy digest, request digest, and idempotency key.
 - Managed paths are canonical relative POSIX NFC strings and reject absolute,
   traversal, backslash, ADS/reserved-name, trailing-dot/space, case/Unicode
-  collision, symlink, reparse, missing ancestor, and non-directory ancestor
-  aliases, including Windows superscript-digit and console-device names.
+collision, symlink, reparse, missing ancestor, and non-directory ancestor
+aliases, including Windows superscript-digit and console-device names.
+- The concrete fixture mutation runtime accepts an execution authorization only
+  after a trusted W02 issuance verifier confirms its complete canonical digest,
+  plan, service identity, and current verification time. That full digest is
+  part of the durable execution intent and is rechecked before effects and
+  reconciliation; deterministic self-hashes are not issuance evidence.
 - Create/replace authorization resolves the current immutable content object
   and rechecks object ID, byte length, and digest. Reused identical objects are
   resolved once, while one object ID mapped to conflicting bytes is rejected

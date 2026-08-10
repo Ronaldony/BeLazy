@@ -89,6 +89,26 @@ class KillSwitch:
         return False
 
 
+class ReboundAttestationBroker:
+    def __init__(self, delegate) -> None:
+        self.delegate = delegate
+
+    def verify_current(self, credential_reference, scope, *, evaluated_at):
+        lease = self.delegate.verify_current(
+            credential_reference, scope, evaluated_at=evaluated_at
+        )
+        if lease is None or scope.purpose is not VerificationPurpose.RECONCILE:
+            return lease
+        return replace(
+            lease,
+            attestation_record=ArtifactReference(
+                RelativeArtifactPath("credentials/rebound-attestation.json"),
+                HashDigest("1" * 64),
+                ArtifactVersion("credential-registration-attestation/1.0"),
+            ),
+        )
+
+
 class Settlement:
     def __init__(self) -> None:
         self.calls = 0
@@ -529,6 +549,47 @@ def test_uncertain_result_reconciles_without_redispatch(
     assert loaded.receipt is not None
     assert loaded.receipt.reconciliation_record is not None
     assert journal.unresolved() == ()
+
+
+def test_reconcile_rejects_credential_attestation_rebound_before_effect(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    runtime, journal, observer, executor, inputs, enforcement_calls = _setup(
+        tmp_path, monkeypatch, behavior="timeout"
+    )
+    runtime.dispatch(inputs)
+    snapshot = journal.unresolved()[0]
+    executor.behavior = "reconcile-success"
+    runtime._credentials = ReboundAttestationBroker(runtime._credentials)
+
+    with pytest.raises(DurableExecutionError) as caught:
+        runtime.reconcile_pending(snapshot.journal_id, inputs)
+
+    assert caught.value.reason_code == "runtime.executor.credential_rebound"
+    assert executor.reconcile_calls == 0
+
+
+def test_reconcile_binds_full_credential_reference_not_digest_prefix(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    runtime, journal, observer, executor, inputs, enforcement_calls = _setup(
+        tmp_path, monkeypatch, behavior="timeout"
+    )
+    runtime.dispatch(inputs)
+    snapshot = journal.unresolved()[0]
+    rebound = replace(
+        inputs,
+        credential_reference=replace(
+            inputs.credential_reference,
+            path=RelativeArtifactPath("credentials/foreign-executor.json"),
+        ),
+    )
+
+    with pytest.raises(DurableExecutionError) as caught:
+        runtime.reconcile_pending(snapshot.journal_id, rebound)
+
+    assert caught.value.reason_code == "runtime.executor.reconcile_rebound"
+    assert executor.reconcile_calls == 0
 
 
 def test_reconcile_can_remain_uncertain_then_settle_without_redispatch(

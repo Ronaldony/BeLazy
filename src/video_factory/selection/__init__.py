@@ -25,6 +25,11 @@ from .decision import (
     verify_candidate_decision,
 )
 from .projection import project_legacy_selection
+from .cutover import (
+    CandidateSelectionCutoverMode,
+    CandidateSelectionRoute,
+    route_candidate_selection,
+)
 from .serialization import (
     SelectionSerializationError,
     candidate_decision_from_bytes,
@@ -41,6 +46,8 @@ __all__ = [
     "CandidateDecisionStatus",
     "CandidateDecisionVerificationInputs",
     "CandidateOption",
+    "CandidateSelectionCutoverMode",
+    "CandidateSelectionRoute",
     "CurrentCandidateConfidenceVerifier",
     "LegacyCandidateSelectionProjection",
     "RankedCandidate",
@@ -54,6 +61,7 @@ __all__ = [
     "validate_candidate_decision_structure",
     "verify_candidate_decision",
     "project_legacy_selection",
+    "route_candidate_selection",
     "SelectionSerializationError",
     "candidate_decision_from_bytes",
     "candidate_decision_from_mapping",

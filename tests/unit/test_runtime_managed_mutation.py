@@ -32,6 +32,7 @@ from video_factory.mutation import (
     WorkspaceTrustState,
     mutation_content_observation_sha256,
     mutation_execution_authorization_id,
+    mutation_execution_authorization_sha256,
     plan_mutation,
     workspace_observation_sha256,
     workspace_revision_to_mapping,
@@ -42,6 +43,7 @@ from video_factory_runtime import (
     FixtureRuntimeBoundary,
     FixtureWorkspaceObserver,
     ManagedMutationRuntimeError,
+    MutationAuthorizationVerification,
     RuntimeAuthorityReservation,
     SQLiteExecutionJournal,
 )
@@ -121,6 +123,36 @@ class Authority:
             reservation,
         )
         return result
+
+
+class AuthorizationVerifier:
+    def __init__(self, authorization: MutationExecutionAuthorization) -> None:
+        self.expected_sha256 = mutation_execution_authorization_sha256(authorization)
+        self.calls = 0
+
+    def verify_current(
+        self,
+        plan,
+        authorization,
+        *,
+        service_identity,
+        evaluated_at,
+    ):
+        self.calls += 1
+        actual_sha256 = mutation_execution_authorization_sha256(authorization)
+        if actual_sha256 != self.expected_sha256:
+            return None
+        return MutationAuthorizationVerification(
+            plan_sha256=plan.plan_sha256,
+            authorization_sha256=actual_sha256,
+            service_identity=service_identity,
+            verification_record=ArtifactReference(
+                RelativeArtifactPath("verification/mutation-authorization.json"),
+                actual_sha256,
+                ArtifactVersion("mutation-authorization-verification/1.0"),
+            ),
+            verified_at=evaluated_at,
+        )
 
 
 class Settlement:
@@ -345,6 +377,7 @@ def _executor(
         journal=journal,
         observer=observer,
         content_store=store,
+        authorization_verifier=AuthorizationVerifier(authorization),
         authority=authority,
         identity_attestor=Identity(),
         kill_switch=KillSwitch(),
@@ -374,6 +407,45 @@ def test_managed_mutation_success_is_durable_and_exact_replay_is_read_only(
     assert len(settlement.calls) == 1
     snapshots = journal.unresolved()
     assert snapshots == ()
+
+
+def test_self_rehashed_unissued_mutation_authorization_is_rejected_before_journal(
+    tmp_path: Path,
+) -> None:
+    boundary, observer, store, plan, authorization = _setup(tmp_path)
+    journal = SQLiteExecutionJournal(boundary)
+    verifier = AuthorizationVerifier(authorization)
+    executor = FixtureManagedMutationExecutor(
+        boundary,
+        journal=journal,
+        observer=observer,
+        content_store=store,
+        authorization_verifier=verifier,
+        authority=Authority(),
+        identity_attestor=Identity(),
+        kill_switch=KillSwitch(),
+        settlement=Settlement(),
+        clock=Clock(),
+        service_identity=SERVICE,
+    )
+    rebound = replace(
+        authorization,
+        idempotency_reservation=_ref(
+            "idempotency/foreign.json", "1", "idempotency-reservation/1.0"
+        ),
+    )
+    forged = replace(
+        rebound,
+        authorization_id=mutation_execution_authorization_id(rebound),
+    )
+
+    with pytest.raises(ManagedMutationRuntimeError) as caught:
+        executor.apply(plan, forged)
+
+    assert caught.value.reason_code == "runtime.mutation.authorization_unverified"
+    assert verifier.calls == 1
+    assert journal.unresolved() == ()
+    assert (observer.root / "artifacts" / "0.txt").read_bytes() == b"old-a"
 
 
 def test_terminal_mutation_replay_does_not_mint_fresh_effect_authority(
@@ -714,6 +786,7 @@ def test_process_restart_from_dispatching_is_reconcile_only(tmp_path: Path) -> N
         journal=journal,
         observer=observer,
         content_store=executor._content,
+        authorization_verifier=AuthorizationVerifier(authorization),
         authority=authority,
         identity_attestor=Identity(),
         kill_switch=KillSwitch(),
@@ -757,6 +830,7 @@ def test_reconciliation_detects_effect_that_started_before_process_death(
         journal=journal,
         observer=observer,
         content_store=executor._content,
+        authorization_verifier=AuthorizationVerifier(authorization),
         authority=authority,
         identity_attestor=Identity(),
         kill_switch=KillSwitch(),

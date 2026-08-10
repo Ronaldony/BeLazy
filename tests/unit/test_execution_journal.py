@@ -141,6 +141,42 @@ def test_fixture_boundary_is_explicit_immutable_and_not_adopted(tmp_path: Path) 
     assert rebound.value.reason_code == "runtime.boundary.marker_rebound"
 
 
+def test_fixture_boundary_rejects_root_identity_replacement_before_child_creation(
+    tmp_path: Path,
+) -> None:
+    boundary = _boundary(tmp_path)
+    original = tmp_path / "runtime-original"
+    boundary.root.rename(original)
+    boundary.root.mkdir()
+    (boundary.root / ".be-lazy-runtime-fixture.json").write_bytes(
+        (original / ".be-lazy-runtime-fixture.json").read_bytes()
+    )
+
+    with pytest.raises(RuntimeBoundaryError) as caught:
+        boundary.require_directory("must-not-create", create=True)
+
+    assert caught.value.reason_code == "runtime.boundary.rebound"
+    assert not (boundary.root / "must-not-create").exists()
+
+
+def test_journal_rechecks_boundary_identity_before_reopening_database(
+    tmp_path: Path,
+) -> None:
+    boundary = _boundary(tmp_path)
+    journal = SQLiteExecutionJournal(boundary)
+    original = tmp_path / "runtime-original"
+    boundary.root.rename(original)
+    boundary.root.mkdir()
+    (boundary.root / ".be-lazy-runtime-fixture.json").write_bytes(
+        (original / ".be-lazy-runtime-fixture.json").read_bytes()
+    )
+
+    with pytest.raises(RuntimeBoundaryError) as caught:
+        journal.unresolved()
+
+    assert caught.value.reason_code == "runtime.boundary.rebound"
+
+
 def test_sqlite_journal_survives_restart_and_returns_terminal_receipt(
     tmp_path: Path,
 ) -> None:

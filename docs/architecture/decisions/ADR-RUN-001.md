@@ -59,6 +59,12 @@ exact-idempotency replay is
 read-only: it validates the durable input binding and returns the existing
 receipt without minting new authority or invoking the effect port.
 
+The fixture boundary retains the exact root and marker filesystem identities.
+It rechecks both identities and exact marker bytes before child creation,
+database access, observation, persistence, and every effect call. Replacing the
+root with another directory, junction, symlink, or reparse point therefore
+fails before a child or SQLite file can be created through the rebound path.
+
 Managed mutation moves existing bytes into a fixture-owned quarantine name,
 verifies the staged no-follow regular file, and only then deletes, replaces, or
 links it. On POSIX the root and complete managed ancestor chain are opened
@@ -88,8 +94,15 @@ non-authorizing and `authority_effect=none` remains invariant.
   external state, and publication reconciliation can be tested locally.
 - A changed request under the same idempotency key is a hard conflict.
 - No credential value is accepted or serialized. A stable broker registration
-  attestation is journaled; a non-serializable current lease crosses only the
-  effect boundary.
+  attestation is journaled and rechecked at dispatch and reconciliation. The
+  durable handle identity hashes the full path, digest, and artifact version,
+  not a digest prefix; a non-serializable current lease crosses only the effect
+  boundary.
+- Managed mutation additionally requires a trusted current W02 issuance
+  verifier. The full canonical `MutationExecutionAuthorization` digest is
+  bound into the durable intent and rechecked before replay, reconciliation,
+  and each effect; a caller-self-rehashed authorization never reaches the
+  journal.
 - The wheel contains runtime contracts and fixture adapters, but the packaged
   policy fixes `fixture_only=true` and `production_enabled=false`.
 - Real provider, production filesystem, credential broker, signature service,

@@ -209,7 +209,30 @@ class DurableExecutorRuntime:
 
     @staticmethod
     def _credential_lease_id(reference: ArtifactReference) -> OpaqueId:
-        return OpaqueId(f"credential-ref-{str(reference.sha256)[:24]}")
+        digest = canonical_sha256(
+            {
+                "artifact_version": "runtime-credential-reference-binding/1.0",
+                "path": str(reference.path),
+                "sha256": str(reference.sha256),
+                "credential_artifact_version": str(reference.artifact_version),
+            }
+        )
+        return OpaqueId(f"credential-ref-{digest}")
+
+    def _require_credential_lease_binding(
+        self,
+        snapshot: JournalSnapshot,
+        lease: CredentialLease,
+    ) -> None:
+        if (
+            snapshot.intent.credential_handle_id
+            != self._credential_lease_id(lease.credential_reference)
+            or snapshot.intent.credential_verification != lease.attestation_record
+        ):
+            raise DurableExecutionError(
+                "runtime.executor.credential_rebound",
+                "current credential lease differs from the durable exact attestation",
+            )
 
     @staticmethod
     def _aware(value: datetime) -> datetime:
@@ -779,6 +802,7 @@ class DurableExecutorRuntime:
             )
 
     def dispatch(self, inputs: DurableDispatchInputs) -> ResultEnvelope:
+        self._boundary.assert_current()
         validate_request_envelope(inputs.request, inputs.descriptor, AdapterKind.EXECUTOR)
         adapter_matches = self._executor.adapter_id == inputs.descriptor.adapter_id
         if not adapter_matches:
@@ -929,6 +953,7 @@ class DurableExecutorRuntime:
             self._credential_scope(inputs, VerificationPurpose.DISPATCH),
             evaluated_at=marker_at,
         )
+        self._require_credential_lease_binding(snapshot, current_credential)
         current_state = snapshot.state
         if current_state in {JournalState.PLANNED, JournalState.AUTHORIZED}:
             self._journal.append_state(
@@ -981,6 +1006,7 @@ class DurableExecutorRuntime:
             self._credential_scope(inputs, VerificationPurpose.DISPATCH),
             evaluated_at=effect_at,
         )
+        self._require_credential_lease_binding(snapshot, effect_credential)
         effect_workspace = self._observer.observe(
             revision_id=inputs.expected_workspace_revision_id
         )
@@ -1030,6 +1056,7 @@ class DurableExecutorRuntime:
         )
         input_bundle = self._verified_input_bundle(inputs, effect_workspace)
         try:
+            self._boundary.assert_current()
             result = self._executor.dispatch(
                 inputs.request,
                 inputs.authority_scope,
@@ -1144,6 +1171,7 @@ class DurableExecutorRuntime:
     ) -> ResultEnvelope:
         """Resolve may-have-started work without ever invoking dispatch again."""
 
+        self._boundary.assert_current()
         validate_request_envelope(inputs.request, inputs.descriptor, AdapterKind.EXECUTOR)
         adapter_matches = self._executor.adapter_id == inputs.descriptor.adapter_id
         if not adapter_matches:
@@ -1240,6 +1268,7 @@ class DurableExecutorRuntime:
             self._credential_scope(inputs, VerificationPurpose.RECONCILE),
             evaluated_at=marker_at,
         )
+        self._require_credential_lease_binding(snapshot, current_credential)
         self._journal.append_state(
             snapshot.journal_id,
             JournalState.RECONCILING,
@@ -1269,6 +1298,7 @@ class DurableExecutorRuntime:
             self._credential_scope(inputs, VerificationPurpose.RECONCILE),
             evaluated_at=effect_at,
         )
+        self._require_credential_lease_binding(snapshot, effect_credential)
         effect_workspace = self._observer.observe(
             revision_id=inputs.expected_workspace_revision_id
         )
@@ -1318,6 +1348,7 @@ class DurableExecutorRuntime:
         )
         input_bundle = self._verified_input_bundle(inputs, effect_workspace)
         try:
+            self._boundary.assert_current()
             result = self._executor.reconcile(
                 inputs.request,
                 inputs.authority_scope,

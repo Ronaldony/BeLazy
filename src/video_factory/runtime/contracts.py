@@ -226,6 +226,7 @@ class MigrationCutoverState:
     generation: int
     mode: MigrationMode
     previous_state_sha256: HashDigest | None
+    legacy_artifact: ArtifactReference
     parity_receipts: tuple[ArtifactReference, ...]
     feature_flag_sha256: HashDigest
     activation_record: ArtifactReference

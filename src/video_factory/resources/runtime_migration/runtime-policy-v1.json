@@ -5,7 +5,7 @@
   "production_enabled": false,
   "journal": {
     "backend": "sqlite",
-    "schema_version": "sqlite-execution-journal/1.1",
+    "schema_version": "sqlite-execution-journal/1.2",
     "synchronous": "FULL",
     "atomic_idempotency_claim": true,
     "request_digest_conflict_rejected": true,
@@ -41,6 +41,7 @@
     "blind_retry_forbidden": true
   },
   "migration": {
+    "schema_version": "sqlite-migration-registry/1.1",
     "modes": [
       "dual_read_compare",
       "legacy_only",
@@ -51,7 +52,9 @@
     "projections_are_authority": false,
     "trusted_parity_receipt_required": true,
     "separate_activation_verification_required": true,
+    "exact_legacy_anchor_required": true,
+    "historical_rollback_target_forbidden": true,
     "production_activation_enabled": false
   },
-  "policy_sha256": "23b3ae6eabcf33d9bf587365542c25faf75a95414e2f7376a68c6289aa770007"
+  "policy_sha256": "fed35707f42909381d4f77805e175a86264f6978559d82d10522261eeddb3044"
 }

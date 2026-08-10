@@ -1345,6 +1345,7 @@ def _cutover_identity(value: MigrationCutoverState) -> dict[str, object]:
             if value.previous_state_sha256 is not None
             else None
         ),
+        "legacy_artifact": _ref(value.legacy_artifact, "legacy_artifact"),
         "parity_receipts": list(refs),
         "feature_flag_sha256": _sha(str(value.feature_flag_sha256), "feature_flag_sha256"),
         "activation_record": _ref(value.activation_record, "activation_record"),
@@ -1389,6 +1390,7 @@ def migration_cutover_state_from_mapping(
                 "generation",
                 "mode",
                 "previous_state_sha256",
+                "legacy_artifact",
                 "parity_receipts",
                 "feature_flag_sha256",
                 "activation_record",
@@ -1418,6 +1420,9 @@ def migration_cutover_state_from_mapping(
         mode=MigrationMode(str(value["mode"])),
         previous_state_sha256=(
             HashDigest(str(previous)) if previous is not None else None
+        ),
+        legacy_artifact=_ref_from_mapping(
+            value["legacy_artifact"], "legacy_artifact"
         ),
         parity_receipts=tuple(
             _ref_from_mapping(item, "parity_receipt") for item in parity

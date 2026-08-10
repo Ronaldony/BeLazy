@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from pathlib import Path
+import subprocess
+import sys
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -53,3 +55,36 @@ def test_architecture_and_public_contract_document_the_split_package_boundary() 
     assert "`video_factory_runtime`" in contracts
     assert "tools/check_runtime_boundary.py" in contracts
     assert "tools/check_runtime_boundary.py" in readme
+
+
+def test_deployment_wheel_command_uses_the_actual_required_cli_flags(
+    tmp_path: Path,
+) -> None:
+    deployment = (RUNBOOKS / "deployment.md").read_text(encoding="utf-8")
+    command = "python tools/verify_schema_wheel.py"
+    assert command in deployment
+    for flag in ("--wheel", "--python", "--work-dir"):
+        assert flag in deployment
+
+    # A nonexistent wheel reaches product validation (exit 1), rather than
+    # argparse's missing-required-argument exit 2.  This keeps the runbook
+    # invocation shape synchronized with the real parser without building a
+    # package inside the documentation test.
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(ROOT / "tools" / "verify_schema_wheel.py"),
+            "--wheel",
+            str(tmp_path / "missing.whl"),
+            "--python",
+            sys.executable,
+            "--work-dir",
+            str(tmp_path),
+        ],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 1
+    assert "following arguments are required" not in result.stderr

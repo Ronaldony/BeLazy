@@ -44,8 +44,11 @@ transaction; the generic state API cannot terminalize unresolved work.
 
 Before a trusted ledger is called, the journal durably records a stable
 reservation claim `(journal, purpose, effect, request)`. Ledger retries under
-that claim are idempotent, and settlement binds every claim and reservation to
-one final state. Before each new effect the runtime verifies exact
+that claim are idempotent, while every invocation returns a fresh
+timestamp-bound verification receipt. The stable reservation identity excludes
+receipt time and ledger-head fields; the journal preserves the first
+reservation plus an append-only history of every fresh receipt. Settlement
+binds every claim and stable reservation to one final state. Before each new effect the runtime verifies exact
 request/plan/context, workspace bytes and manifest, service identity, a
 broker-issued destination- and purpose-bound credential lease, kill switch,
 W04 decision, fresh purpose-bound reservation, idempotency, and destination
@@ -58,7 +61,10 @@ receipt without minting new authority or invoking the effect port.
 
 Managed mutation moves existing bytes into a fixture-owned quarantine name,
 verifies the staged no-follow regular file, and only then deletes, replaces, or
-links it. On Windows the complete managed ancestor chain remains open, file and
+links it. On POSIX the root and complete managed ancestor chain are opened
+component-by-component with `O_NOFOLLOW`; every rename, link, unlink, create,
+stat, read, and directory sync uses those exact `dir_fd` capabilities rather
+than re-resolving a path. On Windows the complete managed ancestor chain remains open, file and
 directory identities stay live through the effect, the directory handle's
 current path is rechecked immediately before each handle-relative rename or
 link, and deletion targets the opened file rather than a re-resolved path. A

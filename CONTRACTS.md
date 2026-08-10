@@ -348,7 +348,8 @@ contains 87 schemas and 82 registered artifact versions.
 `video_factory_runtime` is additive and explicitly fixture-only. A boundary
 marker binds an empty isolated root to one runtime ID. The concrete SQLite
 journal uses `BEGIN IMMEDIATE`, `synchronous=FULL`, atomic idempotency claims,
-and append-only hash-chain events. The same `(action kind, action id,
+append-only hash-chain events, stable claim-bound reservations, and an
+append-only history of fresh timestamp-bound authority receipts. The same `(action kind, action id,
 idempotency key)` with another request digest is rejected. Terminal exact
 replay returns its receipt without a fresh effect check. A durable pre-effect
 `planned`, `authorized`, or `reserved` record may continue only after every
@@ -363,7 +364,9 @@ commit; the generic state API cannot terminalize may-have-started work.
 The fixture executor validates exact request/output/cost/workspace semantics.
 The managed filesystem executor rechecks no-follow file identity, bytes,
 manifest CAS, containment, and link/reparse state at actual use and records
-operation-level partial/uncertain evidence. Both persist fresh W04 reservation
+operation-level partial/uncertain evidence. POSIX effects use the exact
+root-to-parent no-follow directory descriptor chain and handle-relative `*at`
+operations; Windows effects use exact directory/file handles. Both persist fresh W04 reservation
 and settlement records. A raw credential string or caller-minted opaque ID is
 not authority: only a broker-issued, destination/service/purpose-bound current
 lease may cross the effect boundary, and that lease cannot be serialized.
@@ -379,7 +382,9 @@ Migration uses a durable hash-chained state with `legacy_only`,
 `dual_read_compare`, `projection_read_only`, and `rolled_back`. A projection is
 selectable only for read-only use after an exact trusted parity receipt and a
 separate current activation verification. It remains non-current and
-`authority_effect=none`. The only parity verifier is a fixture-pinned exact-byte
+`authority_effect=none`. Generation zero permanently binds the exact legacy
+artifact reference; every legacy/dual/rollback selection must match it, and a
+rollback cannot choose an older activation receipt. The only parity verifier is a fixture-pinned exact-byte
 corpus; every production consumer is `unregistered` and production activation
 is disabled. Public identifier migration remains deferred to T90.
 

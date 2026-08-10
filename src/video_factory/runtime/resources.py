@@ -33,7 +33,7 @@ def _runtime_policy() -> dict[str, object]:
         "production_enabled": False,
         "journal": {
             "backend": "sqlite",
-            "schema_version": "sqlite-execution-journal/1.1",
+            "schema_version": "sqlite-execution-journal/1.2",
             "synchronous": "FULL",
             "atomic_idempotency_claim": True,
             "request_digest_conflict_rejected": True,
@@ -62,6 +62,7 @@ def _runtime_policy() -> dict[str, object]:
             "blind_retry_forbidden": True,
         },
         "migration": {
+            "schema_version": "sqlite-migration-registry/1.1",
             "modes": [
                 "dual_read_compare",
                 "legacy_only",
@@ -72,6 +73,8 @@ def _runtime_policy() -> dict[str, object]:
             "projections_are_authority": False,
             "trusted_parity_receipt_required": True,
             "separate_activation_verification_required": True,
+            "exact_legacy_anchor_required": True,
+            "historical_rollback_target_forbidden": True,
             "production_activation_enabled": False,
         },
     }

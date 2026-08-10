@@ -187,6 +187,7 @@ def test_exact_pinned_pair_enables_only_a_read_only_reversible_projection(
         migration_id=MIGRATION_ID,
         consumer_id=CONSUMER,
         view_kind=VIEW,
+        legacy_artifact=legacy_ref,
         feature_flag_sha256=FEATURE_SHA,
         evaluated_at=NOW,
     )
@@ -241,20 +242,29 @@ def test_exact_pinned_pair_enables_only_a_read_only_reversible_projection(
         rolled_back,
         legacy_artifact=legacy_ref,
         projection_artifact=projection_ref,
-        parity_receipt=receipt,
-        parity_receipt_reference=receipt_ref,
+        parity_receipt=None,
+        parity_receipt_reference=None,
     )
     assert fallback.selected_artifact == legacy_ref
     assert fallback.selected_source == "legacy_rollback"
+    with pytest.raises(MigrationRuntimeError) as old_cycle:
+        reopened.select_read_only(
+            rolled_back,
+            legacy_artifact=legacy_ref,
+            projection_artifact=projection_ref,
+            parity_receipt=receipt,
+            parity_receipt_reference=receipt_ref,
+        )
+    assert old_cycle.value.reason_code == "runtime.migration.rollback_evidence_unexpected"
     with pytest.raises(MigrationRuntimeError) as rebound:
         reopened.select_read_only(
             rolled_back,
             legacy_artifact=replace(legacy_ref, sha256=HashDigest("f" * 64)),
             projection_artifact=projection_ref,
-            parity_receipt=receipt,
-            parity_receipt_reference=receipt_ref,
+            parity_receipt=None,
+            parity_receipt_reference=None,
         )
-    assert rebound.value.reason_code == "runtime.migration.rollback_target_rebound"
+    assert rebound.value.reason_code == "runtime.migration.legacy_rebound"
     assert rolled_back.rollback_record is not None
     with pytest.raises(MigrationRuntimeError) as caught:
         reopened.select_read_only(
@@ -272,6 +282,81 @@ def test_exact_pinned_pair_enables_only_a_read_only_reversible_projection(
         MigrationMode.ROLLED_BACK,
     }
     assert legacy.authority_effect == dual.authority_effect == "none"
+
+
+def test_dual_read_rollback_selects_only_the_state_bound_legacy_anchor(
+    tmp_path: Path,
+) -> None:
+    fixture = _fixture(tmp_path)
+    runtime = fixture[1]
+    projection_ref = fixture[6]
+    legacy_ref = fixture[8]
+    legacy = runtime.initialize_legacy(
+        migration_id=MIGRATION_ID,
+        consumer_id=CONSUMER,
+        view_kind=VIEW,
+        legacy_artifact=legacy_ref,
+        feature_flag_sha256=FEATURE_SHA,
+        evaluated_at=NOW,
+    )
+    for state in (legacy,):
+        selected = runtime.select_read_only(
+            state,
+            legacy_artifact=legacy_ref,
+            projection_artifact=projection_ref,
+            parity_receipt=None,
+            parity_receipt_reference=None,
+        )
+        assert selected.selected_artifact == legacy_ref
+        with pytest.raises(MigrationRuntimeError) as foreign:
+            runtime.select_read_only(
+                state,
+                legacy_artifact=replace(legacy_ref, sha256=HashDigest("f" * 64)),
+                projection_artifact=projection_ref,
+                parity_receipt=None,
+                parity_receipt_reference=None,
+            )
+        assert foreign.value.reason_code == "runtime.migration.legacy_rebound"
+    dual = runtime.transition(
+        migration_id=MIGRATION_ID,
+        target_mode=MigrationMode.DUAL_READ_COMPARE,
+        feature_flag_sha256=FEATURE_SHA,
+        evaluated_at=NOW + timedelta(seconds=1),
+    )
+    selected_dual = runtime.select_read_only(
+        dual,
+        legacy_artifact=legacy_ref,
+        projection_artifact=projection_ref,
+        parity_receipt=None,
+        parity_receipt_reference=None,
+    )
+    assert selected_dual.selected_artifact == legacy_ref
+    rolled_back = runtime.transition(
+        migration_id=MIGRATION_ID,
+        target_mode=MigrationMode.ROLLED_BACK,
+        feature_flag_sha256=HashDigest("9" * 64),
+        evaluated_at=NOW + timedelta(seconds=2),
+    )
+
+    selected = runtime.select_read_only(
+        rolled_back,
+        legacy_artifact=legacy_ref,
+        projection_artifact=projection_ref,
+        parity_receipt=None,
+        parity_receipt_reference=None,
+    )
+
+    assert selected.selected_artifact == legacy_ref
+    assert selected.selected_source == "legacy_rollback"
+    with pytest.raises(MigrationRuntimeError) as foreign:
+        runtime.select_read_only(
+            rolled_back,
+            legacy_artifact=replace(legacy_ref, sha256=HashDigest("f" * 64)),
+            projection_artifact=projection_ref,
+            parity_receipt=None,
+            parity_receipt_reference=None,
+        )
+    assert foreign.value.reason_code == "runtime.migration.legacy_rebound"
 
 
 def test_unseen_or_rebound_pair_never_creates_parity_evidence(tmp_path: Path) -> None:
@@ -339,6 +424,7 @@ def test_activation_requires_fresh_exact_parity_and_separate_approval(
         migration_id=MIGRATION_ID,
         consumer_id=CONSUMER,
         view_kind=VIEW,
+        legacy_artifact=legacy_ref,
         feature_flag_sha256=FEATURE_SHA,
         evaluated_at=NOW,
     )
@@ -428,6 +514,7 @@ def test_activation_rejects_caller_minted_unregistered_parity_receipt(
         migration_id=MIGRATION_ID,
         consumer_id=CONSUMER,
         view_kind=VIEW,
+        legacy_artifact=legacy_ref,
         feature_flag_sha256=FEATURE_SHA,
         evaluated_at=NOW,
     )
@@ -469,6 +556,7 @@ def test_projection_selection_rejects_receipt_rebound(tmp_path: Path) -> None:
         migration_id=MIGRATION_ID,
         consumer_id=CONSUMER,
         view_kind=VIEW,
+        legacy_artifact=legacy_ref,
         feature_flag_sha256=FEATURE_SHA,
         evaluated_at=NOW,
     )

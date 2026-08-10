@@ -10,8 +10,9 @@ with its fixture marker. Packaged policy must report `fixture_only=true` and
 ## Preconditions
 
 1. Verify the approved wheel SHA-256 out of band.
-2. Run `python tools/verify_schema_wheel.py <wheel>` with no source checkout on
-   `PYTHONPATH`.
+2. With no source checkout on `PYTHONPATH`, run
+   `python tools/verify_schema_wheel.py --wheel "<approved-wheel.whl>" --python "<trusted-python>" --work-dir "<empty-external-work-dir>"`.
+   The work directory must exist, be empty, and be outside the checkout.
 3. Confirm 87 packaged schemas, 82 registered versions, and exact
    runtime/migration resource manifests.
 4. Run `python tools/check_core_purity.py`,

@@ -43,17 +43,20 @@ Provide concrete local runtime boundaries outside the pure core, durable executi
   initialized marker-bound fixture root. Packaged policy fixes
   `fixture_only=true` and `production_enabled=false`.
 - SQLite provides atomic idempotency claims, FULL synchronization, append-only
-  hash-chain events, immutable receipt history, restart loading, and distinct
+  hash-chain events, stable reservation claims, append-only fresh authority
+  verification history, immutable terminal receipt history, restart loading, and distinct
   resume/reconcile state handling. The exact ordered mutation-effect IDs are
   part of the canonical `ExecutionIntent`, and dispatch revalidates both the
   execution row and complete event chain inside its transaction.
 - Managed mutation, synthetic external execution, and fake publication capture
   fresh W04 reservation and settlement evidence. W05 `ready` remains
-  non-authorizing; publication uses a separate R3 side-effect action. Windows
-  mutation keeps exact ancestor, directory, and file handles live through its
-  handle-relative operation and rejects a directory-path rebound before use.
+  non-authorizing; publication uses a separate R3 side-effect action. POSIX
+  mutation uses a complete no-follow directory-descriptor chain and only
+  handle-relative `*at` operations. Windows keeps exact ancestor, directory,
+  and file handles live and rejects a directory-path rebound before use.
 - Migration accepts only exact pinned fixture parity plus separate current
-  activation/rollback evidence. Every production consumer is unregistered and
+  activation/rollback evidence. Generation zero permanently anchors the exact
+  legacy reference, including direct dual-read rollback. Every production consumer is unregistered and
   public identifier migration remains deferred.
 - Deployment, migration, rollback, incident, drift, break-glass, journal
   recovery, and release procedures are under `docs/runbooks/`.

@@ -55,7 +55,11 @@ from video_factory.runtime import (
 )
 
 from .boundary import FixtureRuntimeBoundary
-from .authority import ClaimBoundAuthorizationLedger, ClaimBoundLedgerAdapter
+from .authority import (
+    ClaimBoundAuthorizationLedger,
+    ClaimBoundLedgerAdapter,
+    runtime_authority_reservation_sha256,
+)
 from .filesystem import (
     ContentAddressedFixtureStore,
     FixtureAtomicMutationPort,
@@ -197,10 +201,15 @@ class W04MutationAuthorityAdapter:
                 f"fresh W04 authority failed: {error.reason_code}",
             ) from error
         receipt_sha = verified.receipt.receipt_sha256
+        stable_reservation_sha = runtime_authority_reservation_sha256(
+            verified,
+            runtime_claim_sha256=runtime_claim_sha256,
+            expected_purpose=purpose,
+        )
         reservation_sha = canonical_sha256(
             {
-                "artifact_version": "runtime-authority-reservation/1.0",
-                "w04_receipt_sha256": str(receipt_sha),
+                "artifact_version": "runtime-mutation-authority-reservation/1.1",
+                "w04_reservation_sha256": str(stable_reservation_sha),
                 "w02_reservation": {
                     "path": str(authorization.idempotency_reservation.path),
                     "sha256": str(authorization.idempotency_reservation.sha256),
@@ -832,6 +841,7 @@ class FixtureManagedMutationExecutor:
             claim,
             authority_receipt_sha256=reservation.receipt_sha256,
             reservation_sha256=reservation.reservation_sha256,
+            verified_at=evaluated_at.isoformat(),
         )
         dispatched = {
             str(event.operation_id)
@@ -1119,6 +1129,7 @@ class FixtureManagedMutationExecutor:
                     claim,
                     authority_receipt_sha256=reservation.receipt_sha256,
                     reservation_sha256=reservation.reservation_sha256,
+                    verified_at=evaluated_at.isoformat(),
                 )
                 last_authority_sha = reservation.receipt_sha256
                 claims.append(claim)
@@ -1204,7 +1215,11 @@ class FixtureManagedMutationExecutor:
                     purpose=VerificationPurpose.MUTATION,
                     runtime_claim_sha256=claim.claim_sha256,
                 )
-                if effect_reservation is None or effect_reservation != reservation:
+                if (
+                    effect_reservation is None
+                    or effect_reservation.reservation_sha256
+                    != reservation.reservation_sha256
+                ):
                     raise ManagedMutationRuntimeError(
                         "runtime.mutation.authority_rebound",
                         "fresh effect-time authority differs from the durable claim",
@@ -1213,7 +1228,9 @@ class FixtureManagedMutationExecutor:
                     claim,
                     authority_receipt_sha256=effect_reservation.receipt_sha256,
                     reservation_sha256=effect_reservation.reservation_sha256,
+                    verified_at=effect_at.isoformat(),
                 )
+                last_authority_sha = effect_reservation.receipt_sha256
                 expected_entries = self._expected_entries(
                     final_observation.entries,
                     operation,

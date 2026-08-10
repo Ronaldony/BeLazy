@@ -311,7 +311,7 @@
     },
     {
       "filename": "migration-cutover-state.schema.json",
-      "sha256": "47aa180de19d9128368ace69508d4d3e722b9f85e6d7d43df5309ce03219c45f",
+      "sha256": "10d882fb56d975060561396bc31e0de06c5ee09d3898ebbd7ab5c8a9839c5612",
       "schema_id": "https://schemas.video-factory.invalid/runtime/migration-cutover-state.schema.json",
       "artifact_version": "migration-cutover-state/1.0"
     },

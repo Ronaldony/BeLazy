@@ -92,6 +92,7 @@ class KillSwitch:
 class Authority:
     def __init__(self) -> None:
         self.calls = 0
+        self.verifications = 0
         self.claims = {}
 
     def revalidate(
@@ -105,18 +106,20 @@ class Authority:
         purpose,
         runtime_claim_sha256,
     ):
-        if runtime_claim_sha256 in self.claims:
-            return self.claims[runtime_claim_sha256]
-        self.calls += 1
+        reservation = self.claims.get(runtime_claim_sha256)
+        if reservation is None:
+            self.calls += 1
+            reservation = HashDigest(f"{self.calls + 100:064x}")
+            self.claims[runtime_claim_sha256] = reservation
+        self.verifications += 1
         assert authorization.plan_sha256 == plan.plan_sha256
         assert service_identity == SERVICE
         assert evaluated_at.tzinfo is not None
         assert purpose in {VerificationPurpose.MUTATION, VerificationPurpose.RECONCILE}
         result = RuntimeAuthorityReservation(
-            HashDigest(f"{self.calls:064x}"),
-            HashDigest(f"{self.calls + 100:064x}"),
+            HashDigest(f"{self.verifications:064x}"),
+            reservation,
         )
-        self.claims[runtime_claim_sha256] = result
         return result
 
 
@@ -509,24 +512,95 @@ def test_leaf_swap_inside_atomic_stage_is_uncertain_and_preserves_approved_bytes
     )
     target = observer.root / "artifacts" / "0.txt"
     approved_backup = observer.root / "artifacts" / "0.approved-backup"
-    original_replace = runtime_filesystem.os.replace
+    original_rename = runtime_filesystem.os.rename
     swapped = False
 
-    def swap_leaf_before_stage(source, destination):
+    def swap_leaf_before_stage(source, destination, *args, **kwargs):
         nonlocal swapped
-        if not swapped and Path(source) == target:
+        if not swapped and source == target.name and kwargs.get("src_dir_fd") is not None:
             swapped = True
-            original_replace(target, approved_backup)
+            original_rename(target, approved_backup)
             target.write_bytes(b"unapproved-race")
-        return original_replace(source, destination)
+        return original_rename(source, destination, *args, **kwargs)
 
-    monkeypatch.setattr(runtime_filesystem.os, "replace", swap_leaf_before_stage)
+    monkeypatch.setattr(runtime_filesystem.os, "rename", swap_leaf_before_stage)
     receipt = executor.apply(plan, authorization)
 
     assert swapped is True
     assert receipt.status is MutationReceiptStatus.UNCERTAIN
     assert approved_backup.read_bytes() == b"old-a"
     assert target.read_bytes() == b"unapproved-race"
+    assert journal.load(journal.unresolved()[0].journal_id).reconcile_only is True
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX exact directory capabilities")
+def test_posix_ancestor_swap_cannot_redirect_the_handle_bound_replace(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    executor, journal, observer, authority, settlement, plan, authorization = _executor(
+        tmp_path
+    )
+    target = observer.root / "artifacts" / "0.txt"
+    ancestor = target.parent
+    rebound = observer.root / "artifacts-rebound"
+    original_rename = runtime_filesystem.os.rename
+    attempted = False
+
+    def swap_ancestor_after_capabilities(source, destination, *args, **kwargs):
+        nonlocal attempted
+        if not attempted and source == target.name and kwargs.get("src_dir_fd") is not None:
+            attempted = True
+            original_rename(ancestor, rebound)
+            ancestor.mkdir()
+            target.write_bytes(b"unapproved-race")
+        return original_rename(source, destination, *args, **kwargs)
+
+    monkeypatch.setattr(runtime_filesystem.os, "rename", swap_ancestor_after_capabilities)
+    receipt = executor.apply(plan, authorization)
+
+    assert attempted is True
+    assert receipt.status is MutationReceiptStatus.UNCERTAIN
+    assert target.read_bytes() == b"unapproved-race"
+    assert (rebound / "0.txt").read_bytes() == b"new-0"
+    assert journal.load(journal.unresolved()[0].journal_id).reconcile_only is True
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX exact directory capabilities")
+def test_posix_create_holds_the_complete_ancestor_chain(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    executor, journal, observer, authority, settlement, plan, authorization = _executor(
+        tmp_path, kinds=(MutationKind.CREATE,)
+    )
+    target = observer.root / "artifacts" / "new-0.txt"
+    ancestor = target.parent
+    rebound = observer.root / "artifacts-rebound"
+    original_rename = runtime_filesystem.os.rename
+    original_link = runtime_filesystem.os.link
+    attempted = False
+
+    def swap_ancestor_before_create(source, destination, *args, **kwargs):
+        nonlocal attempted
+        if (
+            not attempted
+            and source.endswith(".new")
+            and destination == target.name
+            and kwargs.get("dst_dir_fd") is not None
+        ):
+            attempted = True
+            original_rename(ancestor, rebound)
+            ancestor.mkdir()
+        return original_link(source, destination, *args, **kwargs)
+
+    monkeypatch.setattr(runtime_filesystem.os, "link", swap_ancestor_before_create)
+    receipt = executor.apply(plan, authorization)
+
+    assert attempted is True
+    assert receipt.status is MutationReceiptStatus.UNCERTAIN
+    assert not target.exists()
+    assert (rebound / "new-0.txt").read_bytes() == b"new-0"
     assert journal.load(journal.unresolved()[0].journal_id).reconcile_only is True
 
 

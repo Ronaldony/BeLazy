@@ -368,6 +368,19 @@ def test_reservation_claim_survives_restart_and_settles_idempotently(
         claim,
         authority_receipt_sha256=AUTHORITY_SHA,
         reservation_sha256=RESERVATION_SHA,
+        verified_at="2026-08-10T00:00:03Z",
+    )
+    fresh_receipt = HashDigest("d" * 64)
+    restarted.record_reservation_result(
+        claim,
+        authority_receipt_sha256=fresh_receipt,
+        reservation_sha256=RESERVATION_SHA,
+        verified_at="2026-08-10T00:00:04Z",
+    )
+    assert restarted.reservation_result(claim) == (AUTHORITY_SHA, RESERVATION_SHA)
+    assert restarted.authority_verification_history(claim) == (
+        (AUTHORITY_SHA, "2026-08-10T00:00:03Z"),
+        (fresh_receipt, "2026-08-10T00:00:04Z"),
     )
     assert SQLiteExecutionJournal(boundary).unsettled_reservation_claims() == (claim,)
     settlement = _ref(

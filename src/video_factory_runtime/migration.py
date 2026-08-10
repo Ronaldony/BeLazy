@@ -57,7 +57,7 @@ from .filesystem import read_stable_regular_file
 PARITY_VERIFIER_RECORD_VERSION = "projection-parity-verification/1.0"
 MIGRATION_ACTIVATION_RECORD_VERSION = "migration-activation-verification/1.0"
 MIGRATION_ROLLBACK_RECORD_VERSION = "migration-rollback-verification/1.0"
-MIGRATION_DB_VERSION = "sqlite-migration-registry/1.0"
+MIGRATION_DB_VERSION = "sqlite-migration-registry/1.1"
 
 
 class MigrationRuntimeError(ValueError):
@@ -113,6 +113,7 @@ class MigrationActivationRequest:
     generation: int
     target_mode: MigrationMode
     previous_state_sha256: HashDigest | None
+    legacy_artifact: ArtifactReference
     parity_receipts: tuple[ArtifactReference, ...]
     feature_flag_sha256: HashDigest
     policy_bundle_sha256: HashDigest
@@ -183,6 +184,7 @@ def _activation_request_mapping(
             if value.previous_state_sha256 is not None
             else None
         ),
+        "legacy_artifact": _reference_mapping(value.legacy_artifact),
         "parity_receipts": [
             _reference_mapping(item) for item in value.parity_receipts
         ],
@@ -758,6 +760,7 @@ class DurableReadOnlyMigrationRuntime:
         migration_id: OpaqueId,
         consumer_id: OpaqueId,
         view_kind: OpaqueId,
+        legacy_artifact: ArtifactReference,
         feature_flag_sha256: HashDigest,
         evaluated_at: datetime,
     ) -> MigrationCutoverState:
@@ -769,6 +772,7 @@ class DurableReadOnlyMigrationRuntime:
             generation=0,
             target_mode=MigrationMode.LEGACY_ONLY,
             previous_state_sha256=None,
+            legacy_artifact=legacy_artifact,
             parity_receipts=(),
             feature_flag_sha256=feature_flag_sha256,
             policy_bundle_sha256=self._policy.policy_bundle_sha256,
@@ -782,6 +786,7 @@ class DurableReadOnlyMigrationRuntime:
             generation=0,
             mode=MigrationMode.LEGACY_ONLY,
             previous_state_sha256=None,
+            legacy_artifact=legacy_artifact,
             parity_receipts=(),
             feature_flag_sha256=feature_flag_sha256,
             activation_record=approval.record,
@@ -865,6 +870,7 @@ class DurableReadOnlyMigrationRuntime:
                     generation=state.generation,
                     target_mode=state.mode,
                     previous_state_sha256=state.previous_state_sha256,
+                    legacy_artifact=state.legacy_artifact,
                     parity_receipts=state.parity_receipts,
                     feature_flag_sha256=state.feature_flag_sha256,
                     policy_bundle_sha256=self._policy.policy_bundle_sha256,
@@ -913,22 +919,38 @@ class DurableReadOnlyMigrationRuntime:
             raise MigrationRuntimeError(
                 "runtime.migration.transition", "migration state transition is not allowed"
             )
-        refs = self._verify_parity_receipts(
+        if any(
+            receipt.legacy_artifact != current.legacy_artifact
+            for receipt, _ in parity_receipts
+        ):
+            raise MigrationRuntimeError(
+                "runtime.migration.legacy_rebound",
+                "parity evidence differs from the migration's exact legacy anchor",
+            )
+        supplied_refs = self._verify_parity_receipts(
             consumer_id=current.consumer_id,
             view_kind=current.view_kind,
             receipts=parity_receipts,
             evaluated_at=when,
         )
-        if target_mode is MigrationMode.PROJECTION_READ_ONLY and not refs:
+        if target_mode is MigrationMode.PROJECTION_READ_ONLY and not supplied_refs:
             raise MigrationRuntimeError(
                 "runtime.migration.parity_missing",
                 "projection read-only mode requires fresh passing parity receipts",
             )
-        if target_mode is not MigrationMode.PROJECTION_READ_ONLY and refs:
+        if target_mode is not MigrationMode.PROJECTION_READ_ONLY and supplied_refs:
             raise MigrationRuntimeError(
                 "runtime.migration.parity_unexpected",
                 "only projection activation consumes parity receipts",
             )
+        refs = (
+            current.parity_receipts
+            if (
+                target_mode is MigrationMode.ROLLED_BACK
+                and current.mode is MigrationMode.PROJECTION_READ_ONLY
+            )
+            else supplied_refs
+        )
         request = MigrationActivationRequest(
             migration_id=current.migration_id,
             consumer_id=current.consumer_id,
@@ -936,6 +958,7 @@ class DurableReadOnlyMigrationRuntime:
             generation=current.generation + 1,
             target_mode=target_mode,
             previous_state_sha256=current.state_sha256,
+            legacy_artifact=current.legacy_artifact,
             parity_receipts=refs,
             feature_flag_sha256=feature_flag_sha256,
             policy_bundle_sha256=self._policy.policy_bundle_sha256,
@@ -949,6 +972,7 @@ class DurableReadOnlyMigrationRuntime:
             generation=current.generation + 1,
             mode=target_mode,
             previous_state_sha256=current.state_sha256,
+            legacy_artifact=current.legacy_artifact,
             parity_receipts=refs,
             feature_flag_sha256=feature_flag_sha256,
             activation_record=approval.record,
@@ -1027,6 +1051,7 @@ class DurableReadOnlyMigrationRuntime:
                     and (
                         state.consumer_id != states[0].consumer_id
                         or state.view_kind != states[0].view_kind
+                        or state.legacy_artifact != states[0].legacy_artifact
                     )
                 )
             ):
@@ -1051,37 +1076,16 @@ class DurableReadOnlyMigrationRuntime:
                 "runtime.migration.state_stale",
                 "projection selection requires the exact current durable state",
             )
+        if legacy_artifact != state.legacy_artifact:
+            raise MigrationRuntimeError(
+                "runtime.migration.legacy_rebound",
+                "legacy selection differs from the migration's exact legacy anchor",
+            )
         if state.mode is MigrationMode.ROLLED_BACK:
-            if parity_receipt is None or parity_receipt_reference is None:
+            if parity_receipt is not None or parity_receipt_reference is not None:
                 raise MigrationRuntimeError(
-                    "runtime.migration.rollback_target_missing",
-                    "rollback selection requires the exact trusted legacy target receipt",
-                )
-            trusted_refs = {
-                item
-                for historical in self.history(state.migration_id)
-                for item in historical.parity_receipts
-            }
-            mapping = projection_parity_receipt_to_mapping(parity_receipt)
-            payload = canonical_json_bytes(mapping).decode("utf-8")
-            expected_sha = HashDigest(hashlib.sha256(payload.encode("utf-8")).hexdigest())
-            with self._connect() as connection:
-                trusted = connection.execute(
-                    "SELECT receipt_json FROM verified_parity_receipts WHERE receipt_sha256 = ?",
-                    (str(parity_receipt.receipt_sha256),),
-                ).fetchone()
-            if (
-                parity_receipt_reference not in trusted_refs
-                or parity_receipt_reference.sha256 != expected_sha
-                or parity_receipt.legacy_artifact != legacy_artifact
-                or parity_receipt.consumer_id != state.consumer_id
-                or parity_receipt.view_kind != state.view_kind
-                or trusted is None
-                or trusted["receipt_json"] != payload
-            ):
-                raise MigrationRuntimeError(
-                    "runtime.migration.rollback_target_rebound",
-                    "rollback legacy target differs from trusted parity provenance",
+                    "runtime.migration.rollback_evidence_unexpected",
+                    "rolled-back selection uses the state-bound legacy anchor only",
                 )
             return ReadOnlyProjectionSelection(
                 selected_artifact=legacy_artifact,
@@ -1089,6 +1093,11 @@ class DurableReadOnlyMigrationRuntime:
                 migration_state_sha256=state.state_sha256,
             )
         if state.mode is not MigrationMode.PROJECTION_READ_ONLY:
+            if parity_receipt is not None or parity_receipt_reference is not None:
+                raise MigrationRuntimeError(
+                    "runtime.migration.parity_unexpected",
+                    "legacy selection cannot consume projection parity evidence",
+                )
             return ReadOnlyProjectionSelection(
                 selected_artifact=legacy_artifact,
                 selected_source="legacy",

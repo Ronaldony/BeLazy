@@ -53,8 +53,45 @@ class ClaimBoundAuthorizationLedger(Protocol):
         purpose: VerificationPurpose,
         runtime_claim_sha256: HashDigest,
     ) -> AuthorityVerificationReceipt | None:
-        """Atomically return the same reservation for every exact claim retry."""
+        """Atomically verify current state for one stable reservation claim.
+
+        Every call returns a fresh timestamp-bound receipt.  Budget/idempotency
+        reservation remains stable because the durable runtime claim is the
+        ledger key; a cached old receipt is never current verification.
+        """
         ...
+
+
+def runtime_authority_reservation_sha256(
+    verified: object,
+    *,
+    runtime_claim_sha256: HashDigest,
+    expected_purpose: VerificationPurpose,
+) -> HashDigest:
+    """Derive the stable reservation identity, excluding fresh receipt time."""
+
+    receipt = getattr(verified, "receipt", None)
+    request_sha256 = getattr(verified, "request_sha256", None)
+    purpose = getattr(verified, "purpose", None)
+    if (
+        receipt is None
+        or getattr(receipt, "receipt_sha256", None) is None
+        or request_sha256 is None
+        or purpose is not expected_purpose
+    ):
+        raise ValueError("fresh authority verification returned an invalid receipt")
+    # The caller's core authority boundary has already proved receipt/request
+    # cross-bindings.  The reservation identity intentionally binds the
+    # durable claim and exact request, not evaluated_at/ledger-head fields that
+    # must change on every fresh check.
+    return canonical_sha256(
+        {
+            "artifact_version": "runtime-authority-reservation/1.1",
+            "runtime_claim_sha256": str(runtime_claim_sha256),
+            "request_sha256": str(request_sha256),
+            "purpose": expected_purpose.value,
+        }
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -196,4 +233,5 @@ __all__ = [
     "ClaimBoundAuthorizationLedger",
     "ClaimBoundLedgerAdapter",
     "FixtureAuthoritySettlementStore",
+    "runtime_authority_reservation_sha256",
 ]

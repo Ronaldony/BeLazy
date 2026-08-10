@@ -246,11 +246,33 @@ def _exclusive_fixture_lock(path: Path) -> Iterator[None]:
         os.close(descriptor)
 
 
+class _GuardedFixtureDirectories:
+    """Exact directory capabilities held for one managed mutation."""
+
+    def __init__(self, root: Path, descriptors: dict[Path, int] | None = None) -> None:
+        self.root = Path(root)
+        self._descriptors = descriptors or {}
+
+    def descriptor(self, path: Path) -> int:
+        if os.name == "nt":
+            raise RuntimeFilesystemError(
+                "runtime.mutation.directory_capability",
+                "POSIX directory capabilities are unavailable on Windows",
+            )
+        try:
+            return self._descriptors[Path(path)]
+        except KeyError as error:
+            raise RuntimeFilesystemError(
+                "runtime.mutation.directory_capability",
+                f"managed directory capability is missing: {path}",
+            ) from error
+
+
 @contextmanager
 def _guard_fixture_directories(
     root: Path,
     directories: tuple[Path, ...],
-) -> Iterator[None]:
+) -> Iterator[_GuardedFixtureDirectories]:
     """Hold every managed ancestor open while a fixture mutation is in flight.
 
     On Windows the directory handles intentionally omit ``FILE_SHARE_DELETE``.
@@ -359,16 +381,30 @@ def _guard_fixture_directories(
                         "runtime.mutation.directory_reparse",
                         f"managed directory is not a no-follow directory: {directory}",
                     )
-            yield
+            yield _GuardedFixtureDirectories(root)
         finally:
             for handle in reversed(handles):
                 close_handle(handle)
         return
 
     directory_flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | _NOFOLLOW
+    descriptors: dict[Path, int] = {}
     try:
         for directory in ordered:
-            descriptor = os.open(directory, directory_flags)
+            try:
+                if directory == root:
+                    descriptor = os.open(directory, directory_flags)
+                else:
+                    descriptor = os.open(
+                        directory.name,
+                        directory_flags,
+                        dir_fd=descriptors[directory.parent],
+                    )
+            except (KeyError, OSError) as error:
+                raise RuntimeFilesystemError(
+                    "runtime.mutation.directory_open",
+                    f"cannot open managed directory capability: {directory}",
+                ) from error
             info = os.fstat(descriptor)
             if not stat.S_ISDIR(info.st_mode):
                 os.close(descriptor)
@@ -377,10 +413,117 @@ def _guard_fixture_directories(
                     f"managed ancestor is not a directory: {directory}",
                 )
             handles.append(descriptor)
-        yield
+            descriptors[directory] = descriptor
+        yield _GuardedFixtureDirectories(root, descriptors)
     finally:
         for descriptor in reversed(handles):
             os.close(descriptor)
+
+
+def _posix_entry_exists(directory_fd: int, name: str) -> bool:
+    try:
+        os.stat(name, dir_fd=directory_fd, follow_symlinks=False)
+    except FileNotFoundError:
+        return False
+    except OSError as error:
+        raise RuntimeFilesystemError(
+            "runtime.mutation.path_stat",
+            f"cannot inspect managed directory entry: {name}",
+        ) from error
+    return True
+
+
+def _posix_require_absent(directory_fd: int, name: str) -> None:
+    if _posix_entry_exists(directory_fd, name):
+        raise RuntimeFilesystemError(
+            "runtime.filesystem.target_exists",
+            f"managed target already exists: {name}",
+        )
+
+
+def _posix_write_new(directory_fd: int, name: str, payload: bytes) -> None:
+    descriptor = os.open(
+        name,
+        os.O_WRONLY | os.O_CREAT | os.O_EXCL | _BINARY | _NOFOLLOW,
+        0o600,
+        dir_fd=directory_fd,
+    )
+    try:
+        view = memoryview(payload)
+        while view:
+            written = os.write(descriptor, view)
+            if written <= 0:
+                raise OSError("short write")
+            view = view[written:]
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+    os.fsync(directory_fd)
+
+
+def _posix_stable_regular_file(
+    directory_fd: int,
+    name: str,
+    *,
+    display_path: Path,
+) -> StableFile:
+    try:
+        before = os.stat(name, dir_fd=directory_fd, follow_symlinks=False)
+        descriptor = os.open(
+            name,
+            os.O_RDONLY | _BINARY | _NOFOLLOW,
+            dir_fd=directory_fd,
+        )
+    except OSError as error:
+        raise RuntimeFilesystemError(
+            "runtime.filesystem.open",
+            f"cannot open exact managed file: {display_path}",
+        ) from error
+    digest = hashlib.sha256()
+    length = 0
+    try:
+        opened = os.fstat(descriptor)
+        if (
+            not stat.S_ISREG(before.st_mode)
+            or not stat.S_ISREG(opened.st_mode)
+            or _identity(before) != _identity(opened)
+        ):
+            raise RuntimeFilesystemError(
+                "runtime.filesystem.identity_changed",
+                f"managed entry changed before reading: {display_path}",
+            )
+        while True:
+            chunk = os.read(descriptor, 1024 * 1024)
+            if not chunk:
+                break
+            digest.update(chunk)
+            length += len(chunk)
+        after_fd = os.fstat(descriptor)
+        if _identity(after_fd) != _identity(opened):
+            raise RuntimeFilesystemError(
+                "runtime.filesystem.bytes_changed",
+                f"managed file changed while reading: {display_path}",
+            )
+    finally:
+        os.close(descriptor)
+    try:
+        after_entry = os.stat(name, dir_fd=directory_fd, follow_symlinks=False)
+    except OSError as error:
+        raise RuntimeFilesystemError(
+            "runtime.filesystem.path_changed",
+            f"managed entry disappeared after reading: {display_path}",
+        ) from error
+    if _identity(after_entry) != _identity(before):
+        raise RuntimeFilesystemError(
+            "runtime.filesystem.path_changed",
+            f"managed entry changed after reading: {display_path}",
+        )
+    return StableFile(
+        path=display_path,
+        exact_sha256=HashDigest(digest.hexdigest()),
+        byte_length=length,
+        identity=_identity(after_entry),
+    )
 
 
 if os.name == "nt":
@@ -1069,42 +1212,66 @@ class FixtureAtomicMutationPort:
             self._staging / f"{suffix}.new",
         )
 
-    def _restore_staged(self, staged: Path, target: Path) -> None:
-        if not self._exists_no_follow(staged):
+    @staticmethod
+    def _posix_restore_staged(
+        staging_fd: int,
+        staged_name: str,
+        target_fd: int,
+        target_name: str,
+    ) -> None:
+        if not _posix_entry_exists(staging_fd, staged_name):
             return
-        if self._exists_no_follow(target):
+        if _posix_entry_exists(target_fd, target_name):
             raise RuntimeFilesystemError(
                 "runtime.mutation.restore_conflict",
                 "concurrent target prevents safe restoration of staged bytes",
             )
-        os.link(staged, target)
-        _fsync_directory(target.parent)
-        os.unlink(staged)
-        _fsync_directory(staged.parent)
+        os.link(
+            staged_name,
+            target_name,
+            src_dir_fd=staging_fd,
+            dst_dir_fd=target_fd,
+            follow_symlinks=False,
+        )
+        os.fsync(target_fd)
+        os.unlink(staged_name, dir_fd=staging_fd)
+        os.fsync(staging_fd)
 
-    def _stage_exact(
+    def _posix_stage_exact(
         self,
-        target: Path,
-        staged: Path,
+        target_fd: int,
+        target_name: str,
+        staging_fd: int,
+        staged_name: str,
         *,
         expected_sha256: HashDigest,
+        display_path: Path,
     ) -> StableFile:
-        if self._exists_no_follow(staged):
+        if _posix_entry_exists(staging_fd, staged_name):
             raise RuntimeFilesystemError(
                 "runtime.mutation.staging_present",
                 "a previous staged mutation requires reconciliation",
             )
         try:
-            os.replace(target, staged)
-            _fsync_directory(target.parent)
-            _fsync_directory(staged.parent)
+            os.rename(
+                target_name,
+                staged_name,
+                src_dir_fd=target_fd,
+                dst_dir_fd=staging_fd,
+            )
+            os.fsync(target_fd)
+            os.fsync(staging_fd)
         except OSError as error:
             raise RuntimeFilesystemError(
                 "runtime.mutation.stage_failed",
                 "could not atomically stage the exact source path",
             ) from error
         try:
-            stable = read_stable_regular_file(staged)
+            stable = _posix_stable_regular_file(
+                staging_fd,
+                staged_name,
+                display_path=display_path,
+            )
             if stable.exact_sha256 != expected_sha256:
                 raise RuntimeFilesystemError(
                     "runtime.filesystem.exact_before",
@@ -1112,8 +1279,163 @@ class FixtureAtomicMutationPort:
                 )
             return stable
         except Exception:
-            self._restore_staged(staged, target)
+            self._posix_restore_staged(
+                staging_fd,
+                staged_name,
+                target_fd,
+                target_name,
+            )
             raise
+
+    def _apply_exact_posix(
+        self,
+        operation,
+        target: Path,
+        before_stage: Path,
+        new_stage: Path,
+        directories: _GuardedFixtureDirectories,
+    ) -> int | None:
+        """Apply through exact POSIX directory capabilities, never path lookup."""
+
+        assert os.name != "nt"
+        target_fd = directories.descriptor(target.parent)
+        staging_fd = directories.descriptor(self._staging)
+        destination = None
+        destination_fd = target_fd
+        if operation.kind is MutationKind.MOVE:
+            assert operation.destination_path is not None
+            destination = self._observer.managed_path(str(operation.destination_path))
+            destination_fd = directories.descriptor(destination.parent)
+
+        if _posix_entry_exists(staging_fd, before_stage.name) or _posix_entry_exists(
+            staging_fd, new_stage.name
+        ):
+            raise RuntimeFilesystemError(
+                "runtime.mutation.staging_present",
+                "a previous staged mutation requires reconciliation",
+            )
+
+        if operation.kind is MutationKind.CREATE:
+            assert operation.new_content is not None
+            payload = self._content.read_current(operation.new_content)
+            _posix_write_new(staging_fd, new_stage.name, payload)
+            _posix_require_absent(target_fd, target.name)
+            os.link(
+                new_stage.name,
+                target.name,
+                src_dir_fd=staging_fd,
+                dst_dir_fd=target_fd,
+                follow_symlinks=False,
+            )
+            os.fsync(target_fd)
+            created = _posix_stable_regular_file(
+                target_fd,
+                target.name,
+                display_path=target,
+            )
+            if (
+                created.exact_sha256 != operation.new_content.exact_sha256
+                or created.byte_length != operation.new_content.byte_length
+            ):
+                raise RuntimeFilesystemError(
+                    "runtime.mutation.create_rebound",
+                    "created target differs from the exact content object",
+                )
+            os.unlink(new_stage.name, dir_fd=staging_fd)
+            os.fsync(staging_fd)
+            return None
+
+        assert operation.expected_before.exact_sha256 is not None
+        staged = self._posix_stage_exact(
+            target_fd,
+            target.name,
+            staging_fd,
+            before_stage.name,
+            expected_sha256=operation.expected_before.exact_sha256,
+            display_path=before_stage,
+        )
+        if operation.kind is MutationKind.DELETE:
+            os.unlink(before_stage.name, dir_fd=staging_fd)
+            os.fsync(staging_fd)
+            return staged.byte_length
+
+        if operation.kind is MutationKind.MOVE:
+            assert destination is not None
+            _posix_require_absent(destination_fd, destination.name)
+            try:
+                os.link(
+                    before_stage.name,
+                    destination.name,
+                    src_dir_fd=staging_fd,
+                    dst_dir_fd=destination_fd,
+                    follow_symlinks=False,
+                )
+                os.fsync(destination_fd)
+                moved = _posix_stable_regular_file(
+                    destination_fd,
+                    destination.name,
+                    display_path=destination,
+                )
+                if (
+                    moved.exact_sha256 != operation.expected_before.exact_sha256
+                    or moved.byte_length != staged.byte_length
+                ):
+                    raise RuntimeFilesystemError(
+                        "runtime.mutation.move_rebound",
+                        "move destination differs from the staged source",
+                    )
+            except Exception:
+                if not _posix_entry_exists(destination_fd, destination.name):
+                    self._posix_restore_staged(
+                        staging_fd,
+                        before_stage.name,
+                        target_fd,
+                        target.name,
+                    )
+                raise
+            os.unlink(before_stage.name, dir_fd=staging_fd)
+            os.fsync(staging_fd)
+            return staged.byte_length
+
+        assert operation.kind is MutationKind.REPLACE
+        assert operation.new_content is not None
+        payload = self._content.read_current(operation.new_content)
+        _posix_write_new(staging_fd, new_stage.name, payload)
+        try:
+            os.link(
+                new_stage.name,
+                target.name,
+                src_dir_fd=staging_fd,
+                dst_dir_fd=target_fd,
+                follow_symlinks=False,
+            )
+            os.fsync(target_fd)
+            replaced = _posix_stable_regular_file(
+                target_fd,
+                target.name,
+                display_path=target,
+            )
+            if (
+                replaced.exact_sha256 != operation.new_content.exact_sha256
+                or replaced.byte_length != operation.new_content.byte_length
+            ):
+                raise RuntimeFilesystemError(
+                    "runtime.mutation.replace_rebound",
+                    "replacement target differs from the exact content object",
+                )
+        except Exception:
+            if not _posix_entry_exists(target_fd, target.name):
+                self._posix_restore_staged(
+                    staging_fd,
+                    before_stage.name,
+                    target_fd,
+                    target.name,
+                )
+            raise
+        os.unlink(new_stage.name, dir_fd=staging_fd)
+        os.unlink(before_stage.name, dir_fd=staging_fd)
+        os.fsync(staging_fd)
+        return staged.byte_length
 
     def _apply_exact_windows(
         self,
@@ -1246,94 +1568,14 @@ class FixtureAtomicMutationPort:
             with _guard_fixture_directories(
                 self._root,
                 (target.parent, destination_parent, self._staging),
-            ):
-                # Repeat containment after the OS-level ancestor guards exist.
-                target = self._observer.managed_path(str(operation.path))
-                if self._exists_no_follow(before_stage) or self._exists_no_follow(new_stage):
-                    raise RuntimeFilesystemError(
-                        "runtime.mutation.staging_present",
-                        "a previous staged mutation requires reconciliation",
-                    )
-                if operation.kind is MutationKind.CREATE:
-                    assert operation.new_content is not None
-                    payload = self._content.read_current(operation.new_content)
-                    _write_new(new_stage, payload)
-                    self._observer.require_absent(str(operation.path))
-                    os.link(new_stage, target)
-                    _fsync_directory(target.parent)
-                    created = read_stable_regular_file(target)
-                    if (
-                        created.exact_sha256 != operation.new_content.exact_sha256
-                        or created.byte_length != operation.new_content.byte_length
-                    ):
-                        raise RuntimeFilesystemError(
-                            "runtime.mutation.create_rebound",
-                            "created target differs from the exact content object",
-                        )
-                    os.unlink(new_stage)
-                    _fsync_directory(new_stage.parent)
-                    return None
-
-                assert operation.expected_before.exact_sha256 is not None
-                staged = self._stage_exact(
+            ) as directories:
+                return self._apply_exact_posix(
+                    operation,
                     target,
                     before_stage,
-                    expected_sha256=operation.expected_before.exact_sha256,
+                    new_stage,
+                    directories,
                 )
-                if operation.kind is MutationKind.DELETE:
-                    os.unlink(before_stage)
-                    _fsync_directory(before_stage.parent)
-                    return staged.byte_length
-
-                if operation.kind is MutationKind.MOVE:
-                    assert operation.destination_path is not None
-                    destination = self._observer.require_absent(
-                        str(operation.destination_path)
-                    )
-                    try:
-                        os.link(before_stage, destination)
-                        _fsync_directory(destination.parent)
-                        moved = read_stable_regular_file(destination)
-                        if (
-                            moved.exact_sha256 != operation.expected_before.exact_sha256
-                            or moved.byte_length != staged.byte_length
-                        ):
-                            raise RuntimeFilesystemError(
-                                "runtime.mutation.move_rebound",
-                                "move destination differs from the staged source",
-                            )
-                    except Exception:
-                        if not self._exists_no_follow(destination):
-                            self._restore_staged(before_stage, target)
-                        raise
-                    os.unlink(before_stage)
-                    _fsync_directory(before_stage.parent)
-                    return staged.byte_length
-
-                assert operation.kind is MutationKind.REPLACE
-                assert operation.new_content is not None
-                payload = self._content.read_current(operation.new_content)
-                _write_new(new_stage, payload)
-                try:
-                    os.link(new_stage, target)
-                    _fsync_directory(target.parent)
-                    replaced = read_stable_regular_file(target)
-                    if (
-                        replaced.exact_sha256 != operation.new_content.exact_sha256
-                        or replaced.byte_length != operation.new_content.byte_length
-                    ):
-                        raise RuntimeFilesystemError(
-                            "runtime.mutation.replace_rebound",
-                            "replacement target differs from the exact content object",
-                        )
-                except Exception:
-                    if not self._exists_no_follow(target):
-                        self._restore_staged(before_stage, target)
-                    raise
-                os.unlink(new_stage)
-                os.unlink(before_stage)
-                _fsync_directory(self._staging)
-                return staged.byte_length
 
 
 __all__ = [

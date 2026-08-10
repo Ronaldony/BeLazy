@@ -37,7 +37,7 @@ from video_factory.runtime import (
 from .boundary import FixtureRuntimeBoundary, RuntimeBoundaryError
 
 
-SCHEMA_VERSION = "sqlite-execution-journal/1.1"
+SCHEMA_VERSION = "sqlite-execution-journal/1.2"
 
 
 class ExecutionJournalError(ValueError):
@@ -217,6 +217,14 @@ class SQLiteExecutionJournal:
                     prepared_at TEXT NOT NULL,
                     PRIMARY KEY (journal_id, purpose, effect_id),
                     FOREIGN KEY (journal_id) REFERENCES executions(journal_id)
+                );
+                CREATE TABLE IF NOT EXISTS authority_reservation_verifications (
+                    claim_sha256 TEXT NOT NULL,
+                    authority_receipt_sha256 TEXT NOT NULL,
+                    verified_at TEXT NOT NULL,
+                    PRIMARY KEY (claim_sha256, authority_receipt_sha256),
+                    FOREIGN KEY (claim_sha256)
+                        REFERENCES authority_reservation_claims(claim_sha256)
                 );
                 COMMIT;
                 """
@@ -543,8 +551,11 @@ class SQLiteExecutionJournal:
         *,
         authority_receipt_sha256: HashDigest,
         reservation_sha256: HashDigest,
+        verified_at: str,
     ) -> None:
-        """Idempotently attach the trusted ledger result to its durable claim."""
+        """Attach a stable reservation plus append-only fresh verification."""
+
+        parse_rfc3339_datetime(verified_at)
 
         with self._connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
@@ -562,22 +573,92 @@ class SQLiteExecutionJournal:
                     "runtime.journal.claim_missing",
                     "trusted reservation result has no exact durable claim",
                 )
-            previous = (row["authority_receipt_sha256"], row["reservation_sha256"])
-            current = (str(authority_receipt_sha256), str(reservation_sha256))
-            if previous != (None, None) and previous != current:
+            previous_reservation = row["reservation_sha256"]
+            if (
+                previous_reservation is not None
+                and previous_reservation != str(reservation_sha256)
+            ):
                 raise ExecutionJournalError(
                     "runtime.journal.claim_result_rebound",
                     "reservation claim is already bound to another ledger result",
                 )
-            connection.execute(
+            if previous_reservation is None:
+                connection.execute(
+                    """
+                    UPDATE authority_reservation_claims
+                       SET authority_receipt_sha256 = ?, reservation_sha256 = ?
+                     WHERE claim_sha256 = ?
+                    """,
+                    (
+                        str(authority_receipt_sha256),
+                        str(reservation_sha256),
+                        str(claim.claim_sha256),
+                    ),
+                )
+            history = connection.execute(
                 """
-                UPDATE authority_reservation_claims
-                   SET authority_receipt_sha256 = ?, reservation_sha256 = ?
-                 WHERE claim_sha256 = ?
+                SELECT verified_at FROM authority_reservation_verifications
+                 WHERE claim_sha256 = ? AND authority_receipt_sha256 = ?
                 """,
-                (*current, str(claim.claim_sha256)),
-            )
+                (str(claim.claim_sha256), str(authority_receipt_sha256)),
+            ).fetchone()
+            if history is None:
+                connection.execute(
+                    """
+                    INSERT INTO authority_reservation_verifications(
+                        claim_sha256, authority_receipt_sha256, verified_at
+                    ) VALUES (?, ?, ?)
+                    """,
+                    (
+                        str(claim.claim_sha256),
+                        str(authority_receipt_sha256),
+                        verified_at,
+                    ),
+                )
             connection.commit()
+
+    def authority_verification_history(
+        self,
+        claim: AuthorityReservationClaim,
+    ) -> tuple[tuple[HashDigest, str], ...]:
+        """Return every fresh receipt digest recorded for one stable claim."""
+
+        with self._connect() as connection:
+            claim_row = connection.execute(
+                "SELECT * FROM authority_reservation_claims WHERE claim_sha256 = ?",
+                (str(claim.claim_sha256),),
+            ).fetchone()
+            rows = connection.execute(
+                """
+                SELECT authority_receipt_sha256, verified_at
+                  FROM authority_reservation_verifications
+                 WHERE claim_sha256 = ? ORDER BY rowid
+                """,
+                (str(claim.claim_sha256),),
+            ).fetchall()
+        if claim_row is None or (
+            claim_row["journal_id"] != str(claim.journal_id)
+            or claim_row["purpose"] != claim.purpose.value
+            or claim_row["effect_id"] != str(claim.effect_id)
+            or claim_row["request_sha256"] != str(claim.request_sha256)
+        ):
+            raise ExecutionJournalError(
+                "runtime.journal.claim_missing",
+                "verification history has no exact durable claim",
+            )
+        try:
+            result = tuple(
+                (HashDigest(row["authority_receipt_sha256"]), row["verified_at"])
+                for row in rows
+            )
+            for _, verified_at in result:
+                parse_rfc3339_datetime(verified_at)
+            return result
+        except Exception as error:
+            raise ExecutionJournalError(
+                "runtime.journal.verification_history",
+                "authority verification history is invalid",
+            ) from error
 
     def record_claim_settlement(
         self,

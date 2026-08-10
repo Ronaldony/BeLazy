@@ -81,7 +81,11 @@ from video_factory.runtime import (
 from video_factory.workflow import ActionRisk, AuthorityRequirement
 
 from .boundary import FixtureRuntimeBoundary
-from .authority import ClaimBoundAuthorizationLedger, ClaimBoundLedgerAdapter
+from .authority import (
+    ClaimBoundAuthorizationLedger,
+    ClaimBoundLedgerAdapter,
+    runtime_authority_reservation_sha256,
+)
 from .credentials import (
     CredentialLease,
     CredentialScope,
@@ -425,26 +429,22 @@ class DurablePublicationRuntime:
 
     @staticmethod
     def _reservation_sha256(
-        verified: object, *, expected_purpose: VerificationPurpose
+        verified: object,
+        *,
+        runtime_claim_sha256: HashDigest,
+        expected_purpose: VerificationPurpose,
     ) -> HashDigest:
-        receipt = getattr(verified, "receipt", None)
-        if (
-            getattr(verified, "purpose", None) is not expected_purpose
-            or getattr(receipt, "receipt_sha256", None) is None
-            or getattr(verified, "request_sha256", None) is None
-        ):
+        try:
+            return runtime_authority_reservation_sha256(
+                verified,
+                runtime_claim_sha256=runtime_claim_sha256,
+                expected_purpose=expected_purpose,
+            )
+        except ValueError as error:
             raise PublicationRuntimeError(
                 "runtime.publication.authority_receipt",
                 "fresh publication authority receipt is invalid",
-            )
-        return canonical_sha256(
-            {
-                "artifact_version": "runtime-authority-reservation/1.0",
-                "receipt_sha256": str(receipt.receipt_sha256),
-                "request_sha256": str(verified.request_sha256),
-                "purpose": expected_purpose.value,
-            }
-        )
+            ) from error
 
     def _current_identity(
         self,
@@ -1210,12 +1210,15 @@ class DurablePublicationRuntime:
             purpose=VerificationPurpose.DISPATCH,
         )
         reservation_sha = self._reservation_sha256(
-            verified, expected_purpose=VerificationPurpose.DISPATCH
+            verified,
+            runtime_claim_sha256=claim.claim_sha256,
+            expected_purpose=VerificationPurpose.DISPATCH,
         )
         self._journal.record_reservation_result(
             claim,
             authority_receipt_sha256=verified.receipt.receipt_sha256,
             reservation_sha256=reservation_sha,
+            verified_at=evaluated_at.isoformat(),
         )
         marker_at = self._aware(self._clock.now())
         self._current_identity(
@@ -1353,13 +1356,11 @@ class DurablePublicationRuntime:
             purpose=VerificationPurpose.DISPATCH,
         )
         effect_reservation_sha = self._reservation_sha256(
-            effect_verified, expected_purpose=VerificationPurpose.DISPATCH
+            effect_verified,
+            runtime_claim_sha256=claim.claim_sha256,
+            expected_purpose=VerificationPurpose.DISPATCH,
         )
-        if (
-            effect_verified.receipt.receipt_sha256
-            != verified.receipt.receipt_sha256
-            or effect_reservation_sha != reservation_sha
-        ):
+        if effect_reservation_sha != reservation_sha:
             raise PublicationRuntimeError(
                 "runtime.publication.authority_rebound",
                 "effect-time authority differs from the durable reservation claim",
@@ -1368,6 +1369,7 @@ class DurablePublicationRuntime:
             claim,
             authority_receipt_sha256=effect_verified.receipt.receipt_sha256,
             reservation_sha256=effect_reservation_sha,
+            verified_at=effect_at.isoformat(),
         )
         try:
             result = self._publisher.publish(
@@ -1577,12 +1579,15 @@ class DurablePublicationRuntime:
             purpose=VerificationPurpose.RECONCILE,
         )
         reservation_sha = self._reservation_sha256(
-            verified, expected_purpose=VerificationPurpose.RECONCILE
+            verified,
+            runtime_claim_sha256=claim.claim_sha256,
+            expected_purpose=VerificationPurpose.RECONCILE,
         )
         self._journal.record_reservation_result(
             claim,
             authority_receipt_sha256=verified.receipt.receipt_sha256,
             reservation_sha256=reservation_sha,
+            verified_at=evaluated_at.isoformat(),
         )
         marker_at = self._aware(self._clock.now())
         self._current_identity(
@@ -1694,13 +1699,11 @@ class DurablePublicationRuntime:
             purpose=VerificationPurpose.RECONCILE,
         )
         effect_reservation_sha = self._reservation_sha256(
-            effect_verified, expected_purpose=VerificationPurpose.RECONCILE
+            effect_verified,
+            runtime_claim_sha256=claim.claim_sha256,
+            expected_purpose=VerificationPurpose.RECONCILE,
         )
-        if (
-            effect_verified.receipt.receipt_sha256
-            != verified.receipt.receipt_sha256
-            or effect_reservation_sha != reservation_sha
-        ):
+        if effect_reservation_sha != reservation_sha:
             raise PublicationRuntimeError(
                 "runtime.publication.authority_rebound",
                 "reconcile-time authority differs from the durable reservation claim",
@@ -1709,6 +1712,7 @@ class DurablePublicationRuntime:
             claim,
             authority_receipt_sha256=effect_verified.receipt.receipt_sha256,
             reservation_sha256=effect_reservation_sha,
+            verified_at=effect_at.isoformat(),
         )
         try:
             result = self._publisher.reconcile(

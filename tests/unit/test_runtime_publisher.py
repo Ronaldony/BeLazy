@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
+import sqlite3
 from types import SimpleNamespace
 
 import pytest
@@ -69,24 +70,51 @@ class ClaimBoundFakeLedger(FakeLedger):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.runtime_claims = {}
+        self.runtime_verifications = 0
+        self.deny_after_runtime_verifications = None
 
     def revalidate_and_reserve_current(
         self, decision, request, *, runtime_claim_sha256, **kwargs
     ):
+        if (
+            self.deny_after_runtime_verifications is not None
+            and self.runtime_verifications
+            >= self.deny_after_runtime_verifications
+        ):
+            return None
+        material = (
+            decision.decision_sha256,
+            request.request_sha256,
+            kwargs.get("purpose"),
+            kwargs.get("workspace_observation_sha256"),
+            kwargs.get("adapter_id"),
+            kwargs.get("service_identity"),
+        )
         previous = self.runtime_claims.get(runtime_claim_sha256)
-        if previous is not None:
-            return previous
+        if previous is not None and previous != material:
+            return None
         receipt = super().revalidate_and_reserve_current(
             decision, request, **kwargs
         )
         if receipt is not None:
-            self.runtime_claims[runtime_claim_sha256] = receipt
+            self.runtime_claims[runtime_claim_sha256] = material
+            self.runtime_verifications += 1
         return receipt
 
 
 class Clock:
     def now(self):
         return NOW
+
+
+class AdvancingClock:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def now(self):
+        value = NOW + timedelta(seconds=self.calls)
+        self.calls += 1
+        return value
 
 
 class Identity:
@@ -242,7 +270,7 @@ class Publisher:
         )
 
 
-def _setup(tmp_path, *, behavior="success"):
+def _setup(tmp_path, *, behavior="success", clock=None):
     candidate, candidate_ref, destination, verification = _release_fixture()
     assessment_authority, assessment_ledger, assessment_refs = _authority(
         candidate,
@@ -406,7 +434,7 @@ def _setup(tmp_path, *, behavior="success"):
         kill_switch=KillSwitch(),
         credential_broker=broker,
         settlement=settlement,
-        clock=Clock(),
+        clock=clock or Clock(),
     )
     return runtime, journal, publisher, workspace, settlement, inputs
 
@@ -429,6 +457,52 @@ def test_ready_release_requires_separate_r3_publish_authority_and_durable_replay
     assert publisher.workspace_verifications[0].verified_content_refs
     assert settlement.calls == 1
     assert journal.unresolved() == ()
+
+
+def test_advancing_clock_records_fresh_receipts_for_one_stable_reservation(
+    tmp_path,
+) -> None:
+    clock = AdvancingClock()
+    runtime, journal, publisher, workspace, settlement, inputs = _setup(
+        tmp_path,
+        clock=clock,
+    )
+
+    receipt = runtime.publish(inputs)
+
+    assert receipt.status is PublicationStatus.SUCCEEDED
+    assert publisher.calls == 1
+    assert journal.unsettled_reservation_claims() == ()
+    connection = sqlite3.connect(journal.database_path)
+    try:
+        rows = connection.execute(
+            "SELECT claim_sha256, authority_receipt_sha256, verified_at "
+            "FROM authority_reservation_verifications ORDER BY rowid"
+        ).fetchall()
+    finally:
+        connection.close()
+    assert len(rows) == 2
+    assert rows[0][0] == rows[1][0]
+    assert rows[0][1] != rows[1][1]
+    assert rows[0][2] != rows[1][2]
+
+
+def test_effect_time_revocation_blocks_publish_after_the_durable_marker(
+    tmp_path,
+) -> None:
+    runtime, journal, publisher, workspace, settlement, inputs = _setup(
+        tmp_path,
+        clock=AdvancingClock(),
+    )
+    inputs.publish_ledger.deny_after_runtime_verifications = 1
+
+    with pytest.raises(ValueError):
+        runtime.publish(inputs)
+
+    assert publisher.calls == 0
+    unresolved = journal.unresolved()
+    assert len(unresolved) == 1
+    assert unresolved[0].reconcile_only is True
 
 
 def test_terminal_publication_replay_does_not_reauthorize_or_republish(tmp_path) -> None:

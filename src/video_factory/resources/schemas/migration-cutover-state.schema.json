@@ -6,7 +6,7 @@
   "required": [
     "artifact_version", "state_id", "state_sha256", "migration_id",
     "consumer_id", "view_kind", "generation", "mode",
-    "previous_state_sha256", "parity_receipts", "feature_flag_sha256",
+    "previous_state_sha256", "legacy_artifact", "parity_receipts", "feature_flag_sha256",
     "activation_record", "rollback_record", "activated_at",
     "rollback_required", "read_only", "projections_are_authority",
     "authority_effect"
@@ -21,6 +21,7 @@
     "generation": { "type": "integer", "minimum": 0 },
     "mode": { "enum": ["legacy_only", "dual_read_compare", "projection_read_only", "rolled_back"] },
     "previous_state_sha256": { "$ref": "#/$defs/nullableSha" },
+    "legacy_artifact": { "$ref": "artifact-common.schema.json#/$defs/boundArtifact" },
     "parity_receipts": { "type": "array", "uniqueItems": true, "items": { "$ref": "artifact-common.schema.json#/$defs/boundArtifact" } },
     "feature_flag_sha256": { "$ref": "artifact-common.schema.json#/$defs/sha256" },
     "activation_record": { "$ref": "artifact-common.schema.json#/$defs/boundArtifact" },

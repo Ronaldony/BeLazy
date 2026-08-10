@@ -58,7 +58,11 @@ from video_factory.runtime import (
 )
 
 from .boundary import FixtureRuntimeBoundary
-from .authority import ClaimBoundAuthorizationLedger, ClaimBoundLedgerAdapter
+from .authority import (
+    ClaimBoundAuthorizationLedger,
+    ClaimBoundLedgerAdapter,
+    runtime_authority_reservation_sha256,
+)
 from .credentials import (
     CredentialLease,
     CredentialScope,
@@ -584,29 +588,22 @@ class DurableExecutorRuntime:
 
     @staticmethod
     def _reservation_sha256(
-        verified: object, *, expected_purpose: VerificationPurpose
+        verified: object,
+        *,
+        runtime_claim_sha256: HashDigest,
+        expected_purpose: VerificationPurpose,
     ) -> HashDigest:
-        receipt = getattr(verified, "receipt", None)
-        purpose = getattr(verified, "purpose", None)
-        request_sha256 = getattr(verified, "request_sha256", None)
-        receipt_sha256 = getattr(receipt, "receipt_sha256", None)
-        if (
-            receipt_sha256 is None
-            or request_sha256 is None
-            or purpose is not expected_purpose
-        ):
+        try:
+            return runtime_authority_reservation_sha256(
+                verified,
+                runtime_claim_sha256=runtime_claim_sha256,
+                expected_purpose=expected_purpose,
+            )
+        except ValueError as error:
             raise DurableExecutionError(
                 "runtime.executor.authority_receipt",
                 "fresh authority verification returned an invalid receipt",
-            )
-        return canonical_sha256(
-            {
-                "artifact_version": "runtime-authority-reservation/1.0",
-                "receipt_sha256": str(receipt_sha256),
-                "request_sha256": str(request_sha256),
-                "purpose": purpose.value,
-            }
-        )
+            ) from error
 
     def _current_identity(
         self,
@@ -905,12 +902,15 @@ class DurableExecutorRuntime:
             verification_purpose=VerificationPurpose.DISPATCH,
         )
         reservation_sha = self._reservation_sha256(
-            verified, expected_purpose=VerificationPurpose.DISPATCH
+            verified,
+            runtime_claim_sha256=claim.claim_sha256,
+            expected_purpose=VerificationPurpose.DISPATCH,
         )
         self._journal.record_reservation_result(
             claim,
             authority_receipt_sha256=verified.receipt.receipt_sha256,
             reservation_sha256=reservation_sha,
+            verified_at=evaluated_at.isoformat(),
         )
         marker_at = self._aware(self._clock.now())
         self._current_identity(
@@ -1013,13 +1013,11 @@ class DurableExecutorRuntime:
             verification_purpose=VerificationPurpose.DISPATCH,
         )
         effect_reservation_sha = self._reservation_sha256(
-            effect_verified, expected_purpose=VerificationPurpose.DISPATCH
+            effect_verified,
+            runtime_claim_sha256=claim.claim_sha256,
+            expected_purpose=VerificationPurpose.DISPATCH,
         )
-        if (
-            effect_verified.receipt.receipt_sha256
-            != verified.receipt.receipt_sha256
-            or effect_reservation_sha != reservation_sha
-        ):
+        if effect_reservation_sha != reservation_sha:
             raise DurableExecutionError(
                 "runtime.executor.authority_rebound",
                 "effect-time authority differs from the durable reservation claim",
@@ -1028,6 +1026,7 @@ class DurableExecutorRuntime:
             claim,
             authority_receipt_sha256=effect_verified.receipt.receipt_sha256,
             reservation_sha256=effect_reservation_sha,
+            verified_at=effect_at.isoformat(),
         )
         input_bundle = self._verified_input_bundle(inputs, effect_workspace)
         try:
@@ -1214,12 +1213,15 @@ class DurableExecutorRuntime:
             verification_purpose=VerificationPurpose.RECONCILE,
         )
         reservation_sha = self._reservation_sha256(
-            verified, expected_purpose=VerificationPurpose.RECONCILE
+            verified,
+            runtime_claim_sha256=claim.claim_sha256,
+            expected_purpose=VerificationPurpose.RECONCILE,
         )
         self._journal.record_reservation_result(
             claim,
             authority_receipt_sha256=verified.receipt.receipt_sha256,
             reservation_sha256=reservation_sha,
+            verified_at=evaluated_at.isoformat(),
         )
         marker_at = self._aware(self._clock.now())
         self._current_identity(
@@ -1299,13 +1301,11 @@ class DurableExecutorRuntime:
             verification_purpose=VerificationPurpose.RECONCILE,
         )
         effect_reservation_sha = self._reservation_sha256(
-            effect_verified, expected_purpose=VerificationPurpose.RECONCILE
+            effect_verified,
+            runtime_claim_sha256=claim.claim_sha256,
+            expected_purpose=VerificationPurpose.RECONCILE,
         )
-        if (
-            effect_verified.receipt.receipt_sha256
-            != verified.receipt.receipt_sha256
-            or effect_reservation_sha != reservation_sha
-        ):
+        if effect_reservation_sha != reservation_sha:
             raise DurableExecutionError(
                 "runtime.executor.authority_rebound",
                 "reconcile-time authority differs from the durable reservation claim",
@@ -1314,6 +1314,7 @@ class DurableExecutorRuntime:
             claim,
             authority_receipt_sha256=effect_verified.receipt.receipt_sha256,
             reservation_sha256=effect_reservation_sha,
+            verified_at=effect_at.isoformat(),
         )
         input_bundle = self._verified_input_bundle(inputs, effect_workspace)
         try:

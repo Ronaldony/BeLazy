@@ -52,6 +52,13 @@ fresh exact parity receipt for the same consumer, view, legacy bytes, projection
 bytes, Blueprint source, policy, and state generation. It remains read-only and
 has `authority_effect=none`.
 
+Generation zero also binds the exact immutable legacy artifact reference, and
+every later state must preserve it. Legacy, dual-read, and rolled-back selection
+accept only that anchor. A rollback from projection mode carries only the
+immediately preceding activation's parity references for audit; callers do not
+choose a historical rollback receipt. A rollback directly from dual-read needs
+no parity receipt and still resolves the same anchored legacy artifact.
+
 All six production consumer entries are packaged as `unregistered`, and
 `production_activation_enabled=false`. Production cutover still requires a
 reviewed version-specific semantic normalizer, consumer inventory, accepted

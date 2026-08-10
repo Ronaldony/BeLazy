@@ -14,12 +14,18 @@ consumer backed by an immutable pinned exact-byte parity corpus.
    compiler identity, consumer ID, and view kind.
 3. Obtain a `projection-parity-receipt/1.0` from the trusted verifier. An unseen
    pair fails closed.
-4. Initialize `legacy_only` with a separate current activation record.
+4. Initialize `legacy_only` with the exact immutable legacy artifact reference
+   and a separate current activation record. That reference is permanent for
+   the entire migration chain.
 5. Enter `dual_read_compare`; continue serving the legacy reference.
 6. Enter `projection_read_only` only with a fresh exact parity receipt and a
    separate current activation record for that state generation.
 7. Select only a read reference. The projection remains non-current,
    non-editable, and `authority_effect=none`.
+8. On rollback, select the state-bound legacy reference only. Do not supply an
+   older parity receipt as a rollback target; projection rollback audit refs are
+   copied from the immediately preceding activation, while dual-read rollback
+   needs no parity evidence.
 
 ## Stop conditions
 

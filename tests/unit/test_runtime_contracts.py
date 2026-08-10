@@ -185,6 +185,7 @@ def _artifacts():
         generation=1,
         mode=MigrationMode.PROJECTION_READ_ONLY,
         previous_state_sha256=_sha("2"),
+        legacy_artifact=parity.legacy_artifact,
         parity_receipts=(parity_ref,),
         feature_flag_sha256=_sha("3"),
         activation_record=_ref("m", "migration-activation-verification/1.0"),

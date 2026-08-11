@@ -91,7 +91,7 @@
     "round_2_sha256": "d4b254ce7da4c001a940f2910b79b7acc1c9f41d851d0011fa1463606383e758",
     "final_reviewers": [
       {"role": "architecture_contract", "critical": 0, "high": 0, "medium": 0, "result": "GO"},
-      {"role": "security_authority_runtime", "critical": 0, "high": 0, "medium": 0, "result": "GO"},
+      {"role": "security_authority_boundary", "critical": 0, "high": 0, "medium": 0, "result": "GO"},
       {"role": "test_compatibility_packaging", "critical": 0, "high": 0, "medium": 0, "result": "GO"},
       {"role": "documentation_migration_delivery", "critical": 0, "high": 0, "medium": 0, "result": "GO"}
     ]
@@ -123,4 +123,3 @@
     "human_approval_identity_or_signature_synthesis": false
   }
 }
-

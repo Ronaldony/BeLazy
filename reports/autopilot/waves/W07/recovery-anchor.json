@@ -16,7 +16,7 @@
     "commit": "58844d7339b1f1e5bddd906d9c0d2d82dd88f36a",
     "tree": "6a89a4cc1a3547c80426f4e385da0bc6b32a409a",
     "provenance_path": "docs/provenance/w07-final-audit.json",
-    "provenance_sha256": "1a4439a6446843b8781b7f2e3678e4dfe57093255b7b447fdd6ca87aa5916d45",
+    "provenance_sha256": "cac9c46cb29a7d8570d846c0b2dd4a81830a37853b85dd0d116bae5cad89fcab",
     "receipt_path": "reports/autopilot/waves/W07/test-receipt.json",
     "receipt_sha256": "b7d77c2dca8f3be2feb40414af4c176c85686ef31590d0c5e1e48734422b905f",
     "review_path": "reports/autopilot/waves/W07/review-round-2.md",
@@ -82,14 +82,14 @@
         ],
         "latest_reviews": [
           {"round": 2, "role": "architecture_contract", "status": "approved", "critical": 0, "high": 0},
-          {"round": 2, "role": "security_authority_runtime", "status": "approved", "critical": 0, "high": 0},
+          {"round": 2, "role": "security_authority_boundary", "status": "approved", "critical": 0, "high": 0},
           {"round": 2, "role": "test_compatibility_packaging", "status": "approved", "critical": 0, "high": 0},
           {"round": 2, "role": "documentation_migration_delivery", "status": "approved", "critical": 0, "high": 0}
         ],
         "unresolved_findings": []
       }
     },
-    "semantic_sha256": "d9f09a1c057d8b32ebc7c3e92a6cf5ab316ceb275e1eb0367a38602c57976282"
+    "semantic_sha256": "bfd84f56d43d0c224b2edb65e0c86ca4d18db8585f608a8979dde2724d686358"
   },
   "recovery_checks": [
     "checkpoint commit resolves to the recorded tree, parent, and subject",
@@ -100,4 +100,3 @@
     "source and handoff identities remain unchanged"
   ]
 }
-

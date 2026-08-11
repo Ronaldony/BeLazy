@@ -30,11 +30,12 @@ EXPECTED_WAVES = {
     "W06-RUNTIME-MIGRATION": ("RUN-001", "RUN-002", "MIG-001", "REL-002"),
     "W07-FINAL-AUDIT": ("AUDIT-001", "AUDIT-002", "AUDIT-003"),
 }
-REVIEW_ROLES = {
+DEFAULT_REVIEW_ROLES = {
     "architecture_contract",
     "security_authority_boundary",
     "test_compatibility_packaging",
 }
+W07_REVIEW_ROLES = DEFAULT_REVIEW_ROLES | {"documentation_migration_delivery"}
 
 
 def _sha256(path: Path) -> str:
@@ -153,7 +154,12 @@ def validate_state(root: Path) -> list[str]:
         reviews = wave["reviews"]
         latest_round = max((item["round"] for item in reviews), default=0)
         latest = [item for item in reviews if item["round"] == latest_round]
-        if {item["role"] for item in latest} != REVIEW_ROLES:
+        expected_review_roles = (
+            W07_REVIEW_ROLES
+            if wave["id"] == "W07-FINAL-AUDIT"
+            else DEFAULT_REVIEW_ROLES
+        )
+        if {item["role"] for item in latest} != expected_review_roles:
             errors.append(f"{wave['id']}:latest_review_roles_incomplete")
         if any(
             item.get("status") not in {"approved", "passed"}

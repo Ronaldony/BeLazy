@@ -108,7 +108,7 @@
     "rollback_path": "reports/autopilot/rollback-and-commit-range.md",
     "rollback_sha256": "406547c578a29e9d0e7f5160f2ca6b1ced72412fa1a211b8f0c1eb68cce8acb5",
     "execplan_path": ".agent/execplans/be-lazy-autopilot.md",
-    "execplan_sha256": "0f11a8ef0e78dc43af344c4cdefa1a5d6526ce8f5c4c06ae587279cb6f900a42"
+    "execplan_sha256": "2fc412ecf2cc074899bb457806cdbc9556671d41ccb7e36df23e2295dbe41d1e"
   },
   "side_effects": {
     "network": false,

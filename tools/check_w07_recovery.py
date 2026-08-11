@@ -124,7 +124,7 @@ def validate_w07_recovery(root: Path) -> list[str]:
         seal_commit = _git(
             root,
             "log",
-            "--diff-filter=A",
+            "-1",
             "--format=%H",
             "--",
             "reports/autopilot/waves/W07/recovery-anchor.json",
@@ -141,12 +141,12 @@ def validate_w07_recovery(root: Path) -> list[str]:
             errors.append("evidence_tree_mismatch")
         if not _is_ancestor(root, implementation["commit"], checkpoint_commit):
             errors.append("implementation_not_checkpoint_ancestor")
-        if not _is_ancestor(root, evidence["commit"], checkpoint_commit):
-            errors.append("evidence_not_checkpoint_ancestor")
+        if not _is_ancestor(root, checkpoint_commit, evidence["commit"]):
+            errors.append("checkpoint_not_evidence_ancestor")
         if not _is_ancestor(root, checkpoint_commit, head):
             errors.append("checkpoint_not_head_ancestor")
-        if not _is_ancestor(root, checkpoint_commit, seal_commit):
-            errors.append("checkpoint_not_seal_ancestor")
+        if not _is_ancestor(root, evidence["commit"], seal_commit):
+            errors.append("evidence_not_seal_ancestor")
         if not _is_ancestor(root, seal_commit, head):
             errors.append("seal_not_head_ancestor")
     except (OSError, IndexError, subprocess.SubprocessError):
@@ -159,12 +159,14 @@ def validate_w07_recovery(root: Path) -> list[str]:
             errors.append(f"{path_key}_binding_invalid")
             continue
         try:
-            if path_key == "execplan_path" and seal_commit is not None:
-                observed = hashlib.sha256(_git_bytes(root, seal_commit, relative)).hexdigest()
-            else:
-                observed = _sha256(root / relative)
-            if observed != expected:
-                errors.append(f"{path_key}_digest_mismatch")
+            committed = hashlib.sha256(
+                _git_bytes(root, evidence["commit"], relative)
+            ).hexdigest()
+            current = _sha256(root / relative)
+            if committed != expected:
+                errors.append(f"{path_key}_evidence_commit_digest_mismatch")
+            if current != expected:
+                errors.append(f"{path_key}_current_digest_mismatch")
         except (OSError, subprocess.SubprocessError):
             errors.append(f"{path_key}_unreadable")
 
@@ -236,4 +238,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
-

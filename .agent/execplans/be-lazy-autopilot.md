@@ -30,7 +30,7 @@ evidence and no external side effects.
 | W04 Workflow/Authority | passed | WF-001, AUTH-001, AUTH-002, WF-002 | `5bc36f63d51e0a78c42603fa13946b691ed67585` |
 | W05 Automation/Quality/Release | passed | SEL-001, QA-001, REL-001 | `22df49acf9fb0370b78b0ed5a4e42373b2352877` |
 | W06 Runtime/Migration | passed | RUN-001, RUN-002, MIG-001, REL-002 | `7c4b83ad89df51710452dbc7f494113cf45970b2` |
-| W07 Final Audit | pending | AUDIT-001..003 | pending |
+| W07 Final Audit | passed | AUDIT-001..003 | `58844d7339b1f1e5bddd906d9c0d2d82dd88f36a` |
 
 ## W00 decisions and evidence
 
@@ -499,7 +499,7 @@ schema/semantics, and target containment before continuing.
   version 0.3.1, all 17 CLI commands, and exact public re-export identities.
 - W00/W01 provenance, generic recovery, and W01 through W06 recovery checks
   pass. The source archive and handoff manifest remain exact and unchanged.
-- Implementation reviewers report Critical 0, High 0, Medium 0. The W07 final
-  result, report, complete command receipt, compatibility/T90 decision, and
-  rollback range are sealed by the local completion checkpoint; only the
-  ignored-state and recovery-anchor binding follows as a metadata-only commit.
+- Final reviewers report Critical 0, High 0, Medium 0. The W07 final result,
+  report, command receipt, compatibility/T90 decision, rollback range, ignored
+  state, and recovery anchor are bound to the local completion checkpoint and
+  its tracked evidence seal. No mandatory wave work remains.

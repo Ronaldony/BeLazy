@@ -88,7 +88,7 @@
     "discovery_path": "reports/autopilot/waves/W07/discovery.md",
     "round_1_path": "reports/autopilot/waves/W07/review-round-1.md",
     "round_2_path": "reports/autopilot/waves/W07/review-round-2.md",
-    "round_2_sha256": "d4b254ce7da4c001a940f2910b79b7acc1c9f41d851d0011fa1463606383e758",
+    "round_2_sha256": "3fb0fb4b2bfa8198a6f5b60fc36f4229a00196dcb40729de1c1b2907de2fa920",
     "final_reviewers": [
       {"role": "architecture_contract", "critical": 0, "high": 0, "medium": 0, "result": "GO"},
       {"role": "security_authority_boundary", "critical": 0, "high": 0, "medium": 0, "result": "GO"},
@@ -108,7 +108,7 @@
     "rollback_path": "reports/autopilot/rollback-and-commit-range.md",
     "rollback_sha256": "406547c578a29e9d0e7f5160f2ca6b1ced72412fa1a211b8f0c1eb68cce8acb5",
     "execplan_path": ".agent/execplans/be-lazy-autopilot.md",
-    "execplan_sha256": "2fc412ecf2cc074899bb457806cdbc9556671d41ccb7e36df23e2295dbe41d1e"
+    "execplan_sha256": "e7e1012ed0a0fb8ae8bda19f657bfb8005f3c4664d2657116e16dc8b8515809a"
   },
   "side_effects": {
     "network": false,

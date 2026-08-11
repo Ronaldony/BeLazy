@@ -473,7 +473,9 @@ schema/semantics, and target containment before continuing.
    processes use UTF-8 and tolerant diagnostic decoding while all return-code,
    RECORD, identity, schema, and semantic checks remain fail-closed.
 8. Public identifier migration is not performed. T90 remains separately
-   deferred, and no network, remote, install, provider, publication, deployment,
+   deferred. No dependency download or host/target package installation
+   occurred; the two local wheels were installed only into disposable external
+   probe directories. No network, remote, provider, publication, deployment,
    credential, or human-approval/signature side effect is authorized or claimed.
 
 ## W07 completed checks

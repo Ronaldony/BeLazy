@@ -36,10 +36,11 @@ bundle; those artifacts are now present, schema-validated, checkpoint-bound,
 and covered by `tools/check_w07_recovery.py`.
 
 The exact full suite passed 1104 tests with four platform-only skips and zero
-failures. Source and handoff identities are unchanged. No network, remote,
-install, provider, production mutation, publication, deployment, credential,
-migration activation, or human approval/signature side effect occurred.
+failures. Source and handoff identities are unchanged. No dependency download
+or host/target installation occurred; the two local wheels were installed only
+into disposable external probe directories. No network, remote, provider,
+production mutation, publication, deployment, credential, migration
+activation, or human approval/signature side effect occurred.
 
 There are no unresolved Critical, High, or Medium findings and no requested
 code change.
-

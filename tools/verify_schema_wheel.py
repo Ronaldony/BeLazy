@@ -661,6 +661,8 @@ def install_and_probe(wheel: Path, python: Path, work_dir: Path) -> str:
     environment.pop("PYTHONPATH", None)
     environment["PYTHONDONTWRITEBYTECODE"] = "1"
     environment["PYTHONNOUSERSITE"] = "1"
+    environment["PYTHONIOENCODING"] = "utf-8"
+    environment["PYTHONUTF8"] = "1"
     pip_command = [
         str(python),
         "-B",
@@ -681,6 +683,7 @@ def install_and_probe(wheel: Path, python: Path, work_dir: Path) -> str:
         capture_output=True,
         text=True,
         encoding="utf-8",
+        errors="replace",
         check=False,
     )
     if installed.returncode != 0:
@@ -764,6 +767,7 @@ print(json.dumps({'package_file': str(package_file), 'schemas': expected_schemas
         capture_output=True,
         text=True,
         encoding="utf-8",
+        errors="replace",
         check=False,
     )
     if probed.returncode != 0:

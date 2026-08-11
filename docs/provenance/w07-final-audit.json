@@ -1,0 +1,126 @@
+{
+  "schema_version": "be-lazy-w07-final-audit/1.0",
+  "wave": "W07-FINAL-AUDIT",
+  "created_at": "2026-08-11T01:25:00.000Z",
+  "implementation": {
+    "commit": "2acd77c0b1b80d6449b38a0e79e859b4cfc9f4e5",
+    "tree": "72bf1859c25a2e450c892777426c70802cc0daf1",
+    "parent": "fd858ff22a16bbf0eaffa9d813a160ebda9dcce0",
+    "baseline_ancestor": "df05c406f26303d3216486c12c2a9a7d192d6ef7",
+    "branch": "agent/autopilot-v4",
+    "candidate_chain": [
+      "e494350a24b762620f4ec55ea0e95c6bde828fbe",
+      "d07b34c9cacb713f28e6d69c89899016fd458da3",
+      "fd858ff22a16bbf0eaffa9d813a160ebda9dcce0",
+      "2acd77c0b1b80d6449b38a0e79e859b4cfc9f4e5"
+    ],
+    "change_summary": "48 files changed; 1562 insertions; 224 deletions from the sealed W06 recovery ancestor"
+  },
+  "checkpoint": {
+    "commit": "58844d7339b1f1e5bddd906d9c0d2d82dd88f36a",
+    "tree": "6a89a4cc1a3547c80426f4e385da0bc6b32a409a",
+    "parent": "6a946c2952f4e3dc190d4626a976732a29f6fbf3",
+    "subject": "autopilot(W07): complete final audit and delivery report"
+  },
+  "inputs": {
+    "source_archive_sha256": "954325b77028bcf7d36a88136d8e1ed0ec2348ad15014623710614cced94034a",
+    "source_member_count": 211,
+    "handoff_manifest_sha256": "1bd3aa1687299c15f81539641afcd1563097b0ff8cebc9c24a793e132386244a",
+    "handoff_file_count": 49,
+    "source_baseline_path": "docs/provenance/source-baseline.json",
+    "source_baseline_sha256": "a89e05395b07d778a0994801879a7e3eff3293414145dcb24b88f79a44ffeed3",
+    "source_assessment_path": "docs/provenance/source-analysis/source-architecture-assessment.md",
+    "source_assessment_sha256": "276da20c49e321e13fc5a5199c55cd6a112f36aa6ff6e19b9a2ac3a81145c02b",
+    "import_map_path": "docs/provenance/import-map.csv",
+    "import_map_sha256": "7090ee355f7fa55bcb72423f1489c9230094e44e3574b7f6d047803445510809"
+  },
+  "architecture": {
+    "package_count": 31,
+    "first_party_edge_count": 93,
+    "package_scc_count": 0,
+    "module_count": 142,
+    "module_edge_count": 486,
+    "module_scc_count": 0,
+    "dependency_root_first_party_import_count": 0,
+    "public_reexport_identity_checks": 20
+  },
+  "schema_resources": {
+    "schema_manifest_sha256": "b418fe462b187ee1f4c0d7d7f7a7332203504d3456b0a44f0820e73589075ff1",
+    "schema_count": 87,
+    "registered_version_count": 82,
+    "workflow_manifest_sha256": "e2400c74b8475c58b52419c1defcefbd99acf274b2ac0276bb66a27295d0d566",
+    "director_manifest_sha256": "62bfed6745cb72bf6997aa68d4ce5fa592b692efa98f983bded39d3f10bc0b56",
+    "quality_release_manifest_sha256": "320e48cdb5b2f36436e416b0d0a93c73565e9c94ae98767527dcd30da37a28aa",
+    "runtime_migration_manifest_sha256": "880abdbc2bcef48fb78c309e0e85ed1ab5ea12c50ae9a03f69332f836bbe119d"
+  },
+  "migration_selection": {
+    "registry_version": "projection-migration-registry/1.1",
+    "registry_file_sha256": "f4b59b838d61bbeee83a8473096380e17dae7220afc1179144569f9ad643c52d",
+    "migratable_views": ["brief", "edit", "generation", "storyboard"],
+    "shadow_only_views": ["publish", "sound"],
+    "production_consumers_registered": false,
+    "production_activation_enabled": false,
+    "selection_cutover_authority_effect": "none",
+    "t90_public_identifier_migration_performed": false
+  },
+  "runtime_boundary": {
+    "child_device_inode_binding": true,
+    "root_marker_identity_binding": true,
+    "trusted_w02_issuance_required": true,
+    "durable_full_authorization_digest": true,
+    "opaque_current_credential_attestation": true,
+    "post_marker_actual_use_revalidation": true,
+    "production_effects_enabled": false
+  },
+  "test_evidence": {
+    "receipt_path": "reports/autopilot/waves/W07/test-receipt.json",
+    "receipt_sha256": "b7d77c2dca8f3be2feb40414af4c176c85686ef31590d0c5e1e48734422b905f",
+    "full": "1104 passed, 4 platform-only skipped, 0 failed in 855.00s",
+    "six_gates": "PASS with zero violations",
+    "wheel": "two identical 257-member, 539612-byte wheels; sha256 2ce7642946fd8db1037a93512a6bf7a591da55444407c52ba00bc53bffb3752c",
+    "isolated_probes": "two PASS with 87 schemas, 82 versions, both packages, exact resources, CLI and reexports",
+    "standard_build_backend": {
+      "status": "ENVIRONMENT_BLOCKED",
+      "fallback_misrepresented_as_backend": false
+    }
+  },
+  "review_evidence": {
+    "discovery_path": "reports/autopilot/waves/W07/discovery.md",
+    "round_1_path": "reports/autopilot/waves/W07/review-round-1.md",
+    "round_2_path": "reports/autopilot/waves/W07/review-round-2.md",
+    "round_2_sha256": "d4b254ce7da4c001a940f2910b79b7acc1c9f41d851d0011fa1463606383e758",
+    "final_reviewers": [
+      {"role": "architecture_contract", "critical": 0, "high": 0, "medium": 0, "result": "GO"},
+      {"role": "security_authority_runtime", "critical": 0, "high": 0, "medium": 0, "result": "GO"},
+      {"role": "test_compatibility_packaging", "critical": 0, "high": 0, "medium": 0, "result": "GO"},
+      {"role": "documentation_migration_delivery", "critical": 0, "high": 0, "medium": 0, "result": "GO"}
+    ]
+  },
+  "final_delivery": {
+    "report_path": "reports/autopilot/final-report.md",
+    "report_sha256": "966b549db082fe6276ce11c0a9b467e733c4cb515fd745a9de631c0f4540e840",
+    "result_path": "reports/autopilot/final-result.json",
+    "result_sha256": "9cbbebb655c7899ce8ad24b3d23e4204740c798dbcb0ff6eb08536aa215a7553",
+    "command_receipt_path": "reports/autopilot/final-command-receipt.json",
+    "command_receipt_sha256": "3c11d18b7c1854331fc15faf44df9d8be8899f1ac85b71ed167d84c017330e3c",
+    "t90_path": "reports/autopilot/t90-public-identifiers-decision.md",
+    "t90_sha256": "de3bbf2b8cfc2439325213e7e41d547df3edd2a6f3a14fbd1d17f33cbfad6228",
+    "rollback_path": "reports/autopilot/rollback-and-commit-range.md",
+    "rollback_sha256": "406547c578a29e9d0e7f5160f2ca6b1ced72412fa1a211b8f0c1eb68cce8acb5",
+    "execplan_path": ".agent/execplans/be-lazy-autopilot.md",
+    "execplan_sha256": "0f11a8ef0e78dc43af344c4cdefa1a5d6526ce8f5c4c06ae587279cb6f900a42"
+  },
+  "side_effects": {
+    "network": false,
+    "remote": false,
+    "install": false,
+    "provider": false,
+    "production_mutation": false,
+    "publication": false,
+    "deployment": false,
+    "credential": false,
+    "migration_activation": false,
+    "human_approval_identity_or_signature_synthesis": false
+  }
+}
+

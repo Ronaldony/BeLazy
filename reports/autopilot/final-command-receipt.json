@@ -1,0 +1,60 @@
+{
+  "protocol_version": "be-lazy-final-command-receipt/1.0",
+  "recorded_at": "2026-08-11T01:20:00.000Z",
+  "implementation": {
+    "commit": "2acd77c0b1b80d6449b38a0e79e859b4cfc9f4e5",
+    "tree": "72bf1859c25a2e450c892777426c70802cc0daf1",
+    "branch": "agent/autopilot-v4"
+  },
+  "checkpoint_subject": "autopilot(W07): complete final audit and delivery report",
+  "commands": [
+    {
+      "id": "full_pytest",
+      "exit_code": 0,
+      "result": "1104 passed, 4 skipped in 855.00s"
+    },
+    {
+      "id": "six_boundary_gates",
+      "exit_code": 0,
+      "result": "all PASS with zero violations, package SCC 0"
+    },
+    {
+      "id": "two_offline_wheels",
+      "exit_code": 0,
+      "result": "byte-identical, 257 members, 539612 bytes, sha256 2ce7642946fd8db1037a93512a6bf7a591da55444407c52ba00bc53bffb3752c"
+    },
+    {
+      "id": "two_isolated_wheel_probes",
+      "exit_code": 0,
+      "result": "87 schemas, 82 versions, both packages, exact resources and public CLI/reexports PASS"
+    },
+    {
+      "id": "prior_provenance_and_recovery",
+      "exit_code": 0,
+      "result": "W00/W01 provenance, generic recovery and W01-W06 recovery PASS"
+    },
+    {
+      "id": "final_input_and_repository_scan",
+      "exit_code": 0,
+      "result": "source/handoff exact; remote 0; tracked cache/build 0; nonfixture secret-pattern files 0"
+    }
+  ],
+  "standard_backend": {
+    "status": "ENVIRONMENT_BLOCKED",
+    "reason": "build, setuptools and wheel are absent offline",
+    "fallback_misrepresented_as_backend": false
+  },
+  "side_effects": {
+    "network": false,
+    "remote_contact_or_change": false,
+    "package_install": false,
+    "provider_call": false,
+    "publication": false,
+    "deployment": false,
+    "production_mutation": false,
+    "migration_activation": false,
+    "credential_use": false,
+    "human_approval_identity_or_signature_synthesis": false
+  }
+}
+

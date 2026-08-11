@@ -499,6 +499,7 @@ schema/semantics, and target containment before continuing.
   version 0.3.1, all 17 CLI commands, and exact public re-export identities.
 - W00/W01 provenance, generic recovery, and W01 through W06 recovery checks
   pass. The source archive and handoff manifest remain exact and unchanged.
-- Implementation reviewers report Critical 0, High 0, Medium 0. Final delivery
-  evidence, checkpoint, ignored state, and recovery binding are the remaining
-  non-functional seal work.
+- Implementation reviewers report Critical 0, High 0, Medium 0. The W07 final
+  result, report, complete command receipt, compatibility/T90 decision, and
+  rollback range are sealed by the local completion checkpoint; only the
+  ignored-state and recovery-anchor binding follows as a metadata-only commit.

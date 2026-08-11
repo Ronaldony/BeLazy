@@ -1,0 +1,153 @@
+{
+  "receipt_version": "be-lazy-wave-test-receipt/1.1",
+  "wave": "W07-FINAL-AUDIT",
+  "recorded_at": "2026-08-11T01:20:00.000Z",
+  "subject": {
+    "source": {
+      "archive_sha256": "954325b77028bcf7d36a88136d8e1ed0ec2348ad15014623710614cced94034a",
+      "member_count": 211,
+      "handoff_manifest_sha256": "1bd3aa1687299c15f81539641afcd1563097b0ff8cebc9c24a793e132386244a",
+      "handoff_file_count": 49
+    },
+    "target": {
+      "repository": "be-lazy",
+      "branch": "agent/autopilot-v4",
+      "baseline_ancestor": "df05c406f26303d3216486c12c2a9a7d192d6ef7",
+      "implementation_commit": "2acd77c0b1b80d6449b38a0e79e859b4cfc9f4e5",
+      "implementation_tree": "72bf1859c25a2e450c892777426c70802cc0daf1",
+      "implementation_parent": "fd858ff22a16bbf0eaffa9d813a160ebda9dcce0",
+      "candidate_chain": [
+        "e494350a24b762620f4ec55ea0e95c6bde828fbe",
+        "d07b34c9cacb713f28e6d69c89899016fd458da3",
+        "fd858ff22a16bbf0eaffa9d813a160ebda9dcce0",
+        "2acd77c0b1b80d6449b38a0e79e859b4cfc9f4e5"
+      ]
+    },
+    "schema_resources": {
+      "manifest_path": "src/video_factory/resources/schemas/schema-manifest.json",
+      "manifest_sha256": "b418fe462b187ee1f4c0d7d7f7a7332203504d3456b0a44f0820e73589075ff1",
+      "schema_count": 87,
+      "registered_version_count": 82
+    },
+    "workflow_resources": {
+      "manifest_sha256": "e2400c74b8475c58b52419c1defcefbd99acf274b2ac0276bb66a27295d0d566",
+      "authority_policy_file_sha256": "50a29e0b7da956aefee59b363171bcba021227c4dfd14d3ca13e8ffbc51b7395",
+      "full_code_projection_equal": true
+    },
+    "runtime_migration_resources": {
+      "manifest_sha256": "880abdbc2bcef48fb78c309e0e85ed1ab5ea12c50ae9a03f69332f836bbe119d",
+      "registry_file_sha256": "f4b59b838d61bbeee83a8473096380e17dae7220afc1179144569f9ad643c52d",
+      "registry_version": "projection-migration-registry/1.1",
+      "migratable_view_count": 4,
+      "shadow_only_view_count": 2,
+      "production_enabled": false
+    },
+    "manual_wheel": {
+      "sha256": "2ce7642946fd8db1037a93512a6bf7a591da55444407c52ba00bc53bffb3752c",
+      "size_bytes": 539612,
+      "member_count": 257,
+      "classification": "STDLIB_PEP427_ACCEPTANCE_FALLBACK_ONLY"
+    }
+  },
+  "environment": {
+    "host_os": "Windows",
+    "python": "CPython 3.12.10 AMD64",
+    "test_runner_role": "PREEXISTING_READ_ONLY_TEST_RUNNER",
+    "test_runner_sha256": "0b471133e110cfb53a061cad528ce8e517d7b9ac41a0a396c39ad795a487fc14",
+    "pytest": "9.1.1",
+    "jsonschema": "4.26.0",
+    "network_used": false,
+    "packages_installed": false,
+    "target_environment_modified": false,
+    "variables": {
+      "PYTHONDONTWRITEBYTECODE": "1",
+      "PYTHONNOUSERSITE": "1",
+      "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
+      "basetemp": "UNIQUE_EXTERNAL_TEMP_DIRECTORY"
+    }
+  },
+  "commands": [
+    {
+      "id": "w07-final-focused",
+      "cwd_role": "TARGET_ROOT",
+      "exit_code": 0,
+      "result": "packaging 264 passed/1 symlink-capability skip; resources 144 passed; docs/migration 120 passed; architecture 35 plus 99 passed; runtime 16 plus 2 passed"
+    },
+    {
+      "id": "w07-full",
+      "cwd_role": "TARGET_ROOT",
+      "exit_code": 0,
+      "result": "1104 passed, 4 platform-only skipped, 0 failed in 855.00s on exact implementation commit/tree"
+    },
+    {
+      "id": "w07-boundaries",
+      "cwd_role": "TARGET_ROOT",
+      "exit_code": 0,
+      "result": "core_purity PASS 468; side_effect_free PASS 142; runtime_boundary PASS 142 core/10 runtime; repo_isolation PASS 327; target_boundary PASS 572 files/78 directories"
+    },
+    {
+      "id": "w07-package-dependencies",
+      "cwd_role": "TARGET_ROOT",
+      "exit_code": 0,
+      "result": "31 packages, 93 first-party edges, 0 non-trivial SCC; independent module graph 142 modules/486 edges/0 SCC; public re-export identities 20/20"
+    },
+    {
+      "id": "w07-prior-recovery",
+      "cwd_role": "TARGET_ROOT",
+      "exit_code": 0,
+      "result": "W00/W01 provenance, generic recovery, and W01/W02/W03/W04/W05/W06 recovery all PASS"
+    },
+    {
+      "id": "w07-schema-resources",
+      "cwd_role": "TARGET_ROOT",
+      "exit_code": 0,
+      "result": "87 root/package byte-identical schemas, 82 registered versions, schema/workflow/Director/quality-release/runtime-migration manifests and exact semantic projections PASS"
+    },
+    {
+      "id": "w07-deterministic-wheel",
+      "cwd_role": "TARGET_ROOT",
+      "exit_code": 0,
+      "result": "two independent builds matched: 257 members, 539612 bytes, sha256 2ce7642946fd8db1037a93512a6bf7a591da55444407c52ba00bc53bffb3752c"
+    },
+    {
+      "id": "w07-isolated-wheel-probe",
+      "cwd_role": "EXTERNAL_TEMP_INSTALL",
+      "exit_code": 0,
+      "result": "two probes passed: RECORD/metadata, 87 schemas, 82 versions, both packages, exact resources, distribution/version, 17 CLI commands and public re-export identity"
+    },
+    {
+      "id": "w07-audit-scan",
+      "cwd_role": "TARGET_ROOT",
+      "exit_code": 0,
+      "result": "clean tracked tree; remote count 0; tracked cache/build files 0; nonfixture secret-pattern files 0; instruction/control files match allowlist"
+    },
+    {
+      "id": "w07-input-postcheck",
+      "cwd_role": "TARGET_ROOT",
+      "exit_code": 0,
+      "result": "source archive 211 members and handoff manifest 49 files remain exact and unchanged"
+    }
+  ],
+  "not_executed": [
+    {
+      "command": "python -m build --wheel --sdist --no-isolation",
+      "status": "ENVIRONMENT_BLOCKED",
+      "observed_result": "build=false; setuptools=false; wheel=false",
+      "reason": "The offline host lacks the standard build frontend and backend packages. No download is authorized; the stdlib fallback is not represented as backend or sdist verification."
+    }
+  ],
+  "platform_skips": [
+    "the test environment cannot create symlinks",
+    "Windows uses exact mutation handles",
+    "two POSIX exact-directory-capability cases"
+  ],
+  "claims_not_made": [
+    "setuptools backend or sdist verification",
+    "production provider, publication, deployment or credential use",
+    "production-enabled filesystem mutation",
+    "authoritative migration activation or cutover",
+    "public identifier migration",
+    "human approval, identity, or signature synthesis"
+  ]
+}
+

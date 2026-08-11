@@ -74,7 +74,7 @@
   },
   "test_evidence": {
     "receipt_path": "reports/autopilot/waves/W07/test-receipt.json",
-    "receipt_sha256": "b7d77c2dca8f3be2feb40414af4c176c85686ef31590d0c5e1e48734422b905f",
+    "receipt_sha256": "fb18396642b8df8736f71e2796e6d8117407dd087f219c6d4e2a6c01f13de5bc",
     "full": "1104 passed, 4 platform-only skipped, 0 failed in 855.00s",
     "six_gates": "PASS with zero violations",
     "wheel": "two identical 257-member, 539612-byte wheels; sha256 2ce7642946fd8db1037a93512a6bf7a591da55444407c52ba00bc53bffb3752c",
@@ -98,11 +98,11 @@
   },
   "final_delivery": {
     "report_path": "reports/autopilot/final-report.md",
-    "report_sha256": "966b549db082fe6276ce11c0a9b467e733c4cb515fd745a9de631c0f4540e840",
+    "report_sha256": "f5d041b0bea55b65003d2a0adb8c65c3d46f8feb877e277bbcd171edbe5446f8",
     "result_path": "reports/autopilot/final-result.json",
     "result_sha256": "9cbbebb655c7899ce8ad24b3d23e4204740c798dbcb0ff6eb08536aa215a7553",
     "command_receipt_path": "reports/autopilot/final-command-receipt.json",
-    "command_receipt_sha256": "3c11d18b7c1854331fc15faf44df9d8be8899f1ac85b71ed167d84c017330e3c",
+    "command_receipt_sha256": "17f9c0317f09ab8fa11d260b76db441a7a0a9daccf6ea724b8666ed53095327d",
     "t90_path": "reports/autopilot/t90-public-identifiers-decision.md",
     "t90_sha256": "de3bbf2b8cfc2439325213e7e41d547df3edd2a6f3a14fbd1d17f33cbfad6228",
     "rollback_path": "reports/autopilot/rollback-and-commit-range.md",
@@ -113,7 +113,8 @@
   "side_effects": {
     "network": false,
     "remote": false,
-    "install": false,
+    "dependency_or_host_target_install": false,
+    "isolated_local_wheel_probe_install": true,
     "provider": false,
     "production_mutation": false,
     "publication": false,

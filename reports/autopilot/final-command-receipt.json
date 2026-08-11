@@ -47,7 +47,8 @@
   "side_effects": {
     "network": false,
     "remote_contact_or_change": false,
-    "package_install": false,
+    "dependency_or_host_target_package_install": false,
+    "isolated_local_wheel_probe_install": true,
     "provider_call": false,
     "publication": false,
     "deployment": false,
@@ -57,4 +58,3 @@
     "human_approval_identity_or_signature_synthesis": false
   }
 }
-

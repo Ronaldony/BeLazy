@@ -10,9 +10,11 @@ review findings are resolved, and the final result is `COMPLETE` with zero
 unresolved Critical or High findings.
 
 The source archive and handoff inputs remain byte-identical. No remote exists,
-no network was used, no package was installed, and no provider, publication,
-deployment, credential, production mutation, migration activation, or human
-approval/signature side effect occurred.
+no network was used, and no dependency or package was installed into the host
+or target environment. The two local wheels were installed only into disposable
+external probe directories. No provider, publication, deployment, credential,
+production mutation, migration activation, or human approval/signature side
+effect occurred.
 
 ## Final verification
 
@@ -74,4 +76,3 @@ These gaps do not violate the program's fail-closed completion conditions.
 The local completion checkpoint uses subject
 `autopilot(W07): complete final audit and delivery report`. No tag was required
 or created, and no remote was contacted.
-

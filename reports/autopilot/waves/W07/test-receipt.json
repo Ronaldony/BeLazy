@@ -57,7 +57,8 @@
     "pytest": "9.1.1",
     "jsonschema": "4.26.0",
     "network_used": false,
-    "packages_installed": false,
+    "dependency_or_host_target_packages_installed": false,
+    "isolated_local_wheel_probe_install": true,
     "target_environment_modified": false,
     "variables": {
       "PYTHONDONTWRITEBYTECODE": "1",
@@ -150,4 +151,3 @@
     "human approval, identity, or signature synthesis"
   ]
 }
-

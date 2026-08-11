@@ -440,3 +440,65 @@ schema/semantics, and target containment before continuing.
 - Final architecture, authority/security, and test/packaging reviewers each
   reported Critical 0, High 0, Medium 0 and `GO`. W06 evidence sealing is the
   only remaining work before the W07 final independent audit.
+
+## W07 decisions and evidence
+
+1. W07 re-runs the original architecture, trust, compatibility, packaging,
+   migration, and recovery acceptance rather than treating earlier wave
+   receipts as current authority. Four fresh read-only roles cover architecture,
+   security/runtime authority, test/packaging, and documentation/migration.
+2. Managed mutation accepts only a canonical W02 issuance verified by the
+   trusted boundary and binds the complete authorization digest into durable
+   execution intent. Cached runtime children retain device/inode identity and
+   are rechecked for type, reparse/link status, containment, and identity before
+   reopen or effect.
+3. Credential handles remain opaque and are bound by the full attestation
+   reference, exact service/destination/purpose, current broker verification,
+   and durable reconciliation evidence. No raw credential can enter artifacts,
+   journal rows, receipts, logs, or test evidence.
+4. Migration registry v1.1 separates four registered/schema-backed migratable
+   views from two shadow-only views. Initialization validates the exact expected
+   version, bytes, strict JSON, and installed schema before persisting the
+   generation-zero legacy anchor. Production activation remains disabled.
+5. Candidate selection cutover is an additive, pure coordinator. Only a
+   currently reverified `AUTO_SELECTED` decision can bypass the legacy human
+   selection frontier, and the result carries `authority_effect=none`.
+   Escalation, denial, missing evidence, or rollback returns the unchanged
+   `select_edit_inputs` path.
+6. Mode contracts live in a dependency-root module and public modules retain
+   exact re-export identity. The committed package-dependency gate rejects
+   aliases, dependency-root upward imports, and every non-trivial package SCC.
+7. Packaged authority policy is compared in full with the executable target
+   policy in both source tests and the source-free wheel probe. Wheel child
+   processes use UTF-8 and tolerant diagnostic decoding while all return-code,
+   RECORD, identity, schema, and semantic checks remain fail-closed.
+8. Public identifier migration is not performed. T90 remains separately
+   deferred, and no network, remote, install, provider, publication, deployment,
+   credential, or human-approval/signature side effect is authorized or claimed.
+
+## W07 completed checks
+
+- Final implementation candidate: commit
+  `2acd77c0b1b80d6449b38a0e79e859b4cfc9f4e5`, tree
+  `72bf1859c25a2e450c892777426c70802cc0daf1`, parent
+  `fd858ff22a16bbf0eaffa9d813a160ebda9dcce0`; tracked worktree clean.
+- Exact full suite: 1104 passed, four platform-only skips, zero failures in
+  855.00 seconds. Focused reviewers additionally passed 264/1 packaging,
+  120 documentation/migration, 35+99 architecture, and 16+2 runtime checks.
+- Six gates passed with zero violations: core purity 468, side-effect-free 142,
+  runtime direction 142 core/10 runtime, repository isolation 327, target
+  boundary 572 files/78 directories, and package dependencies 31 packages/93
+  edges/zero SCC.
+- Root/package schemas are byte-identical at 87 schemas and 82 registered
+  versions. All workflow, Director, quality/release, and runtime/migration
+  resource projections pass exact digest and semantic checks.
+- Two independent wheels are byte-identical: 257 members, 539612 bytes,
+  SHA-256
+  `2ce7642946fd8db1037a93512a6bf7a591da55444407c52ba00bc53bffb3752c`.
+  Both isolated probes pass with 87 schemas, 82 versions, both packages,
+  version 0.3.1, all 17 CLI commands, and exact public re-export identities.
+- W00/W01 provenance, generic recovery, and W01 through W06 recovery checks
+  pass. The source archive and handoff manifest remain exact and unchanged.
+- Implementation reviewers report Critical 0, High 0, Medium 0. Final delivery
+  evidence, checkpoint, ignored state, and recovery binding are the remaining
+  non-functional seal work.

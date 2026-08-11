@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from types import MappingProxyType
 
-from video_factory.engine.contracts import ExecutionMode, WorkflowMode
+from video_factory._mode_contracts import ExecutionMode, WorkflowMode
 
 from .models import (
     STAGE_BRIEF,

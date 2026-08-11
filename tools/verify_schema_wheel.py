@@ -724,6 +724,13 @@ if workflow.default_workflow_definition().workflow_version != 'episode-productio
     raise SystemExit('installed workflow definition missing')
 if authority.target_policy_bundle().policy_version != 'authority-policy/2.1':
     raise SystemExit('installed authority policy missing')
+authority_policy_resource = json.loads(
+    files('video_factory.resources.workflow_authority')
+    .joinpath('authority-policy-v2.1.json')
+    .read_text(encoding='utf-8')
+)
+if authority_policy_resource != authority.policy_bundle_to_mapping(authority.target_policy_bundle()):
+    raise SystemExit('installed authority policy resource/code projection mismatch')
 validate_packaged_workflow_resources()
 validate_packaged_quality_resources()
 validate_packaged_runtime_resources()

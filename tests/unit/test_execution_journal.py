@@ -177,6 +177,23 @@ def test_journal_rechecks_boundary_identity_before_reopening_database(
     assert caught.value.reason_code == "runtime.boundary.rebound"
 
 
+def test_journal_rejects_registered_child_identity_replacement(
+    tmp_path: Path,
+) -> None:
+    boundary = _boundary(tmp_path)
+    journal = SQLiteExecutionJournal(boundary)
+    journal_directory = boundary.root / "journal"
+    original = boundary.root / "journal-original"
+    journal_directory.rename(original)
+    journal_directory.mkdir()
+
+    with pytest.raises(RuntimeBoundaryError) as caught:
+        journal.unresolved()
+
+    assert caught.value.reason_code == "runtime.boundary.rebound"
+    assert not (journal_directory / "execution-journal.sqlite3").exists()
+
+
 def test_sqlite_journal_survives_restart_and_returns_terminal_receipt(
     tmp_path: Path,
 ) -> None:

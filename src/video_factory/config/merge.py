@@ -10,7 +10,7 @@ from decimal import Decimal
 import re
 
 from video_factory.domain import HashDigest
-from video_factory.engine.mode import (
+from video_factory._mode_contracts import (
     ExecutionModeLimits,
     resolve_effective_execution_mode,
 )

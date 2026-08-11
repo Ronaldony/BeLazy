@@ -18,7 +18,7 @@ from video_factory.domain import (
     RequestId,
     RoleId,
 )
-from video_factory.engine.contracts import ExecutionMode
+from video_factory._mode_contracts import ExecutionMode
 
 
 class AdapterKind(StrEnum):

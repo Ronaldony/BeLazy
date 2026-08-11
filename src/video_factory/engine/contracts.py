@@ -3,22 +3,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from enum import StrEnum
 from typing import Mapping, Protocol
 
+from video_factory._mode_contracts import ExecutionMode, WorkflowMode
 from video_factory.domain import HashDigest, IdempotencyKey, OpaqueId
-
-
-class WorkflowMode(StrEnum):
-    RAPID = "rapid"
-    STANDARD = "standard"
-    CONTROLLED = "controlled"
-
-
-class ExecutionMode(StrEnum):
-    PREVIEW_ONLY = "preview_only"
-    HUMAN_ONLY = "human_only"
-    AUTOMATED = "automated"
 
 
 @dataclass(frozen=True, slots=True)
@@ -47,4 +35,3 @@ class TransitionResult:
 
 class WorkflowEngine(Protocol):
     def transition(self, request: TransitionRequest) -> TransitionResult: ...
-

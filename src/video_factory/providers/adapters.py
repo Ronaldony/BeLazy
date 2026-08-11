@@ -20,7 +20,7 @@ from video_factory.authority import (
 )
 from video_factory.mutation import WorkspaceObservation, WorkspaceRevision
 from video_factory.domain import ArtifactReference, IdempotencyKey
-from video_factory.engine.contracts import ExecutionMode
+from video_factory._mode_contracts import ExecutionMode
 
 from .contracts import (
     AdapterKind,

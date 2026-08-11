@@ -5,6 +5,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 
+from video_factory._mode_contracts import (
+    ExecutionMode,
+    ModeEnforcementError,
+    mode_is_within_limit,
+)
 from video_factory.approvals import (
     ApprovalEvidence,
     ApprovalRequirement,
@@ -25,8 +30,6 @@ from video_factory.authority import (
 )
 from video_factory.config.canonical import canonical_sha256
 from video_factory.domain import CapabilityId, OpaqueId
-from video_factory.engine.contracts import ExecutionMode
-from video_factory.engine.mode import mode_is_within_limit
 from video_factory.json_boundary import parse_rfc3339_datetime
 from video_factory.mutation import (
     WorkspaceObservation,
@@ -41,10 +44,6 @@ from .contracts import (
     ExecutorAuthorityScope,
     RequestEnvelope,
 )
-
-
-class ModeEnforcementError(ValueError):
-    """Raised before reservation, selection, or an external side effect."""
 
 
 @dataclass(frozen=True, slots=True)

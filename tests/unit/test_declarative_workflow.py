@@ -5,11 +5,12 @@ from __future__ import annotations
 from dataclasses import replace
 import hashlib
 from importlib.resources import files
+import json
 
 import pytest
 
 from video_factory.artifacts import validate_artifact_mapping
-from video_factory.authority import target_policy_bundle
+from video_factory.authority import policy_bundle_to_mapping, target_policy_bundle
 from video_factory.config import canonical_sha256
 from video_factory.domain import HashDigest, OpaqueId
 from video_factory.workflow import (
@@ -187,6 +188,9 @@ def test_packaged_workflow_authority_resources_are_exact_code_projections() -> N
     assert tuple(expected) == RESOURCE_FILENAMES
     for filename, payload in expected.items():
         assert resource_root.joinpath(filename).read_bytes() == payload
+    assert json.loads(expected["authority-policy-v2.1.json"]) == (
+        policy_bundle_to_mapping(target_policy_bundle())
+    )
     manifest_payload = resource_root.joinpath(
         "workflow-authority-resource-manifest.json"
     ).read_bytes()

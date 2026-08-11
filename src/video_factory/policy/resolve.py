@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from video_factory.engine.contracts import WorkflowMode
+from video_factory._mode_contracts import WorkflowMode
 
 from .catalog import WORKFLOW_POLICIES
 from .models import WorkflowPolicy, WorkflowPolicyError

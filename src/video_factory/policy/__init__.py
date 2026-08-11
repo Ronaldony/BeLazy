@@ -1,6 +1,6 @@
 """Workflow policy catalog and ADR-004 bridge (ADR-006)."""
 
-from video_factory.engine.contracts import WorkflowMode
+from video_factory._mode_contracts import WorkflowMode
 
 from .bridge import (
     assert_executor_automated_permitted,

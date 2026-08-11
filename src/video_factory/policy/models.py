@@ -11,7 +11,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import StrEnum
 
-from video_factory.engine.contracts import ExecutionMode, WorkflowMode
+from video_factory._mode_contracts import ExecutionMode, WorkflowMode
 
 
 class WorkflowPolicyError(ValueError):

@@ -7,8 +7,11 @@ Workflow mode and execution mode remain separate axes:
 
 from __future__ import annotations
 
-from video_factory.engine.contracts import ExecutionMode, WorkflowMode
-from video_factory.providers.enforcement import ModeEnforcementError
+from video_factory._mode_contracts import (
+    ExecutionMode,
+    ModeEnforcementError,
+    WorkflowMode,
+)
 
 from .models import (
     ExecutorAutomatedEvidence,

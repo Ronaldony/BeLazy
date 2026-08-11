@@ -7,7 +7,7 @@ from enum import StrEnum
 from typing import Collection, Mapping, Protocol, Sequence
 
 from video_factory.domain import HashDigest, OpaqueId, RelativeArtifactPath
-from video_factory.engine.mode import ExecutionModeLimits
+from video_factory._mode_contracts import ExecutionModeLimits
 
 
 class ConfigLayer(StrEnum):

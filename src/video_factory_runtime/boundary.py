@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import json
 import os
 from pathlib import Path
@@ -54,6 +54,11 @@ class FixtureRuntimeBoundary:
     root_inode: int
     marker_device: int
     marker_inode: int
+    _child_identities: dict[str, tuple[int, int]] = field(
+        default_factory=dict,
+        compare=False,
+        repr=False,
+    )
 
     @classmethod
     def initialize(
@@ -199,6 +204,27 @@ class FixtureRuntimeBoundary:
             raise RuntimeBoundaryError(
                 "runtime.boundary.rebound", "fixture boundary marker content changed"
             )
+        for relative_name, expected_identity in tuple(self._child_identities.items()):
+            child = self.root / relative_name
+            try:
+                child_info = child.lstat()
+                child_resolved = child.resolve(strict=True)
+            except OSError as error:
+                raise RuntimeBoundaryError(
+                    "runtime.boundary.rebound",
+                    "registered runtime child identity is unavailable",
+                ) from error
+            if (
+                _is_link_or_reparse(child)
+                or not stat.S_ISDIR(child_info.st_mode)
+                or (child_info.st_dev, child_info.st_ino) != expected_identity
+                or os.path.commonpath((str(self.root), str(child_resolved)))
+                != str(self.root)
+            ):
+                raise RuntimeBoundaryError(
+                    "runtime.boundary.rebound",
+                    "registered runtime child identity changed",
+                )
         return self.root
 
     def require_directory(self, relative_name: str, *, create: bool) -> Path:
@@ -279,6 +305,16 @@ class FixtureRuntimeBoundary:
             raise RuntimeBoundaryError(
                 "runtime.boundary.escape", "runtime child escaped the fixture boundary"
             )
+        final_info = resolved.lstat()
+        identity = (final_info.st_dev, final_info.st_ino)
+        existing = self._child_identities.get(relative_name)
+        if existing is not None and existing != identity:
+            raise RuntimeBoundaryError(
+                "runtime.boundary.rebound",
+                "registered runtime child identity changed",
+            )
+        self._child_identities[relative_name] = identity
+        self.assert_current()
         return resolved
 
 
